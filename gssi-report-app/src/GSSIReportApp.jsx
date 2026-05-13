@@ -12,6 +12,13 @@ const DEFAULT_REPORT = {
   // Tier
   tier: 'standard',  // quick | standard | full
 
+  // Revision
+  rev: '0',
+  revNotes: '',
+
+  // Assistant UI
+  assistantOn: true,
+
   // Cover
   projectNo: '',
   scanDate: new Date().toISOString().slice(0, 10),
@@ -21,7 +28,8 @@ const DEFAULT_REPORT = {
   weather: '',
   surface: 'Dry',
 
-  // NEW: Slab context (engineers always check these)
+  // Slab context (engineers always check these)
+  slabType: 'SOG',       // SOG | Suspended | PT | Topping
   slabThickness: '',
   slabAge: '',           // e.g. ">30 days cured" or "New pour"
   scanCoverage: '100%',  // % of area scanned
@@ -269,6 +277,131 @@ function ExecutiveSummary({ report }) {
   );
 }
 
+// ============================================================
+// In-app Assistant — rule-based, offline, no network
+// Surfaces the next-most-useful nudge based on report state.
+// ============================================================
+
+function getAssistantTips(report) {
+  const tips = [];
+  const need = (cond, level, text) => { if (cond) tips.push({ level, text }); };
+
+  // Critical: PT slab needs explicit exclusion language
+  if (report.slabType === 'PT') {
+    const hasPtNote = (report.cores || []).some(co =>
+      (co.note + ' ' + co.clearance).toLowerCase().includes('pt') ||
+      (co.note + ' ' + co.clearance).toLowerCase().includes('tendon')
+    );
+    need(!hasPtNote && report.cores.length > 0, 'high',
+      'PT slab: at least one core should explicitly call out the tendon exclusion zone (e.g. "no cores within 300 mm of tendon band").');
+    const hasPtTarget = (report.targets || []).some(t => t.type && t.type.includes('PT'));
+    need(!hasPtTarget && report.targets.length > 0, 'med',
+      'PT slab but no PT cable target logged. If tendons are present, log them; if not visible on radargram, note it in uncertainty zones.');
+  }
+
+  // Cure status vs. depth confidence
+  if (report.slabAge && report.slabAge.includes('green')) {
+    need(true, 'med',
+      'Green concrete (<7 days): GPR signal is attenuated. Add a limitation noting reduced depth confidence and consider a follow-up scan after cure.');
+  }
+
+  // Dielectric sanity check
+  const eps = parseFloat(report.dielectric);
+  need(!isNaN(eps) && (eps < 4 || eps > 12), 'med',
+    `Dielectric εr=${report.dielectric} is outside the typical concrete range (4–12). Verify calibration on a known target before relying on depths.`);
+
+  // Pin / core consistency
+  need(report.cores.length > 0 && report.diagramPins.length === 0, 'med',
+    'You have core verdicts but no pins on the diagram. Pin each core location so the crew can find them.');
+  need(report.cores.length > report.diagramPins.length && report.diagramPins.length > 0, 'low',
+    `${report.cores.length - report.diagramPins.length} core(s) without a matching pin on the diagram.`);
+
+  // Pin datum references
+  const pinsMissingDatum = (report.diagramPins || []).filter(p => !p.datumA && !p.datumB);
+  need(pinsMissingDatum.length > 0, 'med',
+    `${pinsMissingDatum.length} pin(s) missing datum offset. Chalk washes off — add at least one measured offset per pin.`);
+
+  // Drill envelope on safe cores
+  const safeUnscoped = (report.cores || []).filter(co =>
+    co.verdict === 'safe' && (!co.drillMaxDepth || !co.drillDia)
+  );
+  need(safeUnscoped.length > 0, 'med',
+    `${safeUnscoped.length} safe core(s) without a drill envelope. State max bit Ø and max depth — the crew shouldn't have to guess.`);
+
+  // Cover essentials
+  need(!report.projectNo, 'low', 'Project number is blank.');
+  need(!report.client, 'low', 'Client field is blank.');
+  need(!report.siteAddress, 'low', 'Site address is blank.');
+  need(!report.preparedBy, 'med', 'Sign-off: prepared-by name is empty.');
+
+  // Revision sanity
+  need(report.rev && report.rev !== '0' && !report.revNotes, 'low',
+    'Revision is past 0 — add a "Changes since last rev" note for the reviewer.');
+
+  // Found nothing? Praise.
+  if (tips.length === 0) {
+    return [{ level: 'ok', text: 'Report looks complete. Print to PDF when ready.' }];
+  }
+  // Sort high → low
+  const order = { high: 0, med: 1, low: 2, ok: 3 };
+  tips.sort((a, b) => order[a.level] - order[b.level]);
+  return tips;
+}
+
+function Assistant({ report, update }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const tips = useMemo(() => getAssistantTips(report), [report]);
+  if (!report.assistantOn) return null;
+
+  const tone = {
+    high: { bd: c.red, bg: c.redBg, fg: c.redStrong, icon: '⚠' },
+    med:  { bd: c.amber, bg: c.amberBg, fg: c.amberStrong, icon: '•' },
+    low:  { bd: c.border, bg: c.cardAlt, fg: c.textDim, icon: '·' },
+    ok:   { bd: c.green, bg: c.greenBg, fg: c.greenStrong, icon: '✓' },
+  };
+
+  return (
+    <div className="no-print" style={{
+      position: 'fixed', right: 14, bottom: 80, zIndex: 50,
+      width: 'min(360px, calc(100vw - 28px))',
+      background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+      borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+      overflow: 'hidden',
+    }}>
+      <button onClick={() => setCollapsed(x => !x)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: c.accentDim, color: '#fff', border: 'none',
+          padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+        }}>
+        <span>🤖 Assistant {tips[0]?.level === 'ok' ? '· all good' : `· ${tips.length} tip${tips.length === 1 ? '' : 's'}`}</span>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 16 }}>{collapsed ? '▴' : '▾'}</span>
+          <span onClick={(e) => { e.stopPropagation(); update({ assistantOn: false }); }}
+            style={{ fontSize: 14, opacity: 0.8 }}>✕</span>
+        </span>
+      </button>
+      {!collapsed && (
+        <div style={{ maxHeight: 280, overflowY: 'auto', padding: 8 }}>
+          {tips.map((t, i) => {
+            const s = tone[t.level];
+            return (
+              <div key={i} style={{
+                background: s.bg, borderLeft: `3px solid ${s.bd}`,
+                padding: '7px 9px', marginBottom: 6, borderRadius: '0 6px 6px 0',
+                fontSize: 12, color: c.text, lineHeight: 1.4,
+              }}>
+                <span style={{ color: s.fg, fontWeight: 700, marginRight: 6 }}>{s.icon}</span>
+                {t.text}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const StatTile = ({ color, bg, value, label }) => (
   <div style={{
     background: bg, border: `1px solid ${color}40`,
@@ -283,7 +416,24 @@ const StatTile = ({ color, bg, value, label }) => (
 // Site Diagram (photo + sketch + pins)
 // ============================================================
 
-function SiteDiagram({ report, update }) {
+function SiteDiagram({ report, update, setReport }) {
+  const update_pin_gps = (idx, gps) => {
+    setReport(r => {
+      if (!r.diagramPins[idx]) return r;
+      const next = [...r.diagramPins];
+      next[idx] = { ...next[idx], gps };
+      return { ...r, diagramPins: next };
+    });
+  };
+  const updatePinField = (idx, patch) => {
+    setReport(r => {
+      if (!r.diagramPins[idx]) return r;
+      const next = [...r.diagramPins];
+      next[idx] = { ...next[idx], ...patch };
+      return { ...r, diagramPins: next };
+    });
+  };
+
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [tool, setTool] = useState('pin');
@@ -381,9 +531,31 @@ function SiteDiagram({ report, update }) {
       if (!v) return;
       const n = v.toLowerCase().trim();
       if (!['safe', 'caution', 'nogo'].includes(n)) return;
-      update({
-        diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n }],
-      });
+      const newPin = {
+        x: pt.x, y: pt.y, label: nextLabel, verdict: n,
+        ts: new Date().toISOString(),
+        gps: null,
+        datumA: '',
+        datumB: '',
+      };
+      update({ diagramPins: [...report.diagramPins, newPin] });
+      // Try to capture GPS in the background (non-blocking)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const idx = report.diagramPins.length; // index of the just-added pin
+            const gps = {
+              lat: +pos.coords.latitude.toFixed(6),
+              lng: +pos.coords.longitude.toFixed(6),
+              acc: Math.round(pos.coords.accuracy),
+            };
+            // Read latest pins from a state setter to avoid stale closure
+            update_pin_gps(idx, gps);
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+        );
+      }
     } else if (tool.startsWith('draw-')) {
       setDrawing(true);
       setCurrentStroke({ color: toolColors[tool], points: [pt] });
@@ -505,6 +677,51 @@ function SiteDiagram({ report, update }) {
           <span style={{ color: c.red }}>● No drill</span>
         </div>
       </div>
+
+      {report.diagramPins.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{
+            fontSize: 10.5, color: c.textDim, marginBottom: 6,
+            textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+          }}>Pin references (datum offsets)</div>
+          {report.diagramPins.map((p, i) => {
+            const vc = p.verdict === 'safe' ? c.green : p.verdict === 'caution' ? c.amber : c.red;
+            const ts = p.ts ? new Date(p.ts) : null;
+            return (
+              <div key={i} style={{
+                border: `1px solid ${c.border}`, borderRadius: 6,
+                padding: 8, marginBottom: 6, background: c.cardAlt,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{
+                    background: vc, color: '#fff', minWidth: 26, height: 22,
+                    borderRadius: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: 12,
+                  }}>{p.label}</span>
+                  <span style={{ fontSize: 11, color: c.textDim }}>
+                    {ts ? ts.toLocaleString() : '—'}
+                  </span>
+                  {p.gps && (
+                    <span style={{ fontSize: 10.5, color: c.textFaint, marginLeft: 'auto' }}>
+                      📍 {p.gps.lat.toFixed(5)}, {p.gps.lng.toFixed(5)} ±{p.gps.acc}m
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <Input placeholder='Offset A (e.g. 1.2 m W of col C-4)'
+                    value={p.datumA || ''}
+                    onChange={e => updatePinField(i, { datumA: e.target.value })}
+                    style={{ padding: '6px 9px', fontSize: 12 }} />
+                  <Input placeholder='Offset B (e.g. 0.8 m N of wall)'
+                    value={p.datumB || ''}
+                    onChange={e => updatePinField(i, { datumB: e.target.value })}
+                    style={{ padding: '6px 9px', fontSize: 12 }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -547,6 +764,7 @@ export default function GSSIReportApp() {
     cores: [...report.cores, {
       label: String.fromCharCode(65 + report.cores.length),
       size: '4"', verdict: 'safe', clearance: '', note: '',
+      drillDia: '', drillMaxDepth: '',
     }],
   });
   const updateCore = (i, patch) => {
@@ -591,7 +809,7 @@ export default function GSSIReportApp() {
     <div style={{
       background: c.bg, minHeight: '100vh', color: c.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '14px 12px 100px', maxWidth: 480, margin: '0 auto',
+      padding: '14px 12px 100px', maxWidth: 760, margin: '0 auto',
     }}>
       <style>{`
         @media print {
@@ -613,16 +831,30 @@ export default function GSSIReportApp() {
       <div className="no-print" style={{
         marginBottom: 14, paddingBottom: 12,
         borderBottom: `1px solid ${c.borderStrong}`,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
       }}>
-        <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
-          GPR SCAN REPORT · BC EDITION
+        <div>
+          <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
+            GPR SCAN REPORT · BC EDITION
+          </div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
+            GSSI StructureScan Mini XT
+          </h1>
+          <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
+            Engineers and Geoscientists BC · standard practice
+          </div>
         </div>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
-          GSSI StructureScan Mini XT
-        </h1>
-        <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
-          Engineers and Geoscientists BC · standard practice
-        </div>
+        <button
+          onClick={() => update({ assistantOn: !report.assistantOn })}
+          title={report.assistantOn ? 'Hide assistant' : 'Show assistant'}
+          style={{
+            background: report.assistantOn ? c.accentDim : c.cardAlt,
+            color: report.assistantOn ? '#fff' : c.textDim,
+            border: `1px solid ${report.assistantOn ? c.accent : c.border}`,
+            borderRadius: 6, padding: '6px 10px', cursor: 'pointer',
+            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+          }}
+        >🤖 Assistant {report.assistantOn ? 'On' : 'Off'}</button>
       </div>
 
       {/* === TIER PICKER === */}
@@ -655,9 +887,22 @@ export default function GSSIReportApp() {
 
       {/* === COVER === */}
       <Card title="Project info">
-        <Field label="Project number">
-          <Input value={report.projectNo} onChange={e => update({ projectNo: e.target.value })} placeholder="VAN-2026-0341" />
-        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+          <Field label="Project number">
+            <Input value={report.projectNo} onChange={e => update({ projectNo: e.target.value })} placeholder="VAN-2026-0341" />
+          </Field>
+          <Field label="Revision" hint="Bump on every reissue">
+            <Input value={report.rev} onChange={e => update({ rev: e.target.value })} placeholder="0" />
+          </Field>
+        </div>
+        {report.rev && report.rev !== '0' && (
+          <Field label="Changes since last rev">
+            <Textarea value={report.revNotes}
+              onChange={e => update({ revNotes: e.target.value })}
+              placeholder="e.g. Rev 1: added cores E & F after slab demo; updated PT exclusion zone."
+              style={{ minHeight: 48 }} />
+          </Field>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Scan date">
             <Input type="date" value={report.scanDate} onChange={e => update({ scanDate: e.target.value })} />
@@ -679,6 +924,40 @@ export default function GSSIReportApp() {
 
       {/* === SLAB CONTEXT === */}
       <Card title="Slab context">
+        <Field label="Slab type" hint={
+          report.slabType === 'PT'
+            ? '⚠ PT slab — call out explicit no-core exclusion zones around tendon bands.'
+            : report.slabType === 'Suspended'
+            ? 'Suspended slab — check both top and bottom mats.'
+            : report.slabType === 'Topping'
+            ? 'Topping pour — confirm depth to structural slab below.'
+            : 'Slab-on-grade — typically single mat at mid-depth.'
+        }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {[
+              { id: 'SOG', label: 'SOG' },
+              { id: 'Suspended', label: 'Suspended' },
+              { id: 'PT', label: 'PT' },
+              { id: 'Topping', label: 'Topping' },
+            ].map(t => (
+              <button key={t.id}
+                onClick={() => update({ slabType: t.id })}
+                style={{
+                  background: report.slabType === t.id
+                    ? (t.id === 'PT' ? c.redBg : c.accentDim)
+                    : c.cardAlt,
+                  color: report.slabType === t.id
+                    ? (t.id === 'PT' ? c.redStrong : '#fff')
+                    : c.text,
+                  border: `1px solid ${report.slabType === t.id
+                    ? (t.id === 'PT' ? c.red : c.accent)
+                    : c.border}`,
+                  borderRadius: 6, padding: '8px 4px', fontSize: 12,
+                  fontWeight: 600, cursor: 'pointer',
+                }}>{t.label}</button>
+            ))}
+          </div>
+        </Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Slab thickness">
             <Input value={report.slabThickness} onChange={e => update({ slabThickness: e.target.value })} placeholder="200 mm" />
@@ -778,7 +1057,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === SITE DIAGRAM === */}
-      <SiteDiagram report={report} update={update} />
+      <SiteDiagram report={report} update={update} setReport={setReport} />
 
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" badge={
@@ -813,8 +1092,16 @@ export default function GSSIReportApp() {
                 <option value="caution">⚠ Caution</option>
                 <option value="nogo">✕ Do not drill</option>
               </Select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                <Input value={co.drillDia || ''} onChange={e => updateCore(i, { drillDia: e.target.value })}
+                  placeholder='Max bit Ø (e.g. 2")'
+                  style={{ padding: '5px 9px', fontSize: 12 }} />
+                <Input value={co.drillMaxDepth || ''} onChange={e => updateCore(i, { drillMaxDepth: e.target.value })}
+                  placeholder="Max depth (mm)"
+                  style={{ padding: '5px 9px', fontSize: 12 }} />
+              </div>
               <Input value={co.clearance} onChange={e => updateCore(i, { clearance: e.target.value })}
-                placeholder="Clearance / max safe depth"
+                placeholder="Clearance / nearest target"
                 style={{ padding: '5px 9px', fontSize: 12, marginBottom: 5 }} />
               <Input value={co.note} onChange={e => updateCore(i, { note: e.target.value })}
                 placeholder="Instructions for crew"
@@ -988,9 +1275,12 @@ export default function GSSIReportApp() {
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
-        Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/>
+        Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong>
+        {report.rev && report.rev !== '0' && <> · Rev {report.rev}</>}<br/>
         GSSI StructureScan Mini XT · British Columbia engineering edition
       </div>
+
+      <Assistant report={report} update={update} />
     </div>
   );
 }
