@@ -53,6 +53,14 @@ const DEFAULT_REPORT = {
   diagramImage: null,
   diagramStrokes: [],
   diagramPins: [],
+  coveragePolygon: { points: [] },  // scan coverage area (canvas coords)
+
+  // Rebar mat summary (engineers use to back-calc slab capacity)
+  rebarSummary: {
+    topBarSize: '', topSpacing: '', topCover: '',
+    bottomBarSize: '', bottomSpacing: '', bottomCover: '',
+    notes: '',
+  },
 
   // Cores
   cores: [],
@@ -278,6 +286,30 @@ function ExecutiveSummary({ report }) {
 }
 
 // ============================================================
+// Image helper: downscale to keep localStorage under control
+// ============================================================
+function downscaleImage(file, maxDim = 1200, quality = 0.75) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(ev.target.result);
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ============================================================
 // In-app Assistant — rule-based, offline, no network
 // Surfaces the next-most-useful nudge based on report state.
 // ============================================================
@@ -309,6 +341,35 @@ function getAssistantTips(report) {
   const eps = parseFloat(report.dielectric);
   need(!isNaN(eps) && (eps < 4 || eps > 12), 'med',
     `Dielectric εr=${report.dielectric} is outside the typical concrete range (4–12). Verify calibration on a known target before relying on depths.`);
+
+  // Coverage polygon: pins outside the scanned area
+  const cov = report.coveragePolygon?.points || [];
+  if (cov.length >= 3) {
+    const pip = (pt) => {
+      let inside = false;
+      for (let i = 0, j = cov.length - 1; i < cov.length; j = i++) {
+        const xi = cov[i].x, yi = cov[i].y, xj = cov[j].x, yj = cov[j].y;
+        const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi + 1e-9) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    };
+    const outside = (report.diagramPins || []).filter(p => !pip(p));
+    need(outside.length > 0, 'high',
+      `${outside.length} pin(s) sit outside the scanned coverage area. Either extend the scan or relocate the cores — drilling outside the scanned zone is high-risk.`);
+  } else if ((report.diagramPins || []).length > 0 && (report.coveragePolygon?.points || []).length < 3) {
+    need(true, 'low',
+      'Consider outlining the scanned coverage area on the diagram so the reviewer can tell what was vs. wasn\'t surveyed.');
+  }
+
+  // Rebar mat summary populated?
+  const rs = report.rebarSummary;
+  if (rs && (report.targets || []).some(t => (t.type || '').toLowerCase().includes('rebar'))) {
+    const blank = !rs.topBarSize && !rs.bottomBarSize && !rs.topSpacing && !rs.bottomSpacing;
+    need(blank, 'low',
+      'Rebar targets logged but the mat summary is empty. Add bar size / spacing estimates so the EoR can back-calc capacity.');
+  }
 
   // Pin / core consistency
   need(report.cores.length > 0 && report.diagramPins.length === 0, 'med',
@@ -447,11 +508,39 @@ function SiteDiagram({ report, update, setReport }) {
     'draw-note': '#5DCAA5',
   };
 
+  const coveragePoints = report.coveragePolygon?.points || [];
+
   const redraw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Coverage polygon (under everything else)
+    if (coveragePoints.length >= 2) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(coveragePoints[0].x, coveragePoints[0].y);
+      coveragePoints.forEach(p => ctx.lineTo(p.x, p.y));
+      if (tool !== 'coverage' && coveragePoints.length >= 3) ctx.closePath();
+      ctx.fillStyle = 'rgba(74, 158, 255, 0.18)';
+      ctx.strokeStyle = '#4a9eff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(tool === 'coverage' ? [6, 4] : []);
+      if (coveragePoints.length >= 3) ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Vertex dots while editing
+      if (tool === 'coverage') {
+        coveragePoints.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#4a9eff';
+          ctx.fill();
+        });
+      }
+      ctx.restore();
+    }
 
     report.diagramStrokes.forEach(s => {
       if (s.points.length < 2) return;
@@ -498,7 +587,7 @@ function SiteDiagram({ report, update, setReport }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, currentStroke]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.coveragePolygon, currentStroke, tool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -556,6 +645,10 @@ function SiteDiagram({ report, update, setReport }) {
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
         );
       }
+    } else if (tool === 'coverage') {
+      update({
+        coveragePolygon: { points: [...coveragePoints, pt] },
+      });
     } else if (tool.startsWith('draw-')) {
       setDrawing(true);
       setCurrentStroke({ color: toolColors[tool], points: [pt] });
@@ -594,8 +687,8 @@ function SiteDiagram({ report, update, setReport }) {
   };
 
   const clearAll = () => {
-    if (confirm('Clear all sketches and pins?')) {
-      update({ diagramStrokes: [], diagramPins: [] });
+    if (confirm('Clear all sketches, pins, and coverage?')) {
+      update({ diagramStrokes: [], diagramPins: [], coveragePolygon: { points: [] } });
     }
   };
 
@@ -652,11 +745,29 @@ function SiteDiagram({ report, update, setReport }) {
           <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} style={{ display: 'none' }} />
         </label>
         {toolBtn('pin', '📍 Pin core')}
+        {toolBtn('coverage', '▢ Coverage', c.accent)}
         {toolBtn('draw-rebar', 'Rebar', '#FAC775')}
         {toolBtn('draw-pt', 'PT cable', '#F09595')}
         {toolBtn('draw-conduit', 'Conduit', '#9BC5E8')}
         {toolBtn('draw-note', 'Note', '#5DCAA5')}
       </div>
+      {tool === 'coverage' && (
+        <div style={{
+          background: c.accentDim, color: '#fff',
+          borderRadius: 6, padding: '7px 10px', fontSize: 12, marginBottom: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        }}>
+          <span>Tap to add vertices · {coveragePoints.length} so far</span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <Btn onClick={() => update({ coveragePolygon: { points: coveragePoints.slice(0, -1) } })}
+              style={{ fontSize: 11, padding: '4px 8px' }}>↶</Btn>
+            <Btn onClick={() => { setTool('pin'); }}
+              variant="primary" style={{ fontSize: 11, padding: '4px 8px' }}>Done</Btn>
+            <Btn onClick={() => update({ coveragePolygon: { points: [] } })}
+              variant="ghost" style={{ fontSize: 11, padding: '4px 8px', color: '#fff' }}>Clear</Btn>
+          </span>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <Btn onClick={undo} style={{ fontSize: 12 }}>↶ Undo</Btn>
         <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
@@ -675,6 +786,11 @@ function SiteDiagram({ report, update, setReport }) {
           <span style={{ color: c.green }}>● Safe</span>
           <span style={{ color: c.amber }}>● Caution</span>
           <span style={{ color: c.red }}>● No drill</span>
+          <span><span style={{
+            display: 'inline-block', width: 12, height: 8,
+            background: 'rgba(74, 158, 255, 0.35)', border: `1px solid ${c.accent}`,
+            marginRight: 3, verticalAlign: 'middle',
+          }} /> Scanned area</span>
         </div>
       </div>
 
@@ -749,7 +865,7 @@ export default function GSSIReportApp() {
     targets: [...report.targets, {
       id: `T-${String(report.targets.length + 1).padStart(2, '0')}`,
       type: 'Rebar (top mat)', depth: '', cover: '',
-      note: '', confidence: 'high',
+      note: '', confidence: 'high', bscanImage: null,
     }],
   });
   const updateTarget = (i, patch) => {
@@ -1034,7 +1150,7 @@ export default function GSSIReportApp() {
               value={t.note}
               onChange={e => updateTarget(i, { note: e.target.value })}
               style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
-            <div style={{ display: 'flex', gap: 5 }}>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
               {[
                 { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
                 { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
@@ -1051,10 +1167,111 @@ export default function GSSIReportApp() {
                   }}>{opt.label} conf.</button>
               ))}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {t.bscanImage ? (
+                <>
+                  <img src={t.bscanImage} alt={`B-scan ${t.id}`}
+                    style={{ width: 56, height: 42, objectFit: 'cover',
+                      borderRadius: 4, border: `1px solid ${c.border}` }} />
+                  <span style={{ fontSize: 11, color: c.textDim, flex: 1 }}>B-scan attached</span>
+                  <Btn variant="ghost" onClick={() => updateTarget(i, { bscanImage: null })}
+                    style={{ fontSize: 11, padding: '4px 8px' }}>Remove</Btn>
+                </>
+              ) : (
+                <label style={{
+                  flex: 1, background: c.cardAlt, border: `1px dashed ${c.border}`,
+                  borderRadius: 4, padding: '6px', fontSize: 11, textAlign: 'center',
+                  color: c.textDim, cursor: 'pointer',
+                }}>
+                  📸 Attach B-scan / radargram screenshot
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const dataURL = await downscaleImage(f, 1200, 0.7);
+                      updateTarget(i, { bscanImage: dataURL });
+                    }} />
+                </label>
+              )}
+            </div>
           </div>
         ))}
         <Btn onClick={addTarget} style={{ width: '100%' }}>+ Add target</Btn>
       </Card>
+
+      {/* === REBAR MAT SUMMARY === */}
+      {(() => {
+        const rebarTargets = (report.targets || []).filter(t =>
+          (t.type || '').toLowerCase().includes('rebar'));
+        const num = (s) => {
+          const n = parseFloat(String(s).replace(/[^0-9.\-]/g, ''));
+          return isFinite(n) ? n : null;
+        };
+        const depths = rebarTargets.map(t => num(t.depth)).filter(n => n !== null);
+        const covers = rebarTargets.map(t => num(t.cover)).filter(n => n !== null);
+        const stat = (arr) => arr.length
+          ? { min: Math.min(...arr), max: Math.max(...arr),
+              avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) }
+          : null;
+        const dStat = stat(depths);
+        const cStat = stat(covers);
+        const rs = report.rebarSummary;
+        const updRS = (patch) => update({ rebarSummary: { ...rs, ...patch } });
+        return (
+          <Card title="Rebar mat summary" badge={
+            <span style={{
+              background: c.cardAlt, color: c.textDim, fontSize: 11,
+              padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+            }}>{rebarTargets.length} logged</span>
+          }>
+            {(dStat || cStat) && (
+              <div style={{
+                background: c.cardAlt, borderRadius: 6, padding: 9, marginBottom: 10,
+                fontSize: 12, color: c.text,
+              }}>
+                <div style={{ color: c.textDim, fontSize: 10.5, marginBottom: 5,
+                  letterSpacing: 0.6, fontWeight: 600, textTransform: 'uppercase' }}>
+                  Auto from logged targets
+                </div>
+                {dStat && (
+                  <div>Depth (mm): min <strong>{dStat.min}</strong> · avg <strong>{dStat.avg}</strong> · max <strong>{dStat.max}</strong></div>
+                )}
+                {cStat && (
+                  <div>Cover (mm): min <strong>{cStat.min}</strong> · avg <strong>{cStat.avg}</strong> · max <strong>{cStat.max}</strong></div>
+                )}
+              </div>
+            )}
+            <div style={{
+              fontSize: 10.5, color: c.textDim, marginBottom: 6,
+              textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+            }}>Top mat</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <Input placeholder="Bar size (10M)" value={rs.topBarSize}
+                onChange={e => updRS({ topBarSize: e.target.value })} style={{ fontSize: 13 }} />
+              <Input placeholder='Spacing (200 c/c)' value={rs.topSpacing}
+                onChange={e => updRS({ topSpacing: e.target.value })} style={{ fontSize: 13 }} />
+              <Input placeholder="Cover (mm)" value={rs.topCover}
+                onChange={e => updRS({ topCover: e.target.value })} style={{ fontSize: 13 }} />
+            </div>
+            <div style={{
+              fontSize: 10.5, color: c.textDim, marginBottom: 6,
+              textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+            }}>Bottom mat</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <Input placeholder="Bar size (10M)" value={rs.bottomBarSize}
+                onChange={e => updRS({ bottomBarSize: e.target.value })} style={{ fontSize: 13 }} />
+              <Input placeholder='Spacing (200 c/c)' value={rs.bottomSpacing}
+                onChange={e => updRS({ bottomSpacing: e.target.value })} style={{ fontSize: 13 }} />
+              <Input placeholder="Cover (mm)" value={rs.bottomCover}
+                onChange={e => updRS({ bottomCover: e.target.value })} style={{ fontSize: 13 }} />
+            </div>
+            <Field label="Notes" hint="Bar size estimates are visual / GPR-inferred unless verified by daylighting.">
+              <Textarea value={rs.notes} onChange={e => updRS({ notes: e.target.value })}
+                placeholder="e.g. Top mat appears #4 @ 200 c/c, bottom mat could not be resolved below the top mat in the NE quadrant." />
+            </Field>
+          </Card>
+        );
+      })()}
 
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} setReport={setReport} />
