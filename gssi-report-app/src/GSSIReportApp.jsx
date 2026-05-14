@@ -80,32 +80,33 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — refined Vancouver-engineering palette
-// Dark slate + steel + safety colors. Not PoE this time —
-// more "engineering firm letterhead", clean and serious.
+// Design tokens — Aggarwal Kamikazes palette
+// Warm chocolate / rust / cream — industrial, hand-drawn,
+// gritty workshop feel. Saw-blade reds for danger, olive
+// for "safe", golden for caution.
 // ============================================================
 
 const c = {
-  bg: '#0f1419',
-  bgRaised: '#161c23',
-  card: '#1c232c',
-  cardAlt: '#232b35',
-  border: '#2a333e',
-  borderStrong: '#3a4553',
-  text: '#e6edf3',
-  textDim: '#8a96a3',
-  textFaint: '#5d6874',
-  accent: '#4a9eff',       // steel blue — engineering primary
-  accentDim: '#1f4d80',
-  green: '#3fb950',
-  greenBg: '#0d2818',
-  greenStrong: '#56d364',
-  amber: '#d29922',
-  amberBg: '#2a1f08',
-  amberStrong: '#e3b341',
-  red: '#f85149',
-  redBg: '#2a1010',
-  redStrong: '#ff7b72',
+  bg: '#1a120c',           // deep chocolate
+  bgRaised: '#241811',     // raised dark brown
+  card: '#2d1f15',         // warm brown card
+  cardAlt: '#36261a',      // slightly lighter brown
+  border: '#3d2b1e',       // rust brown
+  borderStrong: '#5c3f29', // strong rust
+  text: '#f3e4c8',         // cream
+  textDim: '#c4a982',      // warm tan
+  textFaint: '#8b7656',    // muted brown-tan
+  accent: '#e8843d',       // burnt orange — Kamikazes primary
+  accentDim: '#7a3e15',    // deep rust
+  green: '#9aa83a',        // olive (earthy)
+  greenBg: '#22260f',
+  greenStrong: '#bcc94f',
+  amber: '#e6a532',        // golden
+  amberBg: '#2d2010',
+  amberStrong: '#f4ba3f',
+  red: '#d63830',          // brick / saw-blade red
+  redBg: '#2d100c',
+  redStrong: '#e85751',
 };
 
 // ============================================================
@@ -345,9 +346,9 @@ function SiteDiagram({ report, update }) {
 
     report.diagramPins.forEach(pin => {
       const vc = {
-        safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#fff' },
-        caution: { fill: '#d29922', stroke: '#2a1f08', text: '#fff' },
-        nogo:    { fill: '#f85149', stroke: '#2a1010', text: '#fff' },
+        safe:    { fill: '#9aa83a', stroke: '#22260f', text: '#1a120c' },
+        caution: { fill: '#e6a532', stroke: '#2d2010', text: '#1a120c' },
+        nogo:    { fill: '#d63830', stroke: '#2d100c', text: '#fff' },
       }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
 
       ctx.beginPath();
@@ -841,7 +842,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(8, 12, 18, 0.92)',
+      background: 'rgba(26, 18, 12, 0.94)',
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{
@@ -1415,7 +1416,7 @@ function ScanLocations({ report, update }) {
           }}>
             {/* On-screen header: editable label + verdict */}
             <div className="loc-header" style={{
-              background: '#5DCAA5', color: '#0f1419', padding: '7px 11px',
+              background: c.accent, color: '#1a120c', padding: '7px 11px',
               fontSize: 13, fontWeight: 700, letterSpacing: 0.4,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
             }}>
@@ -1701,6 +1702,50 @@ function ScanLocations({ report, update }) {
 }
 
 // ============================================================
+// KamikazeMark — gear-and-saw brand badge (inline SVG)
+// ============================================================
+
+function KamikazeMark({ size = 48 }) {
+  const teeth = 12;
+  const outerR = 50, innerR = 42, hubR = 19;
+  const toothPath = [];
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2;
+    const a2 = ((i + 0.5) / teeth) * Math.PI * 2;
+    const x1 = 50 + outerR * Math.cos(a),     y1 = 50 + outerR * Math.sin(a);
+    const x2 = 50 + outerR * Math.cos(a2),    y2 = 50 + outerR * Math.sin(a2);
+    const x3 = 50 + innerR * Math.cos(a2 + 0.05), y3 = 50 + innerR * Math.sin(a2 + 0.05);
+    const x4 = 50 + innerR * Math.cos(a - 0.05),  y4 = 50 + innerR * Math.sin(a - 0.05);
+    toothPath.push(i === 0 ? `M${x1.toFixed(1)} ${y1.toFixed(1)}` : `L${x1.toFixed(1)} ${y1.toFixed(1)}`);
+    toothPath.push(`L${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} L${x4.toFixed(1)} ${y4.toFixed(1)}`);
+  }
+  toothPath.push('Z');
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes mark">
+      <defs>
+        <radialGradient id="hub" cx="50%" cy="40%" r="60%">
+          <stop offset="0%"  stopColor="#f4a061" />
+          <stop offset="60%" stopColor="#e8843d" />
+          <stop offset="100%" stopColor="#7a3e15" />
+        </radialGradient>
+      </defs>
+      {/* outer dark gear */}
+      <path d={toothPath.join(' ')} fill="#2d1f15" stroke="#1a120c" strokeWidth="1.6" />
+      {/* inner ring */}
+      <circle cx="50" cy="50" r={innerR - 2} fill="none" stroke="#5c3f29" strokeWidth="1.4" />
+      {/* hub */}
+      <circle cx="50" cy="50" r={hubR} fill="url(#hub)" stroke="#3d2b1e" strokeWidth="2" />
+      {/* AK monogram */}
+      <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+        fontFamily='"Impact","Oswald","Arial Narrow Bold",sans-serif'
+        fontSize="18" fontWeight="900" fill="#1a120c" letterSpacing="-0.5">AK</text>
+      {/* saw-blade slash */}
+      <line x1="20" y1="80" x2="80" y2="20" stroke="#d63830" strokeWidth="3" strokeLinecap="round" opacity="0.85" />
+    </svg>
+  );
+}
+
+// ============================================================
 // Main App
 // ============================================================
 
@@ -1824,8 +1869,8 @@ export default function GSSIReportApp() {
             margin-bottom: 14px;
           }
           .scan-location-card .loc-header {
-            background: #5DCAA5 !important;
-            color: #000 !important;
+            background: #e8843d !important;
+            color: #1a120c !important;
             border-bottom: 1px solid #999;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -1872,24 +1917,33 @@ export default function GSSIReportApp() {
       <div className="no-print" style={{
         marginBottom: 14, paddingBottom: 12,
         borderBottom: `1px solid ${c.borderStrong}`,
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
       }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
-            GPR SCAN REPORT · BC EDITION
-          </div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
-            GSSI StructureScan Mini XT
-          </h1>
-          <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
-            Engineers and Geoscientists BC · standard practice
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 1, minWidth: 0 }}>
+          <KamikazeMark size={48} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 10, color: c.accent, letterSpacing: 2.5, fontWeight: 800, marginBottom: 2,
+              fontFamily: '"Impact","Oswald","Arial Narrow Bold",sans-serif',
+            }}>
+              AGGARWAL KAMIKAZES · GPR
+            </div>
+            <h1 style={{
+              margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: -0.3,
+              color: c.text, lineHeight: 1.15,
+            }}>
+              ScanReport
+            </h1>
+            <div style={{ fontSize: 11, color: c.textFaint, marginTop: 3 }}>
+              GSSI StructureScan Mini XT · BC engineering practice
+            </div>
           </div>
         </div>
         <label style={{
-          background: c.accentDim, border: `1px solid ${c.accent}`,
+          background: c.accent, border: `1px solid ${c.accent}`,
           borderRadius: 6, padding: '8px 12px', textAlign: 'center', fontSize: 12,
-          color: '#fff', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-          flexShrink: 0,
+          color: '#1a120c', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap',
+          flexShrink: 0, letterSpacing: 0.3,
         }}>
           📂 Load draft
           <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
