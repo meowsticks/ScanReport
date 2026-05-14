@@ -58,6 +58,22 @@ const DEFAULT_REPORT = {
   // NEW: Areas of uncertainty (Terraprobe-style)
   uncertaintyZones: '',
 
+  // Legal disclaimer (printed at the end of every report)
+  legalDisclaimer:
+    'This report is a non-destructive subsurface investigation prepared by ' +
+    'Aggarwal Kamikazes Cutting & Coring Ltd (the "Company") for the named client only. ' +
+    'Ground Penetrating Radar is an interpretive method; subsurface conditions may differ ' +
+    'from those depicted, and the Company makes no warranty, express or implied, regarding ' +
+    'the absence of utilities, conduits, post-tensioning cables, reinforcing steel, voids, ' +
+    'or other features not detected at the time of scan. The client is solely responsible ' +
+    'for verifying all marked and unmarked features prior to coring, cutting, drilling, ' +
+    'or excavation — including by physical exposure (daylighting) wherever any risk to ' +
+    'embedded services exists. The Company\'s total aggregate liability arising from or ' +
+    'related to this report, regardless of cause of action, is limited to the fees paid ' +
+    'for the scanning service. This report is valid only for the scan area, date, ' +
+    'equipment, and conditions specified herein; subsequent modifications to the structure ' +
+    'or surrounding area void these findings.',
+
   // Limitations (BC-tuned defaults)
   limitations: [
     'Depths derived from assumed dielectric constant; actual depths may vary ±10%.',
@@ -1322,6 +1338,19 @@ function NorthArrow({ rotation, size = 36 }) {
 
 function ScanLocations({ report, update }) {
   const fileInputRefs = useRef({});
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  const reorderLocs = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const list = [...report.scanLocations];
+    const fromIdx = list.findIndex(l => l.id === fromId);
+    const toIdx   = list.findIndex(l => l.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [item] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, item);
+    update({ scanLocations: list });
+  };
 
   const addLocation = () => {
     const id = `loc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1409,17 +1438,51 @@ function ScanLocations({ report, update }) {
       {report.scanLocations.map((loc, idx) => {
         const vm = verdictMeta[loc.verdict] || verdictMeta.safe;
         return (
-          <div key={loc.id} className="scan-location-card" style={{
-            border: `1px solid ${c.borderStrong}`, borderRadius: 8,
-            marginBottom: 12, overflow: 'hidden',
-          }}>
-            {/* On-screen header: editable label + verdict */}
-            <div className="loc-header" style={{
-              background: c.accent, color: '#fff', padding: '7px 11px',
-              fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          <div key={loc.id}
+            className={
+              'scan-location-card' +
+              (dragId === loc.id ? ' dragging' : '') +
+              (overId === loc.id && dragId && dragId !== loc.id ? ' drop-target' : '')
+            }
+            onDragOver={(e) => {
+              if (!dragId) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (overId !== loc.id) setOverId(loc.id);
+            }}
+            onDragLeave={() => { if (overId === loc.id) setOverId(null); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const fromId = e.dataTransfer.getData('text/plain') || dragId;
+              reorderLocs(fromId, loc.id);
+              setDragId(null); setOverId(null);
+            }}
+            style={{
+              border: `1px solid ${c.borderStrong}`, borderRadius: 8,
+              marginBottom: 12, overflow: 'hidden',
             }}>
-              <span>Concrete Scanning Data</span>
+            {/* On-screen header: doubles as drag handle */}
+            <div className="loc-header"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', loc.id);
+                e.dataTransfer.effectAllowed = 'move';
+                setDragId(loc.id);
+              }}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              style={{
+                background: c.accent, color: '#fff', padding: '7px 11px',
+                fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                cursor: 'grab', userSelect: 'none',
+              }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span className="no-print" style={{
+                  fontSize: 13, opacity: 0.85, letterSpacing: 0,
+                  fontWeight: 900, lineHeight: 1,
+                }} aria-hidden>⋮⋮</span>
+                Concrete Scanning Data
+              </span>
               <span style={{ fontSize: 11, opacity: 0.8 }}>{loc.label}</span>
             </div>
 
@@ -1810,13 +1873,30 @@ export default function GSSIReportApp() {
       padding: '14px 12px 100px', maxWidth: 480, margin: '0 auto',
     }}>
       <style>{`
+        .print-only { display: none; }
+        .scan-location-card.dragging { opacity: 0.35; }
+        .scan-location-card.drop-target {
+          outline: 2px dashed #e02020;
+          outline-offset: -2px;
+        }
         @media print {
           @page { size: A4; margin: 1.5cm; }
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
+          .print-only { display: block !important; }
           input, select, textarea {
             border: 1px solid #ddd !important;
             background: white !important; color: black !important;
+          }
+          .legal-disclaimer-print {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            font-size: 9pt;
+            line-height: 1.45;
+            color: #000;
+            border-top: 1px solid #999;
+            margin-top: 12px;
+            padding-top: 10px;
           }
           .scan-photo-row {
             page-break-inside: avoid;
@@ -1900,26 +1980,14 @@ export default function GSSIReportApp() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <KamikazeMark size={40} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2,
-            }}>
-              <span style={{
-                fontSize: 16, color: c.text, fontWeight: 900,
-                letterSpacing: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-              }}>
-                AK SCANREPORT
-              </span>
-              <span style={{
-                background: c.accentDim, color: c.accent,
-                fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                padding: '2px 7px', borderRadius: 4,
-              }}>FIELD</span>
-            </div>
-            <div style={{ fontSize: 10.5, color: c.textFaint, letterSpacing: 0.4 }}>
-              GSSI StructureScan Mini XT · BC engineering practice
-            </div>
+          <KamikazeMark size={44} />
+          <div style={{
+            fontSize: 15, color: c.text, fontWeight: 800,
+            letterSpacing: 0.3, lineHeight: 1.2,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          }}>
+            Aggarwal Kamikazes<br />
+            <span style={{ color: c.textDim, fontWeight: 600 }}>Cutting &amp; Coring Ltd</span>
           </div>
         </div>
         <label style={{
@@ -2265,6 +2333,23 @@ export default function GSSIReportApp() {
           </Btn>
         </Card>
       )}
+
+      {/* === LEGAL DISCLAIMER === */}
+      <Card title="Legal disclaimer">
+        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 7, lineHeight: 1.5 }}>
+          Printed at the end of every report. Have your own counsel review before
+          relying on this language for production work.
+        </div>
+        <Textarea
+          className="no-print"
+          value={report.legalDisclaimer || ''}
+          onChange={e => update({ legalDisclaimer: e.target.value })}
+          style={{ minHeight: 160, fontSize: 12, lineHeight: 1.5, padding: '8px 10px' }}
+        />
+        <div className="print-only legal-disclaimer-print">
+          {report.legalDisclaimer || ''}
+        </div>
+      </Card>
 
       {/* === SIGN-OFF === */}
       <Card title="Authorship & review">
