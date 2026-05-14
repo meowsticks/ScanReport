@@ -1767,23 +1767,32 @@ function ScanLocations({ report, update }) {
 // KamikazeMark — gear-and-saw brand badge (inline SVG)
 // ============================================================
 
-function KamikazeMark({ size = 40 }) {
+function KamikazeMark({ size = 52 }) {
+  // 8 saw-blade-style notches around the rim
+  const notches = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    const x1 = 50 + 48 * Math.cos(a);
+    const y1 = 50 + 48 * Math.sin(a);
+    const x2 = 50 + 38 * Math.cos(a);
+    const y2 = 50 + 38 * Math.sin(a);
+    notches.push(
+      <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)}
+        stroke="#e02020" strokeWidth="4" strokeLinecap="round" />
+    );
+  }
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes mark">
-      <defs>
-        <radialGradient id="km-hub" cx="50%" cy="40%" r="70%">
-          <stop offset="0%"  stopColor="#2a2a2a" />
-          <stop offset="100%" stopColor="#000000" />
-        </radialGradient>
-      </defs>
-      {/* outer black disc with red ring */}
-      <circle cx="50" cy="50" r="48" fill="url(#km-hub)" stroke="#e02020" strokeWidth="2.5" />
+      {/* outer red ring */}
+      <circle cx="50" cy="50" r="48" fill="none" stroke="#e02020" strokeWidth="3" />
+      {/* black disc */}
+      <circle cx="50" cy="50" r="34" fill="#000" stroke="#e02020" strokeWidth="2" />
+      {/* saw notches between the rings */}
+      {notches}
       {/* AK monogram */}
-      <text x="50" y="52" textAnchor="middle" dominantBaseline="central"
-        fontFamily='"Impact","Oswald","Arial Narrow Bold",sans-serif'
-        fontSize="38" fontWeight="900" fill="#ffffff" letterSpacing="-1">AK</text>
-      {/* saw-blade slash */}
-      <line x1="18" y1="82" x2="82" y2="18" stroke="#e02020" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
+      <text x="50" y="54" textAnchor="middle" dominantBaseline="central"
+        fontFamily='Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif'
+        fontSize="30" fontWeight="900" fill="#fff" letterSpacing="-1">AK</text>
     </svg>
   );
 }
@@ -1974,32 +1983,51 @@ export default function GSSIReportApp() {
       `}</style>
 
       {/* === HEADER === */}
-      <div className="no-print" style={{
-        marginBottom: 14, paddingBottom: 12,
-        borderBottom: `1px solid ${c.borderStrong}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      <div className="no-print ak-header" style={{
+        marginBottom: 14, padding: '12px 14px',
+        background: 'linear-gradient(180deg, #150505 0%, #000 100%)',
+        border: `1px solid ${c.borderStrong}`,
+        borderLeft: `4px solid ${c.accent}`,
+        borderRadius: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <KamikazeMark size={44} />
-          <div style={{
-            fontSize: 15, color: c.text, fontWeight: 800,
-            letterSpacing: 0.3, lineHeight: 1.2,
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-          }}>
-            Aggarwal Kamikazes<br />
-            <span style={{ color: c.textDim, fontWeight: 600 }}>Cutting &amp; Coring Ltd</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+          <KamikazeMark size={56} />
+          <div style={{ flex: 1, minWidth: 0, lineHeight: 1.05 }}>
+            <div className="ak-title" style={{
+              fontSize: 26, color: '#fff', fontWeight: 900,
+              letterSpacing: 0.8, textTransform: 'uppercase',
+              fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
+              textShadow: '0 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(224,32,32,0.25)',
+            }}>
+              Aggarwal Kamikazes
+            </div>
+            <div style={{
+              fontSize: 13, color: c.accent, fontWeight: 800,
+              letterSpacing: 3, textTransform: 'uppercase',
+              marginTop: 2,
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            }}>
+              Cutting &amp; Coring&nbsp;Ltd
+            </div>
           </div>
         </div>
         <label style={{
-          background: c.accent, border: `1px solid ${c.accent}`,
-          borderRadius: 6, padding: '8px 12px', textAlign: 'center', fontSize: 11,
-          color: '#fff', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
-          flexShrink: 0, letterSpacing: 1, textTransform: 'uppercase',
+          background: c.accent, border: `2px solid ${c.accent}`,
+          borderRadius: 6, padding: '9px 14px', textAlign: 'center', fontSize: 12,
+          color: '#fff', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap',
+          flexShrink: 0, letterSpacing: 1.2, textTransform: 'uppercase',
+          boxShadow: '0 2px 0 rgba(0,0,0,0.5)',
         }}>
           📂 Load
           <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
         </label>
       </div>
+      <style>{`
+        @media (max-width: 480px) {
+          .ak-header .ak-title { font-size: 19px !important; letter-spacing: 0.4px !important; }
+        }
+      `}</style>
 
       {/* === TIER PICKER === */}
       <Card title="Report tier" dense>
