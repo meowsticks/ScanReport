@@ -46,6 +46,12 @@ const DEFAULT_REPORT = {
   diagramStrokes: [],
   diagramPins: [],
 
+  // Scan photos (embedded in PDF)
+  scanPhotos: [],
+
+  // Scan locations (per-location card with notes + annotated photo)
+  scanLocations: [],
+
   // Cores
   cores: [],
 
@@ -74,32 +80,32 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — refined Vancouver-engineering palette
-// Dark slate + steel + safety colors. Not PoE this time —
-// more "engineering firm letterhead", clean and serious.
+// Design tokens — Aggarwal Kamikazes palette (AK Dispatch v5)
+// Pure black canvas, bright red accent, white type, uppercase
+// wide-letter-spaced wordmark. Amber for warning callouts.
 // ============================================================
 
 const c = {
-  bg: '#0f1419',
-  bgRaised: '#161c23',
-  card: '#1c232c',
-  cardAlt: '#232b35',
-  border: '#2a333e',
-  borderStrong: '#3a4553',
-  text: '#e6edf3',
-  textDim: '#8a96a3',
-  textFaint: '#5d6874',
-  accent: '#4a9eff',       // steel blue — engineering primary
-  accentDim: '#1f4d80',
+  bg: '#000000',           // pure black
+  bgRaised: '#0a0a0a',     // raised black
+  card: '#111111',         // dark card
+  cardAlt: '#161616',      // slightly lighter card
+  border: '#1f1f1f',       // subtle border
+  borderStrong: '#2a2a2a', // stronger border
+  text: '#ffffff',         // white
+  textDim: '#9a9a9a',      // medium gray
+  textFaint: '#5a5a5a',    // muted gray
+  accent: '#e02020',       // Kamikaze red — primary
+  accentDim: '#7a0e10',    // dark red (BOSS-pill bg)
   green: '#3fb950',
   greenBg: '#0d2818',
   greenStrong: '#56d364',
-  amber: '#d29922',
+  amber: '#e0a020',        // amber warning
   amberBg: '#2a1f08',
-  amberStrong: '#e3b341',
-  red: '#f85149',
+  amberStrong: '#f4ba3f',
+  red: '#e02020',
   redBg: '#2a1010',
-  redStrong: '#ff7b72',
+  redStrong: '#ff5a5a',
 };
 
 // ============================================================
@@ -287,8 +293,8 @@ function SiteDiagram({ report, update }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [tool, setTool] = useState('pin');
-  const [drawing, setDrawing] = useState(false);
-  const [currentStroke, setCurrentStroke] = useState(null);
+  const [anchor, setAnchor] = useState(null);
+  const [hoverPt, setHoverPt] = useState(null);
 
   const toolColors = {
     'draw-rebar': '#FAC775',
@@ -296,6 +302,8 @@ function SiteDiagram({ report, update }) {
     'draw-conduit': '#9BC5E8',
     'draw-note': '#5DCAA5',
   };
+
+  const lineWidthFor = (color) => color === '#F09595' ? 6 : 5;
 
   const redraw = () => {
     const canvas = canvasRef.current;
@@ -306,7 +314,7 @@ function SiteDiagram({ report, update }) {
     report.diagramStrokes.forEach(s => {
       if (s.points.length < 2) return;
       ctx.strokeStyle = s.color;
-      ctx.lineWidth = s.color === '#F09595' ? 4 : 3;
+      ctx.lineWidth = lineWidthFor(s.color);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -315,22 +323,31 @@ function SiteDiagram({ report, update }) {
       ctx.stroke();
     });
 
-    if (currentStroke && currentStroke.points.length >= 2) {
-      ctx.strokeStyle = currentStroke.color;
-      ctx.lineWidth = currentStroke.color === '#F09595' ? 4 : 3;
+    if (anchor && hoverPt && tool.startsWith('draw-')) {
+      const color = toolColors[tool];
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidthFor(color);
       ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.55;
+      ctx.setLineDash([6, 5]);
       ctx.beginPath();
-      ctx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
-      currentStroke.points.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(hoverPt.x, hoverPt.y);
       ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(anchor.x, anchor.y, 5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     report.diagramPins.forEach(pin => {
       const vc = {
-        safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#fff' },
-        caution: { fill: '#d29922', stroke: '#2a1f08', text: '#fff' },
-        nogo:    { fill: '#f85149', stroke: '#2a1010', text: '#fff' },
+        safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
+        caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
+        nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
       }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
 
       ctx.beginPath();
@@ -348,7 +365,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, currentStroke]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, anchor, hoverPt, tool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -385,25 +402,32 @@ function SiteDiagram({ report, update }) {
         diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n }],
       });
     } else if (tool.startsWith('draw-')) {
-      setDrawing(true);
-      setCurrentStroke({ color: toolColors[tool], points: [pt] });
+      if (!anchor) {
+        setAnchor(pt);
+        setHoverPt(pt);
+      } else {
+        const color = toolColors[tool];
+        update({
+          diagramStrokes: [...report.diagramStrokes, { color, points: [anchor, pt] }],
+        });
+        setAnchor(null);
+        setHoverPt(null);
+      }
     }
   };
 
   const handleMove = (e) => {
-    if (!drawing || !currentStroke) return;
+    if (!anchor || !tool.startsWith('draw-')) return;
     e.preventDefault();
-    const pt = getCoords(e);
-    setCurrentStroke(s => ({ ...s, points: [...s.points, pt] }));
+    setHoverPt(getCoords(e));
   };
 
-  const handleEnd = () => {
-    if (drawing && currentStroke && currentStroke.points.length > 1) {
-      update({ diagramStrokes: [...report.diagramStrokes, currentStroke] });
-    }
-    setDrawing(false);
-    setCurrentStroke(null);
-  };
+  const handleEnd = () => {};
+
+  useEffect(() => {
+    setAnchor(null);
+    setHoverPt(null);
+  }, [tool]);
 
   const handlePhoto = (e) => {
     const file = e.target.files?.[0];
@@ -454,7 +478,7 @@ function SiteDiagram({ report, update }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: c.textFaint, fontSize: 12, textAlign: 'center', padding: 20,
           }}>
-            Tap Photo to add site image<br/>or draw on the blank canvas
+            Tap Photo to add site image<br/>or sketch on the blank canvas
           </div>
         )}
         <canvas
@@ -506,6 +530,1198 @@ function SiteDiagram({ report, update }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+// ============================================================
+// Scan Photos (embedded in PDF, grouped by confidence)
+// ============================================================
+
+const CONFIDENCE_ORDER = ['high', 'med', 'low'];
+const CONFIDENCE_META = {
+  high: { label: 'High confidence', color: c.green,  bg: c.greenBg },
+  med:  { label: 'Medium confidence', color: c.amber, bg: c.amberBg },
+  low:  { label: 'Low confidence',  color: c.red,   bg: c.redBg },
+};
+
+const SCAN_TYPES = [
+  { id: 'site',    label: 'Marked-up slab' },
+  { id: 'bscan',   label: 'B-scan (linescan)' },
+  { id: 'cscan',   label: 'C-scan / Scan3D' },
+  { id: 'focus',   label: 'Focus' },
+  { id: 'other',   label: 'Other' },
+];
+const SCAN_TYPE_ORDER = ['bscan', 'cscan', 'focus', 'site', 'other'];
+const SCAN_TYPE_LABEL = SCAN_TYPES.reduce((acc, t) => { acc[t.id] = t.label; return acc; }, {});
+
+const ANNOTATION_COLORS = [
+  { id: 'red',    hex: '#e84a4a' },
+  { id: 'blue',   hex: '#3a8de8' },
+  { id: 'orange', hex: '#e89c3a' },
+  { id: 'green',  hex: '#45c97a' },
+  { id: 'black',  hex: '#000000' },
+];
+const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = c.hex; return acc; }, {});
+
+function parseScanFilename(name) {
+  if (!name) return {};
+  const lower = name.toLowerCase();
+  const out = {};
+  if (/linescan|bscan|b-scan/.test(lower))            out.scanType = 'bscan';
+  else if (/scan3d|cscan|c-scan|plan/.test(lower))    out.scanType = 'cscan';
+  else if (/focus/.test(lower))                       out.scanType = 'focus';
+  const parts = [];
+  const cm  = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*cm/);
+  const inch = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*in/);
+  if (cm)   parts.push(`${cm[1]}–${cm[2]} cm`);
+  if (inch) parts.push(`${inch[1]}–${inch[2]} in`);
+  if (parts.length) out.scaleInfo = parts.join(' × ');
+  const loc = name.match(/[_\-](L\d+)(?:[_\-.]|$)/i) || name.match(/^(L\d+)[_\-.]/i);
+  if (loc) out.locationRef = loc[1].toUpperCase();
+  return out;
+}
+
+// Draw an arrowhead at (x2, y2) pointing away from (x1, y1)
+function drawArrowHead(ctx, x1, y1, x2, y2, color) {
+  const headLen = Math.max(10, Math.hypot(x2 - x1, y2 - y1) * 0.18);
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 7), y2 - headLen * Math.sin(angle - Math.PI / 7));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 7), y2 - headLen * Math.sin(angle + Math.PI / 7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawAnnotation(ctx, a, W, H) {
+  const color = ANNOTATION_COLOR_HEX[a.color] || a.color || '#e84a4a';
+  const minDim = Math.min(W, H);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, minDim * 0.006);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (a.type === 'arrow' && a.start && a.end) {
+    const x1 = a.start.x * W, y1 = a.start.y * H;
+    const x2 = a.end.x * W,   y2 = a.end.y * H;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    drawArrowHead(ctx, x1, y1, x2, y2, color);
+  } else if (a.type === 'circle' && a.center && typeof a.radius === 'number') {
+    ctx.beginPath();
+    ctx.arc(a.center.x * W, a.center.y * H, a.radius * minDim, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (a.type === 'rect' && a.topLeft && a.bottomRight) {
+    const x = a.topLeft.x * W, y = a.topLeft.y * H;
+    const w = (a.bottomRight.x - a.topLeft.x) * W;
+    const h = (a.bottomRight.y - a.topLeft.y) * H;
+    ctx.strokeRect(x, y, w, h);
+  } else if (a.type === 'text' && a.position) {
+    const fontSize = Math.max(10, (a.fontSize || 14) * (minDim / 400));
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textBaseline = 'top';
+    const text = a.content || '';
+    const padX = fontSize * 0.3;
+    const padY = fontSize * 0.15;
+    const m = ctx.measureText(text);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(
+      a.position.x * W - padX,
+      a.position.y * H - padY,
+      m.width + padX * 2,
+      fontSize + padY * 2,
+    );
+    ctx.fillStyle = color;
+    ctx.fillText(text, a.position.x * W, a.position.y * H);
+  }
+}
+
+// ============================================================
+// AnnotatedImage — img with overlay canvas of annotations
+// ============================================================
+
+function AnnotatedImage({ src, annotations = [], style, alt }) {
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const redraw = () => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!canvas || !img || !container) return;
+    const imgRect = img.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (imgRect.width === 0 || imgRect.height === 0) return;
+    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+    canvas.style.width = imgRect.width + 'px';
+    canvas.style.height = imgRect.height + 'px';
+    canvas.width = imgRect.width;
+    canvas.height = imgRect.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    annotations.forEach(a => drawAnnotation(ctx, a, canvas.width, canvas.height));
+  };
+
+  useEffect(redraw, [annotations, src]);
+
+  useEffect(() => {
+    const handler = () => redraw();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [annotations]);
+
+  return (
+    <div ref={containerRef} style={{
+      position: 'relative', display: 'block', lineHeight: 0, ...style,
+    }}>
+      <img ref={imgRef} src={src} alt={alt || 'Scan'}
+        onLoad={redraw}
+        style={{ display: 'block', width: '100%', height: 'auto' }} />
+      <canvas ref={canvasRef} style={{
+        position: 'absolute', pointerEvents: 'none',
+      }} />
+    </div>
+  );
+}
+
+// ============================================================
+// AnnotationEditor — full-screen modal canvas editor
+// ============================================================
+
+function AnnotationEditor({ photo, onSave, onClose }) {
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null);
+  const [annotations, setAnnotations] = useState(() => [...(photo.annotations || [])]);
+  const [tool, setTool] = useState('arrow');
+  const [color, setColor] = useState('red');
+  const [anchor, setAnchor] = useState(null);   // first click (fractional)
+  const [hover, setHover] = useState(null);     // mouse-move (fractional)
+
+  const getFractionalCoords = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches?.[0] || e.changedTouches?.[0];
+    const cx = t ? t.clientX : e.clientX;
+    const cy = t ? t.clientY : e.clientY;
+    return {
+      x: Math.max(0, Math.min(1, (cx - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (cy - rect.top) / rect.height)),
+    };
+  };
+
+  const redraw = () => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!canvas || !img || !container) return;
+    const imgRect = img.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (imgRect.width === 0 || imgRect.height === 0) return;
+    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+    canvas.style.width = imgRect.width + 'px';
+    canvas.style.height = imgRect.height + 'px';
+    canvas.width = imgRect.width;
+    canvas.height = imgRect.height;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    annotations.forEach(a => drawAnnotation(ctx, a, W, H));
+
+    // Preview of in-progress shape
+    if (anchor && hover) {
+      const previewColor = ANNOTATION_COLOR_HEX[color];
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.setLineDash([5, 4]);
+      const minDim = Math.min(W, H);
+      ctx.strokeStyle = previewColor;
+      ctx.fillStyle = previewColor;
+      ctx.lineWidth = Math.max(2, minDim * 0.006);
+      if (tool === 'arrow') {
+        ctx.beginPath();
+        ctx.moveTo(anchor.x * W, anchor.y * H);
+        ctx.lineTo(hover.x * W, hover.y * H);
+        ctx.stroke();
+      } else if (tool === 'circle') {
+        const dx = (hover.x - anchor.x) * W;
+        const dy = (hover.y - anchor.y) * H;
+        const r = Math.hypot(dx, dy);
+        ctx.beginPath();
+        ctx.arc(anchor.x * W, anchor.y * H, r, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (tool === 'rect') {
+        const x = Math.min(anchor.x, hover.x) * W;
+        const y = Math.min(anchor.y, hover.y) * H;
+        const w = Math.abs(hover.x - anchor.x) * W;
+        const h = Math.abs(hover.y - anchor.y) * H;
+        ctx.strokeRect(x, y, w, h);
+      }
+      ctx.restore();
+    }
+  };
+
+  useEffect(redraw, [annotations, anchor, hover, tool, color]);
+
+  useEffect(() => {
+    const handler = () => redraw();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [annotations, anchor, hover]);
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    const pt = getFractionalCoords(e);
+    if (!pt) return;
+    if (tool === 'text') {
+      const content = prompt('Label text:', '');
+      if (!content) return;
+      pushAnnotation({
+        id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        type: 'text', color, position: pt, content, fontSize: 14,
+      });
+      return;
+    }
+    if (!anchor) {
+      setAnchor(pt);
+      setHover(pt);
+    } else {
+      const id = `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      let ann = null;
+      if (tool === 'arrow') {
+        ann = { id, type: 'arrow', color, start: anchor, end: pt };
+      } else if (tool === 'circle') {
+        const W = canvasRef.current.width, H = canvasRef.current.height;
+        const dx = (pt.x - anchor.x) * W;
+        const dy = (pt.y - anchor.y) * H;
+        const radiusPx = Math.hypot(dx, dy);
+        const radius = radiusPx / Math.min(W, H);
+        ann = { id, type: 'circle', color, center: anchor, radius };
+      } else if (tool === 'rect') {
+        ann = {
+          id, type: 'rect', color,
+          topLeft:     { x: Math.min(anchor.x, pt.x), y: Math.min(anchor.y, pt.y) },
+          bottomRight: { x: Math.max(anchor.x, pt.x), y: Math.max(anchor.y, pt.y) },
+        };
+      }
+      if (ann) pushAnnotation(ann);
+      setAnchor(null);
+      setHover(null);
+    }
+  };
+
+  const pushAnnotation = (a) => setAnnotations(prev => [...prev, a]);
+
+  const handleMove = (e) => {
+    if (!anchor || tool === 'text') return;
+    e.preventDefault();
+    const pt = getFractionalCoords(e);
+    if (pt) setHover(pt);
+  };
+
+  const undo = () => setAnnotations(prev => prev.slice(0, -1));
+  const clearAll = () => {
+    if (confirm('Clear all annotations on this scan?')) setAnnotations([]);
+  };
+
+  const save = () => onSave(annotations);
+
+  useEffect(() => {
+    setAnchor(null);
+    setHover(null);
+  }, [tool]);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0, 0, 0, 0.95)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        padding: '10px 12px', background: c.bgRaised,
+        borderBottom: `1px solid ${c.borderStrong}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>
+          🖊 Annotate scan
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Btn variant="ghost" onClick={onClose} style={{ fontSize: 12 }}>Cancel</Btn>
+          <Btn variant="primary" onClick={save} style={{ fontSize: 12 }}>✓ Save</Btn>
+        </div>
+      </div>
+
+      <div ref={containerRef} style={{
+        flex: 1, position: 'relative', overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8,
+      }}>
+        <img
+          ref={imgRef}
+          src={photo.dataUrl}
+          alt="scan"
+          onLoad={redraw}
+          style={{
+            maxWidth: '100%', maxHeight: '100%',
+            objectFit: 'contain', display: 'block', userSelect: 'none',
+          }}
+        />
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            touchAction: 'none', cursor: tool === 'text' ? 'text' : 'crosshair',
+          }}
+          onClick={handleClick}
+          onMouseMove={handleMove}
+          onTouchStart={handleClick}
+          onTouchMove={handleMove}
+        />
+      </div>
+
+      <div style={{
+        padding: '10px 12px', background: c.bgRaised,
+        borderTop: `1px solid ${c.borderStrong}`,
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+          {[
+            { id: 'arrow',  label: '→ Arrow' },
+            { id: 'circle', label: '○ Circle' },
+            { id: 'rect',   label: '▭ Rect' },
+            { id: 'text',   label: 'T Text' },
+          ].map(opt => (
+            <button key={opt.id}
+              onClick={() => setTool(opt.id)}
+              style={{
+                background: tool === opt.id ? c.accentDim : c.cardAlt,
+                border: `1px solid ${tool === opt.id ? c.accent : c.border}`,
+                borderRadius: 6, padding: '8px 4px',
+                color: tool === opt.id ? '#fff' : c.text,
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>{opt.label}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {ANNOTATION_COLORS.map(co => (
+              <button key={co.id}
+                onClick={() => setColor(co.id)}
+                title={co.id}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: co.hex, cursor: 'pointer',
+                  border: color === co.id ? `3px solid ${c.text}` : `1px solid ${c.border}`,
+                }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="ghost" onClick={undo}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>↶ Undo</Btn>
+            <Btn variant="ghost" onClick={clearAll}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
+          </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center' }}>
+          {tool === 'text'
+            ? 'Tap to place a text label.'
+            : anchor
+              ? `Tap to finish the ${tool}.`
+              : `Tap to start the ${tool}.`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScanPhotos({ report, update }) {
+  const fileInputRef = useRef(null);
+  const [editingPhotoId, setEditingPhotoId] = useState(null);
+
+  const addPhotos = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const loaded = await Promise.all(files.map(file => new Promise((resolve) => {
+      const reader = new FileReader();
+      const detected = parseScanFilename(file.name || '');
+      reader.onload = (ev) => resolve({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        dataUrl: ev.target.result,
+        caption: '',
+        confidence: 'high',
+        pinRef: '',
+        scanType: detected.scanType || 'site',
+        locationRef: detected.locationRef || '',
+        scaleInfo: detected.scaleInfo || '',
+        panelGroup: '',
+        panelLabel: '',
+        annotations: [],
+      });
+      reader.readAsDataURL(file);
+    })));
+    update({ scanPhotos: [...report.scanPhotos, ...loaded] });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const editingPhoto = report.scanPhotos.find(p => p.id === editingPhotoId);
+
+  const updatePhoto = (id, patch) => {
+    update({
+      scanPhotos: report.scanPhotos.map(p => p.id === id ? { ...p, ...patch } : p),
+    });
+  };
+
+  const removePhoto = (id) => {
+    update({ scanPhotos: report.scanPhotos.filter(p => p.id !== id) });
+  };
+
+  const movePhoto = (id, dir) => {
+    const idx = report.scanPhotos.findIndex(p => p.id === id);
+    const swap = idx + dir;
+    if (idx < 0 || swap < 0 || swap >= report.scanPhotos.length) return;
+    const next = [...report.scanPhotos];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    update({ scanPhotos: next });
+  };
+
+  const grouped = CONFIDENCE_ORDER.map(level => ({
+    level,
+    meta: CONFIDENCE_META[level],
+    photos: report.scanPhotos.filter(p => (p.confidence || 'high') === level),
+  }));
+
+  return (
+    <Card title="Scan photos" badge={
+      <span style={{
+        background: c.cardAlt, color: c.textDim, fontSize: 11,
+        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+      }}>{report.scanPhotos.length}</span>
+    }>
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        Add photos of the scanned area with markup, obstructions, or context shots.
+        Each photo is grouped by confidence and embedded into the PDF.
+      </div>
+
+      <label style={{
+        display: 'block', background: c.cardAlt, border: `1px dashed ${c.borderStrong}`,
+        borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
+        color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 10,
+      }}>
+        📷 Add photos (one or many)
+        <input ref={fileInputRef} type="file" accept="image/*" multiple
+          capture="environment" onChange={addPhotos} style={{ display: 'none' }} />
+      </label>
+
+      {report.scanPhotos.length === 0 ? (
+        <div style={{
+          padding: '14px', textAlign: 'center', fontSize: 12,
+          color: c.textFaint, background: c.cardAlt, borderRadius: 6,
+        }}>
+          No photos yet.
+        </div>
+      ) : grouped.map(group => {
+        if (group.photos.length === 0) return null;
+        return (
+          <div key={group.level} style={{ marginBottom: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 9px', marginBottom: 7,
+              background: group.meta.bg,
+              borderLeft: `3px solid ${group.meta.color}`,
+              borderRadius: '0 4px 4px 0',
+            }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                color: group.meta.color, textTransform: 'uppercase',
+              }}>{group.meta.label}</span>
+              <span style={{ fontSize: 11, color: c.textDim }}>
+                · {group.photos.length} photo{group.photos.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {group.photos.map(photo => {
+              const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
+              const annotationCount = (photo.annotations || []).length;
+              return (
+                <div key={photo.id} className="scan-photo-row" style={{
+                  border: `1px solid ${c.border}`, borderRadius: 6,
+                  padding: 9, marginBottom: 7, background: c.cardAlt,
+                }}>
+                  <div style={{
+                    display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
+                  }}>
+                    <div style={{ width: 84, flexShrink: 0 }}>
+                      <AnnotatedImage
+                        src={photo.dataUrl}
+                        annotations={photo.annotations || []}
+                        alt={photo.caption || 'Scan photo'}
+                        style={{
+                          width: 84, height: 84, overflow: 'hidden',
+                          borderRadius: 4, border: `1px solid ${c.border}`,
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Textarea
+                        value={photo.caption}
+                        onChange={e => updatePhoto(photo.id, { caption: e.target.value })}
+                        placeholder="Caption: what does this photo show?"
+                        style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
+                      />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                        <Select
+                          value={photo.scanType || 'site'}
+                          onChange={e => updatePhoto(photo.id, { scanType: e.target.value })}
+                          style={{ padding: '6px 8px', fontSize: 12 }}
+                        >
+                          {SCAN_TYPES.map(t => (
+                            <option key={t.id} value={t.id}>{t.label}</option>
+                          ))}
+                        </Select>
+                        <Input
+                          value={photo.locationRef || ''}
+                          onChange={e => updatePhoto(photo.id, { locationRef: e.target.value.toUpperCase() })}
+                          placeholder="Loc (L1)"
+                          list={`loc-list-${photo.id}`}
+                          style={{ padding: '6px 8px', fontSize: 12 }}
+                        />
+                        <datalist id={`loc-list-${photo.id}`}>
+                          {(report.scanLocations || []).map(l => (
+                            <option key={l.id} value={l.label} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <Input
+                        value={photo.scaleInfo || ''}
+                        onChange={e => updatePhoto(photo.id, { scaleInfo: e.target.value })}
+                        placeholder="Scale (e.g. 0–70 cm × 0–20 in)"
+                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                      />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                        <Input
+                          value={photo.panelGroup || ''}
+                          onChange={e => updatePhoto(photo.id, { panelGroup: e.target.value })}
+                          placeholder="Panel group"
+                          style={{ padding: '6px 9px', fontSize: 12 }}
+                        />
+                        <Input
+                          value={photo.panelLabel || ''}
+                          onChange={e => updatePhoto(photo.id, { panelLabel: e.target.value })}
+                          placeholder="Sub-label (a/b/c)"
+                          style={{ padding: '6px 9px', fontSize: 12 }}
+                        />
+                      </div>
+                      <Input
+                        value={photo.pinRef}
+                        onChange={e => updatePhoto(photo.id, { pinRef: e.target.value })}
+                        placeholder="Refs pin (e.g. A, B)"
+                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {[
+                      { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                      { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                      { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                    ].map(opt => (
+                      <button key={opt.id}
+                        onClick={() => updatePhoto(photo.id, { confidence: opt.id })}
+                        style={{
+                          flex: 1,
+                          background: photo.confidence === opt.id ? opt.bg : c.card,
+                          color: photo.confidence === opt.id ? opt.color : c.textDim,
+                          border: `1px solid ${photo.confidence === opt.id ? opt.color : c.border}`,
+                          borderRadius: 4, padding: '5px 6px',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}>{opt.label} conf.</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                    <Btn variant="primary" onClick={() => setEditingPhotoId(photo.id)}
+                      style={{ flex: 1.4, fontSize: 11, padding: '5px 6px' }}>
+                      🖊 Annotate{annotationCount > 0 ? ` (${annotationCount})` : ''}
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => movePhoto(photo.id, -1)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      disabled={globalIdx === 0}>↑ Up</Btn>
+                    <Btn variant="ghost" onClick={() => movePhoto(photo.id, 1)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
+                    <Btn variant="danger" onClick={() => removePhoto(photo.id)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕</Btn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {editingPhoto && (
+        <AnnotationEditor
+          photo={editingPhoto}
+          onSave={(annotations) => {
+            updatePhoto(editingPhoto.id, { annotations });
+            setEditingPhotoId(null);
+          }}
+          onClose={() => setEditingPhotoId(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
+// ============================================================
+// GPR Scans — print section grouping all scans by type
+// ============================================================
+
+function GPRScans({ report }) {
+  const photos = report.scanPhotos || [];
+  if (photos.length === 0) return null;
+
+  // Group by scanType in declared order
+  const byType = SCAN_TYPE_ORDER.map(type => ({
+    type,
+    label: SCAN_TYPE_LABEL[type],
+    items: photos.filter(p => (p.scanType || 'site') === type),
+  })).filter(g => g.items.length > 0);
+
+  // Within a type, partition into panel-groups + singles
+  const partition = (items) => {
+    const groups = {};
+    const singles = [];
+    items.forEach(p => {
+      const g = (p.panelGroup || '').trim();
+      if (!g) { singles.push(p); return; }
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(p);
+    });
+    return { groups, singles };
+  };
+
+  return (
+    <Card title="GPR scans · full size">
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        Full-size render of every scan (B-scan, C-scan, Focus, marked-up slab) grouped by
+        type. Multi-panel figures (a/b/c) display side-by-side. Annotations are baked in.
+      </div>
+
+      {byType.map(group => {
+        const { groups, singles } = partition(group.items);
+        return (
+          <div key={group.type} style={{ marginBottom: 14 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+              color: c.textDim, textTransform: 'uppercase',
+              padding: '6px 9px', marginBottom: 8,
+              borderLeft: `3px solid ${c.accent}`, background: c.cardAlt,
+            }}>{group.label} · {group.items.length}</div>
+
+            {/* Multi-panel groups */}
+            {Object.entries(groups).map(([gname, items]) => (
+              <div key={gname} className="gpr-scan-figure gpr-panel-group" style={{
+                display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10,
+              }}>
+                {items
+                  .slice()
+                  .sort((a, b) => (a.panelLabel || '').localeCompare(b.panelLabel || ''))
+                  .map(p => (
+                    <div key={p.id} className="gpr-panel" style={{
+                      flex: '1 1 30%', minWidth: 0,
+                      border: `1px solid ${c.border}`, borderRadius: 4, padding: 6,
+                      background: c.cardAlt,
+                    }}>
+                      <div className="gpr-panel-sublabel" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, color: c.text }}>
+                        {p.panelLabel ? `(${p.panelLabel}) ` : ''}{p.locationRef || ''}
+                      </div>
+                      <AnnotatedImage
+                        src={p.dataUrl}
+                        annotations={p.annotations || []}
+                        style={{ background: '#000', borderRadius: 3 }}
+                      />
+                      {(p.caption || p.scaleInfo) && (
+                        <div style={{ fontSize: 11, color: c.text, marginTop: 5, lineHeight: 1.4 }}>
+                          {p.caption && <div>{p.caption}</div>}
+                          {p.scaleInfo && <div style={{ color: c.textDim }}>{p.scaleInfo}</div>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                <div style={{ flexBasis: '100%', fontSize: 11, color: c.textDim, fontStyle: 'italic' }}>
+                  Figure: {gname}
+                </div>
+              </div>
+            ))}
+
+            {/* Singles */}
+            {singles.map(p => (
+              <div key={p.id} className="gpr-scan-figure" style={{
+                border: `1px solid ${c.border}`, borderRadius: 6, padding: 9,
+                marginBottom: 9, background: c.cardAlt,
+              }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginBottom: 6, fontSize: 11, color: c.textDim,
+                }}>
+                  <span>
+                    {p.locationRef && <strong style={{ color: c.text }}>{p.locationRef}</strong>}
+                    {p.locationRef && p.scaleInfo && ' · '}
+                    {p.scaleInfo}
+                  </span>
+                </div>
+                <AnnotatedImage
+                  src={p.dataUrl}
+                  annotations={p.annotations || []}
+                  style={{ background: '#000', borderRadius: 4 }}
+                />
+                {p.caption && (
+                  <div style={{ fontSize: 12, color: c.text, marginTop: 6, lineHeight: 1.4 }}>
+                    {p.caption}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </Card>
+  );
+}
+
+// ============================================================
+// Scan Locations (per-location card · prints side-by-side)
+// ============================================================
+
+const DEFAULT_INSTRUCTION = 'Use proposed core location ONLY when coring.';
+
+function NorthArrow({ rotation, size = 36 }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 6, right: 6,
+      background: '#fff', borderRadius: 6, padding: '3px 6px',
+      display: 'flex', alignItems: 'center', gap: 4,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+      fontSize: 10, fontWeight: 700, color: '#000',
+      letterSpacing: 0.5, lineHeight: 1,
+    }}>
+      <span style={{
+        display: 'inline-block', transform: `rotate(${rotation || 0}deg)`,
+        fontSize: size * 0.45, lineHeight: 1,
+      }}>↑</span>
+      <span>N</span>
+    </div>
+  );
+}
+
+function ScanLocations({ report, update }) {
+  const fileInputRefs = useRef({});
+
+  const addLocation = () => {
+    const id = `loc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const idx = report.scanLocations.length;
+    update({
+      scanLocations: [...report.scanLocations, {
+        id,
+        label: `L${idx + 1}`,
+        photo: null,
+        northRotation: 0,
+        coreSize: '',
+        overCut: '',
+        coreCount: '',
+        notes: '',
+        depthCallouts: [],
+        verdict: 'safe',
+        instruction: DEFAULT_INSTRUCTION,
+        confidence: 'high',
+      }],
+    });
+  };
+
+  const updateLoc = (id, patch) => {
+    update({
+      scanLocations: report.scanLocations.map(l =>
+        l.id === id ? { ...l, ...patch } : l
+      ),
+    });
+  };
+
+  const removeLoc = (id) => {
+    if (!confirm('Remove this scan location?')) return;
+    update({ scanLocations: report.scanLocations.filter(l => l.id !== id) });
+  };
+
+  const moveLoc = (id, dir) => {
+    const idx = report.scanLocations.findIndex(l => l.id === id);
+    const swap = idx + dir;
+    if (idx < 0 || swap < 0 || swap >= report.scanLocations.length) return;
+    const next = [...report.scanLocations];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    update({ scanLocations: next });
+  };
+
+  const handlePhoto = (id, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => updateLoc(id, { photo: ev.target.result });
+    reader.readAsDataURL(file);
+    if (fileInputRefs.current[id]) fileInputRefs.current[id].value = '';
+  };
+
+  const addDepth = (id, loc) => {
+    updateLoc(id, { depthCallouts: [...(loc.depthCallouts || []), { position: '', depth: '' }] });
+  };
+  const updateDepth = (id, loc, i, patch) => {
+    const next = [...(loc.depthCallouts || [])];
+    next[i] = { ...next[i], ...patch };
+    updateLoc(id, { depthCallouts: next });
+  };
+  const removeDepth = (id, loc, i) => {
+    updateLoc(id, { depthCallouts: (loc.depthCallouts || []).filter((_, j) => j !== i) });
+  };
+
+  const verdictMeta = {
+    safe:    { color: c.green, bg: c.greenBg, label: '✓ Safe to drill' },
+    caution: { color: c.amber, bg: c.amberBg, label: '⚠ Caution' },
+    nogo:    { color: c.red,   bg: c.redBg,   label: '✕ Do not drill' },
+  };
+
+  return (
+    <Card title="Scan locations · per-location cards" badge={
+      <span style={{
+        background: c.cardAlt, color: c.textDim, fontSize: 11,
+        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+      }}>{report.scanLocations.length}</span>
+    }>
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+        Each location (L1, L2…) prints as a side-by-side card: notes + core spec on
+        the left, annotated photo with north arrow on the right. This is the industry-
+        standard "Concrete Scanning Data" format.
+      </div>
+
+      {report.scanLocations.map((loc, idx) => {
+        const vm = verdictMeta[loc.verdict] || verdictMeta.safe;
+        return (
+          <div key={loc.id} className="scan-location-card" style={{
+            border: `1px solid ${c.borderStrong}`, borderRadius: 8,
+            marginBottom: 12, overflow: 'hidden',
+          }}>
+            {/* On-screen header: editable label + verdict */}
+            <div className="loc-header" style={{
+              background: c.accent, color: '#fff', padding: '7px 11px',
+              fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}>
+              <span>Concrete Scanning Data</span>
+              <span style={{ fontSize: 11, opacity: 0.8 }}>{loc.label}</span>
+            </div>
+
+            <div className="loc-body" style={{ padding: 11 }}>
+              {/* Left side (notes etc) */}
+              <div className="loc-left">
+                {/* Print-only summary line */}
+                <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Location: {loc.label || '—'}</div>
+                  {(loc.coreCount || loc.coreSize || loc.overCut) && (
+                    <div>
+                      Notes: {loc.coreCount && `${loc.coreCount} `}
+                      {loc.coreSize && `${loc.coreSize} core`}
+                      {loc.overCut && ` with an ${loc.overCut} over-cut`}.
+                    </div>
+                  )}
+                </div>
+
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                  <Field label="Label">
+                    <Input value={loc.label}
+                      onChange={e => updateLoc(loc.id, { label: e.target.value })}
+                      style={{ padding: '6px 8px', fontSize: 13, fontWeight: 600 }} />
+                  </Field>
+                  <Field label="Count">
+                    <Input value={loc.coreCount}
+                      onChange={e => updateLoc(loc.id, { coreCount: e.target.value })}
+                      placeholder="(1)"
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                  <Field label="Core">
+                    <Input value={loc.coreSize}
+                      onChange={e => updateLoc(loc.id, { coreSize: e.target.value })}
+                      placeholder='5"'
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                  <Field label="Over-cut">
+                    <Input value={loc.overCut}
+                      onChange={e => updateLoc(loc.id, { overCut: e.target.value })}
+                      placeholder='8"'
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                </div>
+
+                <div className="loc-edit-only">
+                  <Field label="Notes" hint="Multi-paragraph free text. What was found, what's nearby, what to watch out for.">
+                    <Textarea value={loc.notes}
+                      onChange={e => updateLoc(loc.id, { notes: e.target.value })}
+                      placeholder="No targets will be cut in the proposed core location.&#10;&#10;Note: the proposed 8&quot; over-cut will be within 1&quot; of marked PT boundary..."
+                      style={{ minHeight: 88 }} />
+                  </Field>
+                </div>
+
+                {/* Print-only notes text */}
+                {loc.notes && (
+                  <div className="loc-print-only" style={{
+                    fontSize: 12, lineHeight: 1.5, marginBottom: 10,
+                    whiteSpace: 'pre-wrap',
+                  }}>{loc.notes}</div>
+                )}
+
+                {/* Depth callouts — editor */}
+                <div className="loc-edit-only">
+                  <div style={{
+                    fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                    textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                  }}>Depth callouts</div>
+                  {(loc.depthCallouts || []).map((d, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 5, marginBottom: 5 }}>
+                      <Input value={d.position}
+                        onChange={e => updateDepth(loc.id, loc, i, { position: e.target.value })}
+                        placeholder="east side"
+                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                      <Input value={d.depth}
+                        onChange={e => updateDepth(loc.id, loc, i, { depth: e.target.value })}
+                        placeholder='1.5"'
+                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                      <Btn variant="ghost" onClick={() => removeDepth(loc.id, loc, i)}
+                        style={{ padding: '4px 8px', fontSize: 11 }}>✕</Btn>
+                    </div>
+                  ))}
+                  <Btn onClick={() => addDepth(loc.id, loc)}
+                    style={{ width: '100%', fontSize: 11, padding: '5px 8px', marginBottom: 8 }}>
+                    + Add depth callout
+                  </Btn>
+                </div>
+
+                {/* Depth callouts — print */}
+                {(loc.depthCallouts || []).filter(d => d.position || d.depth).length > 0 && (
+                  <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 10 }}>
+                    {(loc.depthCallouts || []).filter(d => d.position || d.depth).map((d, i) => (
+                      <div key={i}>• {d.position}: {d.depth}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="loc-edit-only">
+                  <Field label="Coring instruction (bold in PDF)">
+                    <Input value={loc.instruction}
+                      onChange={e => updateLoc(loc.id, { instruction: e.target.value })}
+                      placeholder={DEFAULT_INSTRUCTION}
+                      style={{ fontWeight: 600 }} />
+                  </Field>
+                </div>
+
+                {loc.instruction && (
+                  <div className="loc-print-only" style={{
+                    fontSize: 12, fontWeight: 700, marginTop: 4,
+                  }}>- {loc.instruction}</div>
+                )}
+
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <Field label="Verdict">
+                    <Select value={loc.verdict}
+                      onChange={e => updateLoc(loc.id, { verdict: e.target.value })}
+                      style={{ color: vm.color, fontWeight: 600 }}>
+                      <option value="safe">✓ Safe to drill</option>
+                      <option value="caution">⚠ Caution</option>
+                      <option value="nogo">✕ Do not drill</option>
+                    </Select>
+                  </Field>
+                  <Field label="Confidence">
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[
+                        { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                        { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                        { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                      ].map(opt => (
+                        <button key={opt.id}
+                          onClick={() => updateLoc(loc.id, { confidence: opt.id })}
+                          style={{
+                            flex: 1,
+                            background: loc.confidence === opt.id ? opt.bg : c.cardAlt,
+                            color: loc.confidence === opt.id ? opt.color : c.textDim,
+                            border: `1px solid ${loc.confidence === opt.id ? opt.color : c.border}`,
+                            borderRadius: 4, padding: '7px 4px',
+                            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          }}>{opt.label}</button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="loc-print-only" style={{
+                  marginTop: 8, paddingTop: 6, borderTop: '1px solid #ccc',
+                  fontSize: 11, color: '#444',
+                }}>
+                  Verdict: <strong>{vm.label}</strong> · Confidence: <strong>{(loc.confidence || 'high').toUpperCase()}</strong>
+                </div>
+              </div>
+
+              {/* Right side (photo + north arrow) */}
+              <div className="loc-right" style={{ marginTop: 12 }}>
+                <div style={{
+                  fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                  textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                }}>Annotated photo</div>
+                <div className="loc-photo" style={{
+                  position: 'relative', background: c.cardAlt, borderRadius: 6,
+                  aspectRatio: '4 / 3', overflow: 'hidden',
+                  border: `1px solid ${c.border}`, marginBottom: 8,
+                }}>
+                  {loc.photo ? (
+                    <>
+                      <img src={loc.photo} alt={loc.label}
+                        style={{
+                          width: '100%', height: '100%', objectFit: 'cover',
+                          position: 'absolute', inset: 0,
+                        }} />
+                      <NorthArrow rotation={loc.northRotation} />
+                      <div style={{
+                        position: 'absolute', bottom: 6, right: 6,
+                        background: 'rgba(0,0,0,0.7)', color: '#fff',
+                        padding: '3px 8px', borderRadius: 4,
+                        fontSize: 12, fontWeight: 700, letterSpacing: 0.5,
+                      }}>{loc.label}</div>
+                    </>
+                  ) : (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: c.textFaint, fontSize: 12, padding: 16, textAlign: 'center',
+                    }}>
+                      No photo yet
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline scan thumbnails referenced at this location */}
+                {(() => {
+                  const refs = (report.scanPhotos || []).filter(p =>
+                    (p.locationRef || '').toUpperCase() === (loc.label || '').toUpperCase() && loc.label
+                  );
+                  if (refs.length === 0) return null;
+                  return (
+                    <div className="loc-scan-refs" style={{ marginBottom: 8 }}>
+                      <div style={{
+                        fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                        textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                      }}>Referenced scans · {refs.length}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        {refs.map(p => (
+                          <div key={p.id} className="loc-scan-ref" style={{
+                            border: `1px solid ${c.border}`, borderRadius: 4,
+                            background: c.cardAlt, padding: 4,
+                          }}>
+                            <AnnotatedImage
+                              src={p.dataUrl}
+                              annotations={p.annotations || []}
+                              style={{ background: '#000', borderRadius: 3 }}
+                            />
+                            <div style={{ fontSize: 10, color: c.text, marginTop: 3, lineHeight: 1.35 }}>
+                              <strong>{SCAN_TYPE_LABEL[p.scanType || 'site'] || p.scanType}</strong>
+                              {p.scaleInfo && <> · {p.scaleInfo}</>}
+                            </div>
+                            {p.caption && (
+                              <div style={{ fontSize: 10, color: c.textDim, lineHeight: 1.35 }}>
+                                {p.caption}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="loc-photo-controls">
+                  <label style={{
+                    display: 'block', background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
+                    borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 12,
+                    color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 8,
+                  }}>
+                    📷 {loc.photo ? 'Replace photo' : 'Add photo'}
+                    <input
+                      ref={el => { if (el) fileInputRefs.current[loc.id] = el; }}
+                      type="file" accept="image/*" capture="environment"
+                      onChange={e => handlePhoto(loc.id, e)}
+                      style={{ display: 'none' }} />
+                  </label>
+
+                  <Field label={`North arrow rotation: ${loc.northRotation || 0}°`}>
+                    <input type="range" min="0" max="359" step="1"
+                      value={loc.northRotation || 0}
+                      onChange={e => updateLoc(loc.id, { northRotation: parseInt(e.target.value, 10) })}
+                      style={{ width: '100%' }} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Row controls */}
+              <div className="loc-controls" style={{ display: 'flex', gap: 5, marginTop: 8 }}>
+                <Btn variant="ghost" onClick={() => moveLoc(loc.id, -1)}
+                  disabled={idx === 0}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↑ Up</Btn>
+                <Btn variant="ghost" onClick={() => moveLoc(loc.id, 1)}
+                  disabled={idx === report.scanLocations.length - 1}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↓ Down</Btn>
+                <Btn variant="danger" onClick={() => removeLoc(loc.id)}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>✕ Remove</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {report.scanLocations.length === 0 && (
+        <div style={{
+          padding: '14px', textAlign: 'center', fontSize: 12,
+          color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 8,
+        }}>
+          No scan locations yet. Add one to build the side-by-side card.
+        </div>
+      )}
+
+      <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+    </Card>
+  );
+}
+
+// ============================================================
+// KamikazeMark — gear-and-saw brand badge (inline SVG)
+// ============================================================
+
+function KamikazeMark({ size = 40 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes mark">
+      <defs>
+        <radialGradient id="km-hub" cx="50%" cy="40%" r="70%">
+          <stop offset="0%"  stopColor="#2a2a2a" />
+          <stop offset="100%" stopColor="#000000" />
+        </radialGradient>
+      </defs>
+      {/* outer black disc with red ring */}
+      <circle cx="50" cy="50" r="48" fill="url(#km-hub)" stroke="#e02020" strokeWidth="2.5" />
+      {/* AK monogram */}
+      <text x="50" y="52" textAnchor="middle" dominantBaseline="central"
+        fontFamily='"Impact","Oswald","Arial Narrow Bold",sans-serif'
+        fontSize="38" fontWeight="900" fill="#ffffff" letterSpacing="-1">AK</text>
+      {/* saw-blade slash */}
+      <line x1="18" y1="82" x2="82" y2="18" stroke="#e02020" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
+    </svg>
   );
 }
 
@@ -602,7 +1818,75 @@ export default function GSSIReportApp() {
             border: 1px solid #ddd !important;
             background: white !important; color: black !important;
           }
+          .scan-photo-row {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .scan-photo-row img { max-width: 100% !important; height: auto !important; }
+
+          .gpr-scan-figure {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin-bottom: 12px;
+          }
+          .gpr-scan-figure img { max-width: 100% !important; height: auto !important; }
+          .gpr-panel-group {
+            display: flex !important;
+            gap: 8px !important;
+            align-items: flex-start !important;
+            flex-wrap: wrap !important;
+          }
+          .gpr-panel-group .gpr-panel { flex: 1 1 30% !important; min-width: 0 !important; }
+          .gpr-panel-sublabel { font-weight: 700 !important; font-size: 12px !important; }
+          .loc-scan-refs { page-break-inside: avoid; break-inside: avoid; }
+          .loc-scan-ref { page-break-inside: avoid; break-inside: avoid; }
+
+          .scan-location-card {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            border: 1px solid #999 !important;
+            border-radius: 0 !important;
+            margin-bottom: 14px;
+          }
+          .scan-location-card .loc-header {
+            background: #e02020 !important;
+            color: #fff !important;
+            border-bottom: 1px solid #999;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .scan-location-card .loc-body {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0 !important;
+            padding: 0 !important;
+          }
+          .scan-location-card .loc-left,
+          .scan-location-card .loc-right {
+            padding: 10px 12px !important;
+            margin-top: 0 !important;
+          }
+          .scan-location-card .loc-left {
+            border-right: 1px solid #999;
+          }
+          .scan-location-card .loc-controls,
+          .scan-location-card .loc-photo-controls,
+          .scan-location-card .loc-edit-only {
+            display: none !important;
+          }
+          .scan-location-card .loc-print-only {
+            display: block !important;
+          }
+          .scan-location-card .loc-photo img {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+          .scan-location-card .loc-photo {
+            border: 1px solid #999 !important;
+            border-radius: 0 !important;
+          }
         }
+        .loc-print-only { display: none; }
         input::placeholder, textarea::placeholder { color: ${c.textFaint}; }
         input:focus, textarea:focus, select:focus {
           outline: none; border-color: ${c.accent};
@@ -613,16 +1897,40 @@ export default function GSSIReportApp() {
       <div className="no-print" style={{
         marginBottom: 14, paddingBottom: 12,
         borderBottom: `1px solid ${c.borderStrong}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
       }}>
-        <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
-          GPR SCAN REPORT · BC EDITION
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          <KamikazeMark size={40} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2,
+            }}>
+              <span style={{
+                fontSize: 16, color: c.text, fontWeight: 900,
+                letterSpacing: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              }}>
+                AK SCANREPORT
+              </span>
+              <span style={{
+                background: c.accentDim, color: c.accent,
+                fontSize: 9, fontWeight: 800, letterSpacing: 1,
+                padding: '2px 7px', borderRadius: 4,
+              }}>FIELD</span>
+            </div>
+            <div style={{ fontSize: 10.5, color: c.textFaint, letterSpacing: 0.4 }}>
+              GSSI StructureScan Mini XT · BC engineering practice
+            </div>
+          </div>
         </div>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
-          GSSI StructureScan Mini XT
-        </h1>
-        <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
-          Engineers and Geoscientists BC · standard practice
-        </div>
+        <label style={{
+          background: c.accent, border: `1px solid ${c.accent}`,
+          borderRadius: 6, padding: '8px 12px', textAlign: 'center', fontSize: 11,
+          color: '#fff', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
+          flexShrink: 0, letterSpacing: 1, textTransform: 'uppercase',
+        }}>
+          📂 Load
+          <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
+        </label>
       </div>
 
       {/* === TIER PICKER === */}
@@ -720,65 +2028,108 @@ export default function GSSIReportApp() {
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
         }}>{report.targets.length}</span>
       }>
-        {report.targets.map((t, i) => (
-          <div key={i} style={{
-            border: `1px solid ${c.border}`, borderRadius: 6,
-            padding: 9, marginBottom: 7,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
-              <span style={{
-                background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
-                fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
-              }}>{t.id}</span>
-              <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
-                style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
-                <option>Rebar (top mat)</option>
-                <option>Rebar (bottom mat)</option>
-                <option>PT cable</option>
-                <option>Conduit (metallic)</option>
-                <option>Conduit (non-metallic)</option>
-                <option>Void</option>
-                <option>Pan decking</option>
-                <option>Unknown anomaly</option>
-              </Select>
-              <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
-              <Input placeholder="Depth (mm)" value={t.depth}
-                onChange={e => updateTarget(i, { depth: e.target.value })}
-                style={{ padding: '6px 9px', fontSize: 13 }} />
-              <Input placeholder="Cover (mm)" value={t.cover}
-                onChange={e => updateTarget(i, { cover: e.target.value })}
-                style={{ padding: '6px 9px', fontSize: 13 }} />
-            </div>
-            <Input placeholder="Note: size, spacing, observation"
-              value={t.note}
-              onChange={e => updateTarget(i, { note: e.target.value })}
-              style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
-            <div style={{ display: 'flex', gap: 5 }}>
-              {[
-                { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
-                { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
-                { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
-              ].map(opt => (
-                <button key={opt.id}
-                  onClick={() => updateTarget(i, { confidence: opt.id })}
-                  style={{
-                    flex: 1,
-                    background: t.confidence === opt.id ? opt.bg : c.cardAlt,
-                    color: t.confidence === opt.id ? opt.color : c.textDim,
-                    border: `1px solid ${t.confidence === opt.id ? opt.color : c.border}`,
-                    borderRadius: 4, padding: '4px 6px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  }}>{opt.label} conf.</button>
+        {CONFIDENCE_ORDER.map(level => {
+          const meta = CONFIDENCE_META[level];
+          const items = report.targets
+            .map((t, i) => ({ t, i }))
+            .filter(({ t }) => (t.confidence || 'high') === level);
+          if (items.length === 0) return null;
+          return (
+            <div key={level} style={{ marginBottom: 10 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 9px', marginBottom: 7,
+                background: meta.bg, borderLeft: `3px solid ${meta.color}`,
+                borderRadius: '0 4px 4px 0',
+              }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                  color: meta.color, textTransform: 'uppercase',
+                }}>{meta.label}</span>
+                <span style={{ fontSize: 11, color: c.textDim }}>
+                  · {items.length} target{items.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {items.map(({ t, i }) => (
+                <div key={i} style={{
+                  border: `1px solid ${c.border}`, borderRadius: 6,
+                  padding: 9, marginBottom: 7,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
+                    <span style={{
+                      background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
+                      fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
+                    }}>{t.id}</span>
+                    <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
+                      style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
+                      <option>Rebar (top mat)</option>
+                      <option>Rebar (bottom mat)</option>
+                      <option>PT cable</option>
+                      <option>Conduit (metallic)</option>
+                      <option>Conduit (non-metallic)</option>
+                      <option>Void</option>
+                      <option>Pan decking</option>
+                      <option>Unknown anomaly</option>
+                    </Select>
+                    <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                    <Input placeholder="Depth (mm)" value={t.depth}
+                      onChange={e => updateTarget(i, { depth: e.target.value })}
+                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                    <Input placeholder="Cover (mm)" value={t.cover}
+                      onChange={e => updateTarget(i, { cover: e.target.value })}
+                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                  </div>
+                  <Input placeholder="Note: size, spacing, observation"
+                    value={t.note}
+                    onChange={e => updateTarget(i, { note: e.target.value })}
+                    style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {[
+                      { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                      { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                      { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                    ].map(opt => (
+                      <button key={opt.id}
+                        onClick={() => updateTarget(i, { confidence: opt.id })}
+                        style={{
+                          flex: 1,
+                          background: t.confidence === opt.id ? opt.bg : c.cardAlt,
+                          color: t.confidence === opt.id ? opt.color : c.textDim,
+                          border: `1px solid ${t.confidence === opt.id ? opt.color : c.border}`,
+                          borderRadius: 4, padding: '4px 6px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}>{opt.label} conf.</button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
+          );
+        })}
+        {report.targets.length === 0 && (
+          <div style={{
+            padding: '14px', textAlign: 'center', fontSize: 12,
+            color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 7,
+          }}>
+            No targets yet.
           </div>
-        ))}
+        )}
         <Btn onClick={addTarget} style={{ width: '100%' }}>+ Add target</Btn>
       </Card>
 
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} />
+
+      {/* === SCAN PHOTOS === */}
+      <ScanPhotos report={report} update={update} />
+
+      {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
+      <ScanLocations report={report} update={update} />
+
+      {/* === GPR SCANS (full-size grouping for the PDF) === */}
+      <GPRScans report={report} />
 
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" badge={
@@ -972,19 +2323,11 @@ export default function GSSIReportApp() {
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
         <Btn variant="primary" onClick={printPDF}>📄 PDF</Btn>
-        <Btn onClick={exportJSON}>💾 Save</Btn>
-        <label style={{
-          background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 6, padding: '9px 12px', textAlign: 'center', fontSize: 13,
-          color: c.text, cursor: 'pointer', fontWeight: 500,
-        }}>
-          📂 Load
-          <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
-        </label>
+        <Btn onClick={exportJSON}>💾 Save draft</Btn>
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
