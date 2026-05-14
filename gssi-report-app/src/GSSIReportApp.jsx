@@ -544,26 +544,432 @@ const CONFIDENCE_META = {
   low:  { label: 'Low confidence',  color: c.red,   bg: c.redBg },
 };
 
+const SCAN_TYPES = [
+  { id: 'site',    label: 'Marked-up slab' },
+  { id: 'bscan',   label: 'B-scan (linescan)' },
+  { id: 'cscan',   label: 'C-scan / Scan3D' },
+  { id: 'focus',   label: 'Focus' },
+  { id: 'other',   label: 'Other' },
+];
+const SCAN_TYPE_ORDER = ['bscan', 'cscan', 'focus', 'site', 'other'];
+const SCAN_TYPE_LABEL = SCAN_TYPES.reduce((acc, t) => { acc[t.id] = t.label; return acc; }, {});
+
+const ANNOTATION_COLORS = [
+  { id: 'red',    hex: '#e84a4a' },
+  { id: 'blue',   hex: '#3a8de8' },
+  { id: 'orange', hex: '#e89c3a' },
+  { id: 'green',  hex: '#45c97a' },
+  { id: 'black',  hex: '#000000' },
+];
+const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = c.hex; return acc; }, {});
+
+function parseScanFilename(name) {
+  if (!name) return {};
+  const lower = name.toLowerCase();
+  const out = {};
+  if (/linescan|bscan|b-scan/.test(lower))            out.scanType = 'bscan';
+  else if (/scan3d|cscan|c-scan|plan/.test(lower))    out.scanType = 'cscan';
+  else if (/focus/.test(lower))                       out.scanType = 'focus';
+  const parts = [];
+  const cm  = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*cm/);
+  const inch = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*in/);
+  if (cm)   parts.push(`${cm[1]}–${cm[2]} cm`);
+  if (inch) parts.push(`${inch[1]}–${inch[2]} in`);
+  if (parts.length) out.scaleInfo = parts.join(' × ');
+  const loc = name.match(/[_\-](L\d+)(?:[_\-.]|$)/i) || name.match(/^(L\d+)[_\-.]/i);
+  if (loc) out.locationRef = loc[1].toUpperCase();
+  return out;
+}
+
+// Draw an arrowhead at (x2, y2) pointing away from (x1, y1)
+function drawArrowHead(ctx, x1, y1, x2, y2, color) {
+  const headLen = Math.max(10, Math.hypot(x2 - x1, y2 - y1) * 0.18);
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 7), y2 - headLen * Math.sin(angle - Math.PI / 7));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 7), y2 - headLen * Math.sin(angle + Math.PI / 7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawAnnotation(ctx, a, W, H) {
+  const color = ANNOTATION_COLOR_HEX[a.color] || a.color || '#e84a4a';
+  const minDim = Math.min(W, H);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, minDim * 0.006);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (a.type === 'arrow' && a.start && a.end) {
+    const x1 = a.start.x * W, y1 = a.start.y * H;
+    const x2 = a.end.x * W,   y2 = a.end.y * H;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    drawArrowHead(ctx, x1, y1, x2, y2, color);
+  } else if (a.type === 'circle' && a.center && typeof a.radius === 'number') {
+    ctx.beginPath();
+    ctx.arc(a.center.x * W, a.center.y * H, a.radius * minDim, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (a.type === 'rect' && a.topLeft && a.bottomRight) {
+    const x = a.topLeft.x * W, y = a.topLeft.y * H;
+    const w = (a.bottomRight.x - a.topLeft.x) * W;
+    const h = (a.bottomRight.y - a.topLeft.y) * H;
+    ctx.strokeRect(x, y, w, h);
+  } else if (a.type === 'text' && a.position) {
+    const fontSize = Math.max(10, (a.fontSize || 14) * (minDim / 400));
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textBaseline = 'top';
+    const text = a.content || '';
+    const padX = fontSize * 0.3;
+    const padY = fontSize * 0.15;
+    const m = ctx.measureText(text);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(
+      a.position.x * W - padX,
+      a.position.y * H - padY,
+      m.width + padX * 2,
+      fontSize + padY * 2,
+    );
+    ctx.fillStyle = color;
+    ctx.fillText(text, a.position.x * W, a.position.y * H);
+  }
+}
+
+// ============================================================
+// AnnotatedImage — img with overlay canvas of annotations
+// ============================================================
+
+function AnnotatedImage({ src, annotations = [], style, alt }) {
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const redraw = () => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!canvas || !img || !container) return;
+    const imgRect = img.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (imgRect.width === 0 || imgRect.height === 0) return;
+    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+    canvas.style.width = imgRect.width + 'px';
+    canvas.style.height = imgRect.height + 'px';
+    canvas.width = imgRect.width;
+    canvas.height = imgRect.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    annotations.forEach(a => drawAnnotation(ctx, a, canvas.width, canvas.height));
+  };
+
+  useEffect(redraw, [annotations, src]);
+
+  useEffect(() => {
+    const handler = () => redraw();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [annotations]);
+
+  return (
+    <div ref={containerRef} style={{
+      position: 'relative', display: 'block', lineHeight: 0, ...style,
+    }}>
+      <img ref={imgRef} src={src} alt={alt || 'Scan'}
+        onLoad={redraw}
+        style={{ display: 'block', width: '100%', height: 'auto' }} />
+      <canvas ref={canvasRef} style={{
+        position: 'absolute', pointerEvents: 'none',
+      }} />
+    </div>
+  );
+}
+
+// ============================================================
+// AnnotationEditor — full-screen modal canvas editor
+// ============================================================
+
+function AnnotationEditor({ photo, onSave, onClose }) {
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null);
+  const [annotations, setAnnotations] = useState(() => [...(photo.annotations || [])]);
+  const [tool, setTool] = useState('arrow');
+  const [color, setColor] = useState('red');
+  const [anchor, setAnchor] = useState(null);   // first click (fractional)
+  const [hover, setHover] = useState(null);     // mouse-move (fractional)
+
+  const getFractionalCoords = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches?.[0] || e.changedTouches?.[0];
+    const cx = t ? t.clientX : e.clientX;
+    const cy = t ? t.clientY : e.clientY;
+    return {
+      x: Math.max(0, Math.min(1, (cx - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (cy - rect.top) / rect.height)),
+    };
+  };
+
+  const redraw = () => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!canvas || !img || !container) return;
+    const imgRect = img.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (imgRect.width === 0 || imgRect.height === 0) return;
+    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
+    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
+    canvas.style.width = imgRect.width + 'px';
+    canvas.style.height = imgRect.height + 'px';
+    canvas.width = imgRect.width;
+    canvas.height = imgRect.height;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    annotations.forEach(a => drawAnnotation(ctx, a, W, H));
+
+    // Preview of in-progress shape
+    if (anchor && hover) {
+      const previewColor = ANNOTATION_COLOR_HEX[color];
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.setLineDash([5, 4]);
+      const minDim = Math.min(W, H);
+      ctx.strokeStyle = previewColor;
+      ctx.fillStyle = previewColor;
+      ctx.lineWidth = Math.max(2, minDim * 0.006);
+      if (tool === 'arrow') {
+        ctx.beginPath();
+        ctx.moveTo(anchor.x * W, anchor.y * H);
+        ctx.lineTo(hover.x * W, hover.y * H);
+        ctx.stroke();
+      } else if (tool === 'circle') {
+        const dx = (hover.x - anchor.x) * W;
+        const dy = (hover.y - anchor.y) * H;
+        const r = Math.hypot(dx, dy);
+        ctx.beginPath();
+        ctx.arc(anchor.x * W, anchor.y * H, r, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (tool === 'rect') {
+        const x = Math.min(anchor.x, hover.x) * W;
+        const y = Math.min(anchor.y, hover.y) * H;
+        const w = Math.abs(hover.x - anchor.x) * W;
+        const h = Math.abs(hover.y - anchor.y) * H;
+        ctx.strokeRect(x, y, w, h);
+      }
+      ctx.restore();
+    }
+  };
+
+  useEffect(redraw, [annotations, anchor, hover, tool, color]);
+
+  useEffect(() => {
+    const handler = () => redraw();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [annotations, anchor, hover]);
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    const pt = getFractionalCoords(e);
+    if (!pt) return;
+    if (tool === 'text') {
+      const content = prompt('Label text:', '');
+      if (!content) return;
+      pushAnnotation({
+        id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        type: 'text', color, position: pt, content, fontSize: 14,
+      });
+      return;
+    }
+    if (!anchor) {
+      setAnchor(pt);
+      setHover(pt);
+    } else {
+      const id = `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      let ann = null;
+      if (tool === 'arrow') {
+        ann = { id, type: 'arrow', color, start: anchor, end: pt };
+      } else if (tool === 'circle') {
+        const W = canvasRef.current.width, H = canvasRef.current.height;
+        const dx = (pt.x - anchor.x) * W;
+        const dy = (pt.y - anchor.y) * H;
+        const radiusPx = Math.hypot(dx, dy);
+        const radius = radiusPx / Math.min(W, H);
+        ann = { id, type: 'circle', color, center: anchor, radius };
+      } else if (tool === 'rect') {
+        ann = {
+          id, type: 'rect', color,
+          topLeft:     { x: Math.min(anchor.x, pt.x), y: Math.min(anchor.y, pt.y) },
+          bottomRight: { x: Math.max(anchor.x, pt.x), y: Math.max(anchor.y, pt.y) },
+        };
+      }
+      if (ann) pushAnnotation(ann);
+      setAnchor(null);
+      setHover(null);
+    }
+  };
+
+  const pushAnnotation = (a) => setAnnotations(prev => [...prev, a]);
+
+  const handleMove = (e) => {
+    if (!anchor || tool === 'text') return;
+    e.preventDefault();
+    const pt = getFractionalCoords(e);
+    if (pt) setHover(pt);
+  };
+
+  const undo = () => setAnnotations(prev => prev.slice(0, -1));
+  const clearAll = () => {
+    if (confirm('Clear all annotations on this scan?')) setAnnotations([]);
+  };
+
+  const save = () => onSave(annotations);
+
+  useEffect(() => {
+    setAnchor(null);
+    setHover(null);
+  }, [tool]);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(8, 12, 18, 0.92)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        padding: '10px 12px', background: c.bgRaised,
+        borderBottom: `1px solid ${c.borderStrong}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>
+          🖊 Annotate scan
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Btn variant="ghost" onClick={onClose} style={{ fontSize: 12 }}>Cancel</Btn>
+          <Btn variant="primary" onClick={save} style={{ fontSize: 12 }}>✓ Save</Btn>
+        </div>
+      </div>
+
+      <div ref={containerRef} style={{
+        flex: 1, position: 'relative', overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8,
+      }}>
+        <img
+          ref={imgRef}
+          src={photo.dataUrl}
+          alt="scan"
+          onLoad={redraw}
+          style={{
+            maxWidth: '100%', maxHeight: '100%',
+            objectFit: 'contain', display: 'block', userSelect: 'none',
+          }}
+        />
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            touchAction: 'none', cursor: tool === 'text' ? 'text' : 'crosshair',
+          }}
+          onClick={handleClick}
+          onMouseMove={handleMove}
+          onTouchStart={handleClick}
+          onTouchMove={handleMove}
+        />
+      </div>
+
+      <div style={{
+        padding: '10px 12px', background: c.bgRaised,
+        borderTop: `1px solid ${c.borderStrong}`,
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+          {[
+            { id: 'arrow',  label: '→ Arrow' },
+            { id: 'circle', label: '○ Circle' },
+            { id: 'rect',   label: '▭ Rect' },
+            { id: 'text',   label: 'T Text' },
+          ].map(opt => (
+            <button key={opt.id}
+              onClick={() => setTool(opt.id)}
+              style={{
+                background: tool === opt.id ? c.accentDim : c.cardAlt,
+                border: `1px solid ${tool === opt.id ? c.accent : c.border}`,
+                borderRadius: 6, padding: '8px 4px',
+                color: tool === opt.id ? '#fff' : c.text,
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>{opt.label}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {ANNOTATION_COLORS.map(co => (
+              <button key={co.id}
+                onClick={() => setColor(co.id)}
+                title={co.id}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: co.hex, cursor: 'pointer',
+                  border: color === co.id ? `3px solid ${c.text}` : `1px solid ${c.border}`,
+                }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="ghost" onClick={undo}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>↶ Undo</Btn>
+            <Btn variant="ghost" onClick={clearAll}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
+          </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center' }}>
+          {tool === 'text'
+            ? 'Tap to place a text label.'
+            : anchor
+              ? `Tap to finish the ${tool}.`
+              : `Tap to start the ${tool}.`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScanPhotos({ report, update }) {
   const fileInputRef = useRef(null);
+  const [editingPhotoId, setEditingPhotoId] = useState(null);
 
   const addPhotos = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     const loaded = await Promise.all(files.map(file => new Promise((resolve) => {
       const reader = new FileReader();
+      const detected = parseScanFilename(file.name || '');
       reader.onload = (ev) => resolve({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         dataUrl: ev.target.result,
         caption: '',
         confidence: 'high',
         pinRef: '',
+        scanType: detected.scanType || 'site',
+        locationRef: detected.locationRef || '',
+        scaleInfo: detected.scaleInfo || '',
+        panelGroup: '',
+        panelLabel: '',
+        annotations: [],
       });
       reader.readAsDataURL(file);
     })));
     update({ scanPhotos: [...report.scanPhotos, ...loaded] });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const editingPhoto = report.scanPhotos.find(p => p.id === editingPhotoId);
 
   const updatePhoto = (id, patch) => {
     update({
@@ -641,6 +1047,7 @@ function ScanPhotos({ report, update }) {
 
             {group.photos.map(photo => {
               const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
+              const annotationCount = (photo.annotations || []).length;
               return (
                 <div key={photo.id} className="scan-photo-row" style={{
                   border: `1px solid ${c.border}`, borderRadius: 6,
@@ -649,12 +1056,17 @@ function ScanPhotos({ report, update }) {
                   <div style={{
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
-                    <img src={photo.dataUrl} alt={photo.caption || 'Scan photo'}
-                      style={{
-                        width: 84, height: 84, objectFit: 'cover',
-                        borderRadius: 4, border: `1px solid ${c.border}`,
-                        flexShrink: 0,
-                      }} />
+                    <div style={{ width: 84, flexShrink: 0 }}>
+                      <AnnotatedImage
+                        src={photo.dataUrl}
+                        annotations={photo.annotations || []}
+                        alt={photo.caption || 'Scan photo'}
+                        style={{
+                          width: 84, height: 84, overflow: 'hidden',
+                          borderRadius: 4, border: `1px solid ${c.border}`,
+                        }}
+                      />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Textarea
                         value={photo.caption}
@@ -662,6 +1074,49 @@ function ScanPhotos({ report, update }) {
                         placeholder="Caption: what does this photo show?"
                         style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
                       />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                        <Select
+                          value={photo.scanType || 'site'}
+                          onChange={e => updatePhoto(photo.id, { scanType: e.target.value })}
+                          style={{ padding: '6px 8px', fontSize: 12 }}
+                        >
+                          {SCAN_TYPES.map(t => (
+                            <option key={t.id} value={t.id}>{t.label}</option>
+                          ))}
+                        </Select>
+                        <Input
+                          value={photo.locationRef || ''}
+                          onChange={e => updatePhoto(photo.id, { locationRef: e.target.value.toUpperCase() })}
+                          placeholder="Loc (L1)"
+                          list={`loc-list-${photo.id}`}
+                          style={{ padding: '6px 8px', fontSize: 12 }}
+                        />
+                        <datalist id={`loc-list-${photo.id}`}>
+                          {(report.scanLocations || []).map(l => (
+                            <option key={l.id} value={l.label} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <Input
+                        value={photo.scaleInfo || ''}
+                        onChange={e => updatePhoto(photo.id, { scaleInfo: e.target.value })}
+                        placeholder="Scale (e.g. 0–70 cm × 0–20 in)"
+                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                      />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                        <Input
+                          value={photo.panelGroup || ''}
+                          onChange={e => updatePhoto(photo.id, { panelGroup: e.target.value })}
+                          placeholder="Panel group"
+                          style={{ padding: '6px 9px', fontSize: 12 }}
+                        />
+                        <Input
+                          value={photo.panelLabel || ''}
+                          onChange={e => updatePhoto(photo.id, { panelLabel: e.target.value })}
+                          placeholder="Sub-label (a/b/c)"
+                          style={{ padding: '6px 9px', fontSize: 12 }}
+                        />
+                      </div>
                       <Input
                         value={photo.pinRef}
                         onChange={e => updatePhoto(photo.id, { pinRef: e.target.value })}
@@ -689,6 +1144,10 @@ function ScanPhotos({ report, update }) {
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                    <Btn variant="primary" onClick={() => setEditingPhotoId(photo.id)}
+                      style={{ flex: 1.4, fontSize: 11, padding: '5px 6px' }}>
+                      🖊 Annotate{annotationCount > 0 ? ` (${annotationCount})` : ''}
+                    </Btn>
                     <Btn variant="ghost" onClick={() => movePhoto(photo.id, -1)}
                       style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
                       disabled={globalIdx === 0}>↑ Up</Btn>
@@ -696,11 +1155,139 @@ function ScanPhotos({ report, update }) {
                       style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
                       disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
                     <Btn variant="danger" onClick={() => removePhoto(photo.id)}
-                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕ Remove</Btn>
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕</Btn>
                   </div>
                 </div>
               );
             })}
+          </div>
+        );
+      })}
+
+      {editingPhoto && (
+        <AnnotationEditor
+          photo={editingPhoto}
+          onSave={(annotations) => {
+            updatePhoto(editingPhoto.id, { annotations });
+            setEditingPhotoId(null);
+          }}
+          onClose={() => setEditingPhotoId(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
+// ============================================================
+// GPR Scans — print section grouping all scans by type
+// ============================================================
+
+function GPRScans({ report }) {
+  const photos = report.scanPhotos || [];
+  if (photos.length === 0) return null;
+
+  // Group by scanType in declared order
+  const byType = SCAN_TYPE_ORDER.map(type => ({
+    type,
+    label: SCAN_TYPE_LABEL[type],
+    items: photos.filter(p => (p.scanType || 'site') === type),
+  })).filter(g => g.items.length > 0);
+
+  // Within a type, partition into panel-groups + singles
+  const partition = (items) => {
+    const groups = {};
+    const singles = [];
+    items.forEach(p => {
+      const g = (p.panelGroup || '').trim();
+      if (!g) { singles.push(p); return; }
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(p);
+    });
+    return { groups, singles };
+  };
+
+  return (
+    <Card title="GPR scans · full size">
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        Full-size render of every scan (B-scan, C-scan, Focus, marked-up slab) grouped by
+        type. Multi-panel figures (a/b/c) display side-by-side. Annotations are baked in.
+      </div>
+
+      {byType.map(group => {
+        const { groups, singles } = partition(group.items);
+        return (
+          <div key={group.type} style={{ marginBottom: 14 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+              color: c.textDim, textTransform: 'uppercase',
+              padding: '6px 9px', marginBottom: 8,
+              borderLeft: `3px solid ${c.accent}`, background: c.cardAlt,
+            }}>{group.label} · {group.items.length}</div>
+
+            {/* Multi-panel groups */}
+            {Object.entries(groups).map(([gname, items]) => (
+              <div key={gname} className="gpr-scan-figure gpr-panel-group" style={{
+                display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10,
+              }}>
+                {items
+                  .slice()
+                  .sort((a, b) => (a.panelLabel || '').localeCompare(b.panelLabel || ''))
+                  .map(p => (
+                    <div key={p.id} className="gpr-panel" style={{
+                      flex: '1 1 30%', minWidth: 0,
+                      border: `1px solid ${c.border}`, borderRadius: 4, padding: 6,
+                      background: c.cardAlt,
+                    }}>
+                      <div className="gpr-panel-sublabel" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, color: c.text }}>
+                        {p.panelLabel ? `(${p.panelLabel}) ` : ''}{p.locationRef || ''}
+                      </div>
+                      <AnnotatedImage
+                        src={p.dataUrl}
+                        annotations={p.annotations || []}
+                        style={{ background: '#000', borderRadius: 3 }}
+                      />
+                      {(p.caption || p.scaleInfo) && (
+                        <div style={{ fontSize: 11, color: c.text, marginTop: 5, lineHeight: 1.4 }}>
+                          {p.caption && <div>{p.caption}</div>}
+                          {p.scaleInfo && <div style={{ color: c.textDim }}>{p.scaleInfo}</div>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                <div style={{ flexBasis: '100%', fontSize: 11, color: c.textDim, fontStyle: 'italic' }}>
+                  Figure: {gname}
+                </div>
+              </div>
+            ))}
+
+            {/* Singles */}
+            {singles.map(p => (
+              <div key={p.id} className="gpr-scan-figure" style={{
+                border: `1px solid ${c.border}`, borderRadius: 6, padding: 9,
+                marginBottom: 9, background: c.cardAlt,
+              }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginBottom: 6, fontSize: 11, color: c.textDim,
+                }}>
+                  <span>
+                    {p.locationRef && <strong style={{ color: c.text }}>{p.locationRef}</strong>}
+                    {p.locationRef && p.scaleInfo && ' · '}
+                    {p.scaleInfo}
+                  </span>
+                </div>
+                <AnnotatedImage
+                  src={p.dataUrl}
+                  annotations={p.annotations || []}
+                  style={{ background: '#000', borderRadius: 4 }}
+                />
+                {p.caption && (
+                  <div style={{ fontSize: 12, color: c.text, marginTop: 6, lineHeight: 1.4 }}>
+                    {p.caption}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         );
       })}
@@ -1021,6 +1608,45 @@ function ScanLocations({ report, update }) {
                   )}
                 </div>
 
+                {/* Inline scan thumbnails referenced at this location */}
+                {(() => {
+                  const refs = (report.scanPhotos || []).filter(p =>
+                    (p.locationRef || '').toUpperCase() === (loc.label || '').toUpperCase() && loc.label
+                  );
+                  if (refs.length === 0) return null;
+                  return (
+                    <div className="loc-scan-refs" style={{ marginBottom: 8 }}>
+                      <div style={{
+                        fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                        textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                      }}>Referenced scans · {refs.length}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        {refs.map(p => (
+                          <div key={p.id} className="loc-scan-ref" style={{
+                            border: `1px solid ${c.border}`, borderRadius: 4,
+                            background: c.cardAlt, padding: 4,
+                          }}>
+                            <AnnotatedImage
+                              src={p.dataUrl}
+                              annotations={p.annotations || []}
+                              style={{ background: '#000', borderRadius: 3 }}
+                            />
+                            <div style={{ fontSize: 10, color: c.text, marginTop: 3, lineHeight: 1.35 }}>
+                              <strong>{SCAN_TYPE_LABEL[p.scanType || 'site'] || p.scanType}</strong>
+                              {p.scaleInfo && <> · {p.scaleInfo}</>}
+                            </div>
+                            {p.caption && (
+                              <div style={{ fontSize: 10, color: c.textDim, lineHeight: 1.35 }}>
+                                {p.caption}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="loc-photo-controls">
                   <label style={{
                     display: 'block', background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
@@ -1172,6 +1798,23 @@ export default function GSSIReportApp() {
             break-inside: avoid;
           }
           .scan-photo-row img { max-width: 100% !important; height: auto !important; }
+
+          .gpr-scan-figure {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin-bottom: 12px;
+          }
+          .gpr-scan-figure img { max-width: 100% !important; height: auto !important; }
+          .gpr-panel-group {
+            display: flex !important;
+            gap: 8px !important;
+            align-items: flex-start !important;
+            flex-wrap: wrap !important;
+          }
+          .gpr-panel-group .gpr-panel { flex: 1 1 30% !important; min-width: 0 !important; }
+          .gpr-panel-sublabel { font-weight: 700 !important; font-size: 12px !important; }
+          .loc-scan-refs { page-break-inside: avoid; break-inside: avoid; }
+          .loc-scan-ref { page-break-inside: avoid; break-inside: avoid; }
 
           .scan-location-card {
             page-break-inside: avoid;
@@ -1447,6 +2090,9 @@ export default function GSSIReportApp() {
 
       {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
       <ScanLocations report={report} update={update} />
+
+      {/* === GPR SCANS (full-size grouping for the PDF) === */}
+      <GPRScans report={report} />
 
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" badge={
