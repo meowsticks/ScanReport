@@ -814,16 +814,28 @@ export default function GSSIReportApp() {
       <div className="no-print" style={{
         marginBottom: 14, paddingBottom: 12,
         borderBottom: `1px solid ${c.borderStrong}`,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10,
       }}>
-        <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
-          GPR SCAN REPORT · BC EDITION
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: c.accent, letterSpacing: 2, fontWeight: 700, marginBottom: 2 }}>
+            GPR SCAN REPORT · BC EDITION
+          </div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
+            GSSI StructureScan Mini XT
+          </h1>
+          <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
+            Engineers and Geoscientists BC · standard practice
+          </div>
         </div>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>
-          GSSI StructureScan Mini XT
-        </h1>
-        <div style={{ fontSize: 11, color: c.textFaint, marginTop: 4 }}>
-          Engineers and Geoscientists BC · standard practice
-        </div>
+        <label style={{
+          background: c.accentDim, border: `1px solid ${c.accent}`,
+          borderRadius: 6, padding: '8px 12px', textAlign: 'center', fontSize: 12,
+          color: '#fff', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}>
+          📂 Load draft
+          <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
+        </label>
       </div>
 
       {/* === TIER PICKER === */}
@@ -1210,19 +1222,11 @@ export default function GSSIReportApp() {
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
         <Btn variant="primary" onClick={printPDF}>📄 PDF</Btn>
-        <Btn onClick={exportJSON}>💾 Save</Btn>
-        <label style={{
-          background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 6, padding: '9px 12px', textAlign: 'center', fontSize: 13,
-          color: c.text, cursor: 'pointer', fontWeight: 500,
-        }}>
-          📂 Load
-          <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
-        </label>
+        <Btn onClick={exportJSON}>💾 Save draft</Btn>
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
