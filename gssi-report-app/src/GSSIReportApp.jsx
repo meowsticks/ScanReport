@@ -49,6 +49,9 @@ const DEFAULT_REPORT = {
   // Scan photos (embedded in PDF)
   scanPhotos: [],
 
+  // Scan locations (per-location card with notes + annotated photo)
+  scanLocations: [],
+
   // Cores
   cores: [],
 
@@ -706,6 +709,372 @@ function ScanPhotos({ report, update }) {
 }
 
 // ============================================================
+// Scan Locations (per-location card · prints side-by-side)
+// ============================================================
+
+const DEFAULT_INSTRUCTION = 'Use proposed core location ONLY when coring.';
+
+function NorthArrow({ rotation, size = 36 }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 6, right: 6,
+      background: '#fff', borderRadius: 6, padding: '3px 6px',
+      display: 'flex', alignItems: 'center', gap: 4,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+      fontSize: 10, fontWeight: 700, color: '#000',
+      letterSpacing: 0.5, lineHeight: 1,
+    }}>
+      <span style={{
+        display: 'inline-block', transform: `rotate(${rotation || 0}deg)`,
+        fontSize: size * 0.45, lineHeight: 1,
+      }}>↑</span>
+      <span>N</span>
+    </div>
+  );
+}
+
+function ScanLocations({ report, update }) {
+  const fileInputRefs = useRef({});
+
+  const addLocation = () => {
+    const id = `loc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const idx = report.scanLocations.length;
+    update({
+      scanLocations: [...report.scanLocations, {
+        id,
+        label: `L${idx + 1}`,
+        photo: null,
+        northRotation: 0,
+        coreSize: '',
+        overCut: '',
+        coreCount: '',
+        notes: '',
+        depthCallouts: [],
+        verdict: 'safe',
+        instruction: DEFAULT_INSTRUCTION,
+        confidence: 'high',
+      }],
+    });
+  };
+
+  const updateLoc = (id, patch) => {
+    update({
+      scanLocations: report.scanLocations.map(l =>
+        l.id === id ? { ...l, ...patch } : l
+      ),
+    });
+  };
+
+  const removeLoc = (id) => {
+    if (!confirm('Remove this scan location?')) return;
+    update({ scanLocations: report.scanLocations.filter(l => l.id !== id) });
+  };
+
+  const moveLoc = (id, dir) => {
+    const idx = report.scanLocations.findIndex(l => l.id === id);
+    const swap = idx + dir;
+    if (idx < 0 || swap < 0 || swap >= report.scanLocations.length) return;
+    const next = [...report.scanLocations];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    update({ scanLocations: next });
+  };
+
+  const handlePhoto = (id, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => updateLoc(id, { photo: ev.target.result });
+    reader.readAsDataURL(file);
+    if (fileInputRefs.current[id]) fileInputRefs.current[id].value = '';
+  };
+
+  const addDepth = (id, loc) => {
+    updateLoc(id, { depthCallouts: [...(loc.depthCallouts || []), { position: '', depth: '' }] });
+  };
+  const updateDepth = (id, loc, i, patch) => {
+    const next = [...(loc.depthCallouts || [])];
+    next[i] = { ...next[i], ...patch };
+    updateLoc(id, { depthCallouts: next });
+  };
+  const removeDepth = (id, loc, i) => {
+    updateLoc(id, { depthCallouts: (loc.depthCallouts || []).filter((_, j) => j !== i) });
+  };
+
+  const verdictMeta = {
+    safe:    { color: c.green, bg: c.greenBg, label: '✓ Safe to drill' },
+    caution: { color: c.amber, bg: c.amberBg, label: '⚠ Caution' },
+    nogo:    { color: c.red,   bg: c.redBg,   label: '✕ Do not drill' },
+  };
+
+  return (
+    <Card title="Scan locations · per-location cards" badge={
+      <span style={{
+        background: c.cardAlt, color: c.textDim, fontSize: 11,
+        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+      }}>{report.scanLocations.length}</span>
+    }>
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+        Each location (L1, L2…) prints as a side-by-side card: notes + core spec on
+        the left, annotated photo with north arrow on the right. This is the industry-
+        standard "Concrete Scanning Data" format.
+      </div>
+
+      {report.scanLocations.map((loc, idx) => {
+        const vm = verdictMeta[loc.verdict] || verdictMeta.safe;
+        return (
+          <div key={loc.id} className="scan-location-card" style={{
+            border: `1px solid ${c.borderStrong}`, borderRadius: 8,
+            marginBottom: 12, overflow: 'hidden',
+          }}>
+            {/* On-screen header: editable label + verdict */}
+            <div className="loc-header" style={{
+              background: '#5DCAA5', color: '#0f1419', padding: '7px 11px',
+              fontSize: 13, fontWeight: 700, letterSpacing: 0.4,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}>
+              <span>Concrete Scanning Data</span>
+              <span style={{ fontSize: 11, opacity: 0.8 }}>{loc.label}</span>
+            </div>
+
+            <div className="loc-body" style={{ padding: 11 }}>
+              {/* Left side (notes etc) */}
+              <div className="loc-left">
+                {/* Print-only summary line */}
+                <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Location: {loc.label || '—'}</div>
+                  {(loc.coreCount || loc.coreSize || loc.overCut) && (
+                    <div>
+                      Notes: {loc.coreCount && `${loc.coreCount} `}
+                      {loc.coreSize && `${loc.coreSize} core`}
+                      {loc.overCut && ` with an ${loc.overCut} over-cut`}.
+                    </div>
+                  )}
+                </div>
+
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                  <Field label="Label">
+                    <Input value={loc.label}
+                      onChange={e => updateLoc(loc.id, { label: e.target.value })}
+                      style={{ padding: '6px 8px', fontSize: 13, fontWeight: 600 }} />
+                  </Field>
+                  <Field label="Count">
+                    <Input value={loc.coreCount}
+                      onChange={e => updateLoc(loc.id, { coreCount: e.target.value })}
+                      placeholder="(1)"
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                  <Field label="Core">
+                    <Input value={loc.coreSize}
+                      onChange={e => updateLoc(loc.id, { coreSize: e.target.value })}
+                      placeholder='5"'
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                  <Field label="Over-cut">
+                    <Input value={loc.overCut}
+                      onChange={e => updateLoc(loc.id, { overCut: e.target.value })}
+                      placeholder='8"'
+                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                  </Field>
+                </div>
+
+                <div className="loc-edit-only">
+                  <Field label="Notes" hint="Multi-paragraph free text. What was found, what's nearby, what to watch out for.">
+                    <Textarea value={loc.notes}
+                      onChange={e => updateLoc(loc.id, { notes: e.target.value })}
+                      placeholder="No targets will be cut in the proposed core location.&#10;&#10;Note: the proposed 8&quot; over-cut will be within 1&quot; of marked PT boundary..."
+                      style={{ minHeight: 88 }} />
+                  </Field>
+                </div>
+
+                {/* Print-only notes text */}
+                {loc.notes && (
+                  <div className="loc-print-only" style={{
+                    fontSize: 12, lineHeight: 1.5, marginBottom: 10,
+                    whiteSpace: 'pre-wrap',
+                  }}>{loc.notes}</div>
+                )}
+
+                {/* Depth callouts — editor */}
+                <div className="loc-edit-only">
+                  <div style={{
+                    fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                    textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                  }}>Depth callouts</div>
+                  {(loc.depthCallouts || []).map((d, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 5, marginBottom: 5 }}>
+                      <Input value={d.position}
+                        onChange={e => updateDepth(loc.id, loc, i, { position: e.target.value })}
+                        placeholder="east side"
+                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                      <Input value={d.depth}
+                        onChange={e => updateDepth(loc.id, loc, i, { depth: e.target.value })}
+                        placeholder='1.5"'
+                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                      <Btn variant="ghost" onClick={() => removeDepth(loc.id, loc, i)}
+                        style={{ padding: '4px 8px', fontSize: 11 }}>✕</Btn>
+                    </div>
+                  ))}
+                  <Btn onClick={() => addDepth(loc.id, loc)}
+                    style={{ width: '100%', fontSize: 11, padding: '5px 8px', marginBottom: 8 }}>
+                    + Add depth callout
+                  </Btn>
+                </div>
+
+                {/* Depth callouts — print */}
+                {(loc.depthCallouts || []).filter(d => d.position || d.depth).length > 0 && (
+                  <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 10 }}>
+                    {(loc.depthCallouts || []).filter(d => d.position || d.depth).map((d, i) => (
+                      <div key={i}>• {d.position}: {d.depth}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="loc-edit-only">
+                  <Field label="Coring instruction (bold in PDF)">
+                    <Input value={loc.instruction}
+                      onChange={e => updateLoc(loc.id, { instruction: e.target.value })}
+                      placeholder={DEFAULT_INSTRUCTION}
+                      style={{ fontWeight: 600 }} />
+                  </Field>
+                </div>
+
+                {loc.instruction && (
+                  <div className="loc-print-only" style={{
+                    fontSize: 12, fontWeight: 700, marginTop: 4,
+                  }}>- {loc.instruction}</div>
+                )}
+
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <Field label="Verdict">
+                    <Select value={loc.verdict}
+                      onChange={e => updateLoc(loc.id, { verdict: e.target.value })}
+                      style={{ color: vm.color, fontWeight: 600 }}>
+                      <option value="safe">✓ Safe to drill</option>
+                      <option value="caution">⚠ Caution</option>
+                      <option value="nogo">✕ Do not drill</option>
+                    </Select>
+                  </Field>
+                  <Field label="Confidence">
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[
+                        { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                        { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                        { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                      ].map(opt => (
+                        <button key={opt.id}
+                          onClick={() => updateLoc(loc.id, { confidence: opt.id })}
+                          style={{
+                            flex: 1,
+                            background: loc.confidence === opt.id ? opt.bg : c.cardAlt,
+                            color: loc.confidence === opt.id ? opt.color : c.textDim,
+                            border: `1px solid ${loc.confidence === opt.id ? opt.color : c.border}`,
+                            borderRadius: 4, padding: '7px 4px',
+                            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          }}>{opt.label}</button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="loc-print-only" style={{
+                  marginTop: 8, paddingTop: 6, borderTop: '1px solid #ccc',
+                  fontSize: 11, color: '#444',
+                }}>
+                  Verdict: <strong>{vm.label}</strong> · Confidence: <strong>{(loc.confidence || 'high').toUpperCase()}</strong>
+                </div>
+              </div>
+
+              {/* Right side (photo + north arrow) */}
+              <div className="loc-right" style={{ marginTop: 12 }}>
+                <div style={{
+                  fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                  textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                }}>Annotated photo</div>
+                <div className="loc-photo" style={{
+                  position: 'relative', background: c.cardAlt, borderRadius: 6,
+                  aspectRatio: '4 / 3', overflow: 'hidden',
+                  border: `1px solid ${c.border}`, marginBottom: 8,
+                }}>
+                  {loc.photo ? (
+                    <>
+                      <img src={loc.photo} alt={loc.label}
+                        style={{
+                          width: '100%', height: '100%', objectFit: 'cover',
+                          position: 'absolute', inset: 0,
+                        }} />
+                      <NorthArrow rotation={loc.northRotation} />
+                      <div style={{
+                        position: 'absolute', bottom: 6, right: 6,
+                        background: 'rgba(0,0,0,0.7)', color: '#fff',
+                        padding: '3px 8px', borderRadius: 4,
+                        fontSize: 12, fontWeight: 700, letterSpacing: 0.5,
+                      }}>{loc.label}</div>
+                    </>
+                  ) : (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: c.textFaint, fontSize: 12, padding: 16, textAlign: 'center',
+                    }}>
+                      No photo yet
+                    </div>
+                  )}
+                </div>
+
+                <div className="loc-photo-controls">
+                  <label style={{
+                    display: 'block', background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
+                    borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 12,
+                    color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 8,
+                  }}>
+                    📷 {loc.photo ? 'Replace photo' : 'Add photo'}
+                    <input
+                      ref={el => { if (el) fileInputRefs.current[loc.id] = el; }}
+                      type="file" accept="image/*" capture="environment"
+                      onChange={e => handlePhoto(loc.id, e)}
+                      style={{ display: 'none' }} />
+                  </label>
+
+                  <Field label={`North arrow rotation: ${loc.northRotation || 0}°`}>
+                    <input type="range" min="0" max="359" step="1"
+                      value={loc.northRotation || 0}
+                      onChange={e => updateLoc(loc.id, { northRotation: parseInt(e.target.value, 10) })}
+                      style={{ width: '100%' }} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Row controls */}
+              <div className="loc-controls" style={{ display: 'flex', gap: 5, marginTop: 8 }}>
+                <Btn variant="ghost" onClick={() => moveLoc(loc.id, -1)}
+                  disabled={idx === 0}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↑ Up</Btn>
+                <Btn variant="ghost" onClick={() => moveLoc(loc.id, 1)}
+                  disabled={idx === report.scanLocations.length - 1}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↓ Down</Btn>
+                <Btn variant="danger" onClick={() => removeLoc(loc.id)}
+                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>✕ Remove</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {report.scanLocations.length === 0 && (
+        <div style={{
+          padding: '14px', textAlign: 'center', fontSize: 12,
+          color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 8,
+        }}>
+          No scan locations yet. Add one to build the side-by-side card.
+        </div>
+      )}
+
+      <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+    </Card>
+  );
+}
+
+// ============================================================
 // Main App
 // ============================================================
 
@@ -803,7 +1172,53 @@ export default function GSSIReportApp() {
             break-inside: avoid;
           }
           .scan-photo-row img { max-width: 100% !important; height: auto !important; }
+
+          .scan-location-card {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            border: 1px solid #999 !important;
+            border-radius: 0 !important;
+            margin-bottom: 14px;
+          }
+          .scan-location-card .loc-header {
+            background: #5DCAA5 !important;
+            color: #000 !important;
+            border-bottom: 1px solid #999;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .scan-location-card .loc-body {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0 !important;
+            padding: 0 !important;
+          }
+          .scan-location-card .loc-left,
+          .scan-location-card .loc-right {
+            padding: 10px 12px !important;
+            margin-top: 0 !important;
+          }
+          .scan-location-card .loc-left {
+            border-right: 1px solid #999;
+          }
+          .scan-location-card .loc-controls,
+          .scan-location-card .loc-photo-controls,
+          .scan-location-card .loc-edit-only {
+            display: none !important;
+          }
+          .scan-location-card .loc-print-only {
+            display: block !important;
+          }
+          .scan-location-card .loc-photo img {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+          .scan-location-card .loc-photo {
+            border: 1px solid #999 !important;
+            border-radius: 0 !important;
+          }
         }
+        .loc-print-only { display: none; }
         input::placeholder, textarea::placeholder { color: ${c.textFaint}; }
         input:focus, textarea:focus, select:focus {
           outline: none; border-color: ${c.accent};
@@ -1029,6 +1444,9 @@ export default function GSSIReportApp() {
 
       {/* === SCAN PHOTOS === */}
       <ScanPhotos report={report} update={update} />
+
+      {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
+      <ScanLocations report={report} update={update} />
 
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" badge={
