@@ -321,7 +321,7 @@ const QRGen = (() => {
 // =============================================================
 
 export default function QRCodeGenerator() {
-  const [url, setUrl] = useState('https://gssi-scan-report.vercel.app');
+  const [url, setUrl] = useState('https://scan-report-one.vercel.app/');
   const [size, setSize] = useState(512);
   const [label, setLabel] = useState('GSSI Scan Report · BC Edition');
   const canvasRef = useRef(null);
