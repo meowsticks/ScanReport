@@ -187,6 +187,39 @@ const Textarea = (props) => (
   }} />
 );
 
+// Textarea that auto-resizes to fit its content (no internal scrollbar)
+function AutoGrowTextarea({ value, onChange, className, style }) {
+  const ref = useRef(null);
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+  useEffect(fit, [value]);
+  useEffect(() => {
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      value={value}
+      onChange={onChange}
+      onInput={fit}
+      style={{
+        width: '100%', background: c.cardAlt,
+        border: `1px solid ${c.border}`, borderRadius: 6,
+        padding: '10px 12px', color: c.text, fontSize: 13, lineHeight: 1.55,
+        fontFamily: 'inherit', boxSizing: 'border-box',
+        resize: 'none', overflow: 'hidden',
+        ...style,
+      }}
+    />
+  );
+}
+
 const Select = ({ children, ...props }) => (
   <select {...props} style={{
     width: '100%', background: c.cardAlt,
@@ -1767,32 +1800,39 @@ function ScanLocations({ report, update }) {
 // KamikazeMark — gear-and-saw brand badge (inline SVG)
 // ============================================================
 
-function KamikazeMark({ size = 52 }) {
-  // 8 saw-blade-style notches around the rim
-  const notches = [];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
-    const x1 = 50 + 48 * Math.cos(a);
-    const y1 = 50 + 48 * Math.sin(a);
-    const x2 = 50 + 38 * Math.cos(a);
-    const y2 = 50 + 38 * Math.sin(a);
-    notches.push(
-      <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)}
-        stroke="#e02020" strokeWidth="4" strokeLinecap="round" />
-    );
+function KamikazeMark({ size = 56 }) {
+  // 22-tooth circular-saw blade, teeth chiseled forward (clockwise lean)
+  const teeth = 22;
+  const rTip = 49;     // tooth tip radius
+  const rGullet = 41;  // gullet (between-tooth low) radius
+  const skew = 0.55;   // 0 = symmetric, >0.5 = forward-leaning chisel
+  const path = [];
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2 - Math.PI / 2;
+    const aNext = ((i + 1) / teeth) * Math.PI * 2 - Math.PI / 2;
+    const tipA = a + (aNext - a) * skew;
+    const gx  = 50 + rGullet * Math.cos(a);
+    const gy  = 50 + rGullet * Math.sin(a);
+    const tx  = 50 + rTip    * Math.cos(tipA);
+    const ty  = 50 + rTip    * Math.sin(tipA);
+    const ngx = 50 + rGullet * Math.cos(aNext);
+    const ngy = 50 + rGullet * Math.sin(aNext);
+    if (i === 0) path.push(`M${gx.toFixed(2)} ${gy.toFixed(2)}`);
+    path.push(`L${tx.toFixed(2)} ${ty.toFixed(2)} L${ngx.toFixed(2)} ${ngy.toFixed(2)}`);
   }
+  path.push('Z');
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes mark">
-      {/* outer red ring */}
-      <circle cx="50" cy="50" r="48" fill="none" stroke="#e02020" strokeWidth="3" />
-      {/* black disc */}
-      <circle cx="50" cy="50" r="34" fill="#000" stroke="#e02020" strokeWidth="2" />
-      {/* saw notches between the rings */}
-      {notches}
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes saw blade">
+      {/* saw blade body (red, with chiseled teeth jutting outward) */}
+      <path d={path.join(' ')} fill="#e02020" stroke="#7a0e10" strokeWidth="0.6" strokeLinejoin="round" />
+      {/* dark hub disc, leaving a thin red ring of gullet visible */}
+      <circle cx="50" cy="50" r="36" fill="#000" stroke="#e02020" strokeWidth="2" />
+      {/* arbor hole hint */}
+      <circle cx="50" cy="50" r="2.5" fill="#e02020" />
       {/* AK monogram */}
-      <text x="50" y="54" textAnchor="middle" dominantBaseline="central"
+      <text x="50" y="55" textAnchor="middle" dominantBaseline="central"
         fontFamily='Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif'
-        fontSize="30" fontWeight="900" fill="#fff" letterSpacing="-1">AK</text>
+        fontSize="26" fontWeight="900" fill="#fff" letterSpacing="-0.5">AK</text>
     </svg>
   );
 }
@@ -1876,10 +1916,10 @@ export default function GSSIReportApp() {
   const showFullEquipment = tier === 'full';
 
   return (
-    <div style={{
+    <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '14px 12px 100px', maxWidth: 480, margin: '0 auto',
+      padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
     }}>
       <style>{`
         .print-only { display: none; }
@@ -2024,8 +2064,16 @@ export default function GSSIReportApp() {
         </label>
       </div>
       <style>{`
-        @media (max-width: 480px) {
+        /* Responsive shell — phone first, breathes on wider screens */
+        .ak-shell { max-width: 720px; }
+        @media (min-width: 900px)  { .ak-shell { max-width: 820px; padding-left: 20px; padding-right: 20px; } }
+        @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
+        @media (max-width: 480px)  {
+          .ak-shell { padding-left: 10px; padding-right: 10px; }
           .ak-header .ak-title { font-size: 19px !important; letter-spacing: 0.4px !important; }
+        }
+        @media print {
+          .ak-shell { max-width: none !important; padding: 0 !important; }
         }
       `}</style>
 
@@ -2368,11 +2416,10 @@ export default function GSSIReportApp() {
           Printed at the end of every report. Have your own counsel review before
           relying on this language for production work.
         </div>
-        <Textarea
+        <AutoGrowTextarea
           className="no-print"
           value={report.legalDisclaimer || ''}
           onChange={e => update({ legalDisclaimer: e.target.value })}
-          style={{ minHeight: 160, fontSize: 12, lineHeight: 1.5, padding: '8px 10px' }}
         />
         <div className="print-only legal-disclaimer-print">
           {report.legalDisclaimer || ''}
