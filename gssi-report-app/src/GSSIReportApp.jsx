@@ -46,6 +46,9 @@ const DEFAULT_REPORT = {
   diagramStrokes: [],
   diagramPins: [],
 
+  // Scan photos (embedded in PDF)
+  scanPhotos: [],
+
   // Cores
   cores: [],
 
@@ -287,8 +290,8 @@ function SiteDiagram({ report, update }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [tool, setTool] = useState('pin');
-  const [drawing, setDrawing] = useState(false);
-  const [currentStroke, setCurrentStroke] = useState(null);
+  const [anchor, setAnchor] = useState(null);
+  const [hoverPt, setHoverPt] = useState(null);
 
   const toolColors = {
     'draw-rebar': '#FAC775',
@@ -296,6 +299,8 @@ function SiteDiagram({ report, update }) {
     'draw-conduit': '#9BC5E8',
     'draw-note': '#5DCAA5',
   };
+
+  const lineWidthFor = (color) => color === '#F09595' ? 6 : 5;
 
   const redraw = () => {
     const canvas = canvasRef.current;
@@ -306,7 +311,7 @@ function SiteDiagram({ report, update }) {
     report.diagramStrokes.forEach(s => {
       if (s.points.length < 2) return;
       ctx.strokeStyle = s.color;
-      ctx.lineWidth = s.color === '#F09595' ? 4 : 3;
+      ctx.lineWidth = lineWidthFor(s.color);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -315,15 +320,24 @@ function SiteDiagram({ report, update }) {
       ctx.stroke();
     });
 
-    if (currentStroke && currentStroke.points.length >= 2) {
-      ctx.strokeStyle = currentStroke.color;
-      ctx.lineWidth = currentStroke.color === '#F09595' ? 4 : 3;
+    if (anchor && hoverPt && tool.startsWith('draw-')) {
+      const color = toolColors[tool];
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidthFor(color);
       ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.55;
+      ctx.setLineDash([6, 5]);
       ctx.beginPath();
-      ctx.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
-      currentStroke.points.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(hoverPt.x, hoverPt.y);
       ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(anchor.x, anchor.y, 5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     report.diagramPins.forEach(pin => {
@@ -348,7 +362,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, currentStroke]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, anchor, hoverPt, tool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -385,25 +399,32 @@ function SiteDiagram({ report, update }) {
         diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n }],
       });
     } else if (tool.startsWith('draw-')) {
-      setDrawing(true);
-      setCurrentStroke({ color: toolColors[tool], points: [pt] });
+      if (!anchor) {
+        setAnchor(pt);
+        setHoverPt(pt);
+      } else {
+        const color = toolColors[tool];
+        update({
+          diagramStrokes: [...report.diagramStrokes, { color, points: [anchor, pt] }],
+        });
+        setAnchor(null);
+        setHoverPt(null);
+      }
     }
   };
 
   const handleMove = (e) => {
-    if (!drawing || !currentStroke) return;
+    if (!anchor || !tool.startsWith('draw-')) return;
     e.preventDefault();
-    const pt = getCoords(e);
-    setCurrentStroke(s => ({ ...s, points: [...s.points, pt] }));
+    setHoverPt(getCoords(e));
   };
 
-  const handleEnd = () => {
-    if (drawing && currentStroke && currentStroke.points.length > 1) {
-      update({ diagramStrokes: [...report.diagramStrokes, currentStroke] });
-    }
-    setDrawing(false);
-    setCurrentStroke(null);
-  };
+  const handleEnd = () => {};
+
+  useEffect(() => {
+    setAnchor(null);
+    setHoverPt(null);
+  }, [tool]);
 
   const handlePhoto = (e) => {
     const file = e.target.files?.[0];
@@ -454,7 +475,7 @@ function SiteDiagram({ report, update }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: c.textFaint, fontSize: 12, textAlign: 'center', padding: 20,
           }}>
-            Tap Photo to add site image<br/>or draw on the blank canvas
+            Tap Photo to add site image<br/>or sketch on the blank canvas
           </div>
         )}
         <canvas
@@ -505,6 +526,181 @@ function SiteDiagram({ report, update }) {
           <span style={{ color: c.red }}>● No drill</span>
         </div>
       </div>
+    </Card>
+  );
+}
+
+// ============================================================
+// Scan Photos (embedded in PDF, grouped by confidence)
+// ============================================================
+
+const CONFIDENCE_ORDER = ['high', 'med', 'low'];
+const CONFIDENCE_META = {
+  high: { label: 'High confidence', color: c.green,  bg: c.greenBg },
+  med:  { label: 'Medium confidence', color: c.amber, bg: c.amberBg },
+  low:  { label: 'Low confidence',  color: c.red,   bg: c.redBg },
+};
+
+function ScanPhotos({ report, update }) {
+  const fileInputRef = useRef(null);
+
+  const addPhotos = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const loaded = await Promise.all(files.map(file => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        dataUrl: ev.target.result,
+        caption: '',
+        confidence: 'high',
+        pinRef: '',
+      });
+      reader.readAsDataURL(file);
+    })));
+    update({ scanPhotos: [...report.scanPhotos, ...loaded] });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const updatePhoto = (id, patch) => {
+    update({
+      scanPhotos: report.scanPhotos.map(p => p.id === id ? { ...p, ...patch } : p),
+    });
+  };
+
+  const removePhoto = (id) => {
+    update({ scanPhotos: report.scanPhotos.filter(p => p.id !== id) });
+  };
+
+  const movePhoto = (id, dir) => {
+    const idx = report.scanPhotos.findIndex(p => p.id === id);
+    const swap = idx + dir;
+    if (idx < 0 || swap < 0 || swap >= report.scanPhotos.length) return;
+    const next = [...report.scanPhotos];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    update({ scanPhotos: next });
+  };
+
+  const grouped = CONFIDENCE_ORDER.map(level => ({
+    level,
+    meta: CONFIDENCE_META[level],
+    photos: report.scanPhotos.filter(p => (p.confidence || 'high') === level),
+  }));
+
+  return (
+    <Card title="Scan photos" badge={
+      <span style={{
+        background: c.cardAlt, color: c.textDim, fontSize: 11,
+        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+      }}>{report.scanPhotos.length}</span>
+    }>
+      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        Add photos of the scanned area with markup, obstructions, or context shots.
+        Each photo is grouped by confidence and embedded into the PDF.
+      </div>
+
+      <label style={{
+        display: 'block', background: c.cardAlt, border: `1px dashed ${c.borderStrong}`,
+        borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
+        color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 10,
+      }}>
+        📷 Add photos (one or many)
+        <input ref={fileInputRef} type="file" accept="image/*" multiple
+          capture="environment" onChange={addPhotos} style={{ display: 'none' }} />
+      </label>
+
+      {report.scanPhotos.length === 0 ? (
+        <div style={{
+          padding: '14px', textAlign: 'center', fontSize: 12,
+          color: c.textFaint, background: c.cardAlt, borderRadius: 6,
+        }}>
+          No photos yet.
+        </div>
+      ) : grouped.map(group => {
+        if (group.photos.length === 0) return null;
+        return (
+          <div key={group.level} style={{ marginBottom: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 9px', marginBottom: 7,
+              background: group.meta.bg,
+              borderLeft: `3px solid ${group.meta.color}`,
+              borderRadius: '0 4px 4px 0',
+            }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                color: group.meta.color, textTransform: 'uppercase',
+              }}>{group.meta.label}</span>
+              <span style={{ fontSize: 11, color: c.textDim }}>
+                · {group.photos.length} photo{group.photos.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {group.photos.map(photo => {
+              const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
+              return (
+                <div key={photo.id} className="scan-photo-row" style={{
+                  border: `1px solid ${c.border}`, borderRadius: 6,
+                  padding: 9, marginBottom: 7, background: c.cardAlt,
+                }}>
+                  <div style={{
+                    display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
+                  }}>
+                    <img src={photo.dataUrl} alt={photo.caption || 'Scan photo'}
+                      style={{
+                        width: 84, height: 84, objectFit: 'cover',
+                        borderRadius: 4, border: `1px solid ${c.border}`,
+                        flexShrink: 0,
+                      }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Textarea
+                        value={photo.caption}
+                        onChange={e => updatePhoto(photo.id, { caption: e.target.value })}
+                        placeholder="Caption: what does this photo show?"
+                        style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
+                      />
+                      <Input
+                        value={photo.pinRef}
+                        onChange={e => updatePhoto(photo.id, { pinRef: e.target.value })}
+                        placeholder="Refs pin (e.g. A, B)"
+                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {[
+                      { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                      { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                      { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                    ].map(opt => (
+                      <button key={opt.id}
+                        onClick={() => updatePhoto(photo.id, { confidence: opt.id })}
+                        style={{
+                          flex: 1,
+                          background: photo.confidence === opt.id ? opt.bg : c.card,
+                          color: photo.confidence === opt.id ? opt.color : c.textDim,
+                          border: `1px solid ${photo.confidence === opt.id ? opt.color : c.border}`,
+                          borderRadius: 4, padding: '5px 6px',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}>{opt.label} conf.</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                    <Btn variant="ghost" onClick={() => movePhoto(photo.id, -1)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      disabled={globalIdx === 0}>↑ Up</Btn>
+                    <Btn variant="ghost" onClick={() => movePhoto(photo.id, 1)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
+                    <Btn variant="danger" onClick={() => removePhoto(photo.id)}
+                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕ Remove</Btn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </Card>
   );
 }
@@ -602,6 +798,11 @@ export default function GSSIReportApp() {
             border: 1px solid #ddd !important;
             background: white !important; color: black !important;
           }
+          .scan-photo-row {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .scan-photo-row img { max-width: 100% !important; height: auto !important; }
         }
         input::placeholder, textarea::placeholder { color: ${c.textFaint}; }
         input:focus, textarea:focus, select:focus {
@@ -720,65 +921,102 @@ export default function GSSIReportApp() {
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
         }}>{report.targets.length}</span>
       }>
-        {report.targets.map((t, i) => (
-          <div key={i} style={{
-            border: `1px solid ${c.border}`, borderRadius: 6,
-            padding: 9, marginBottom: 7,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
-              <span style={{
-                background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
-                fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
-              }}>{t.id}</span>
-              <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
-                style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
-                <option>Rebar (top mat)</option>
-                <option>Rebar (bottom mat)</option>
-                <option>PT cable</option>
-                <option>Conduit (metallic)</option>
-                <option>Conduit (non-metallic)</option>
-                <option>Void</option>
-                <option>Pan decking</option>
-                <option>Unknown anomaly</option>
-              </Select>
-              <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
-              <Input placeholder="Depth (mm)" value={t.depth}
-                onChange={e => updateTarget(i, { depth: e.target.value })}
-                style={{ padding: '6px 9px', fontSize: 13 }} />
-              <Input placeholder="Cover (mm)" value={t.cover}
-                onChange={e => updateTarget(i, { cover: e.target.value })}
-                style={{ padding: '6px 9px', fontSize: 13 }} />
-            </div>
-            <Input placeholder="Note: size, spacing, observation"
-              value={t.note}
-              onChange={e => updateTarget(i, { note: e.target.value })}
-              style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
-            <div style={{ display: 'flex', gap: 5 }}>
-              {[
-                { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
-                { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
-                { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
-              ].map(opt => (
-                <button key={opt.id}
-                  onClick={() => updateTarget(i, { confidence: opt.id })}
-                  style={{
-                    flex: 1,
-                    background: t.confidence === opt.id ? opt.bg : c.cardAlt,
-                    color: t.confidence === opt.id ? opt.color : c.textDim,
-                    border: `1px solid ${t.confidence === opt.id ? opt.color : c.border}`,
-                    borderRadius: 4, padding: '4px 6px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  }}>{opt.label} conf.</button>
+        {CONFIDENCE_ORDER.map(level => {
+          const meta = CONFIDENCE_META[level];
+          const items = report.targets
+            .map((t, i) => ({ t, i }))
+            .filter(({ t }) => (t.confidence || 'high') === level);
+          if (items.length === 0) return null;
+          return (
+            <div key={level} style={{ marginBottom: 10 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 9px', marginBottom: 7,
+                background: meta.bg, borderLeft: `3px solid ${meta.color}`,
+                borderRadius: '0 4px 4px 0',
+              }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                  color: meta.color, textTransform: 'uppercase',
+                }}>{meta.label}</span>
+                <span style={{ fontSize: 11, color: c.textDim }}>
+                  · {items.length} target{items.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {items.map(({ t, i }) => (
+                <div key={i} style={{
+                  border: `1px solid ${c.border}`, borderRadius: 6,
+                  padding: 9, marginBottom: 7,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
+                    <span style={{
+                      background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
+                      fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
+                    }}>{t.id}</span>
+                    <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
+                      style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
+                      <option>Rebar (top mat)</option>
+                      <option>Rebar (bottom mat)</option>
+                      <option>PT cable</option>
+                      <option>Conduit (metallic)</option>
+                      <option>Conduit (non-metallic)</option>
+                      <option>Void</option>
+                      <option>Pan decking</option>
+                      <option>Unknown anomaly</option>
+                    </Select>
+                    <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                    <Input placeholder="Depth (mm)" value={t.depth}
+                      onChange={e => updateTarget(i, { depth: e.target.value })}
+                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                    <Input placeholder="Cover (mm)" value={t.cover}
+                      onChange={e => updateTarget(i, { cover: e.target.value })}
+                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                  </div>
+                  <Input placeholder="Note: size, spacing, observation"
+                    value={t.note}
+                    onChange={e => updateTarget(i, { note: e.target.value })}
+                    style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {[
+                      { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
+                      { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
+                      { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
+                    ].map(opt => (
+                      <button key={opt.id}
+                        onClick={() => updateTarget(i, { confidence: opt.id })}
+                        style={{
+                          flex: 1,
+                          background: t.confidence === opt.id ? opt.bg : c.cardAlt,
+                          color: t.confidence === opt.id ? opt.color : c.textDim,
+                          border: `1px solid ${t.confidence === opt.id ? opt.color : c.border}`,
+                          borderRadius: 4, padding: '4px 6px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}>{opt.label} conf.</button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
+          );
+        })}
+        {report.targets.length === 0 && (
+          <div style={{
+            padding: '14px', textAlign: 'center', fontSize: 12,
+            color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 7,
+          }}>
+            No targets yet.
           </div>
-        ))}
+        )}
         <Btn onClick={addTarget} style={{ width: '100%' }}>+ Add target</Btn>
       </Card>
 
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} />
+
+      {/* === SCAN PHOTOS === */}
+      <ScanPhotos report={report} update={update} />
 
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" badge={
