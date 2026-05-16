@@ -991,7 +991,21 @@ function AnnotationEditor({ photo, onSave, onClose }) {
 
 function ScanPhotos({ report, update }) {
   const fileInputRef = useRef(null);
+  const cameraRef    = useRef(null);
   const [editingPhotoId, setEditingPhotoId] = useState(null);
+  const [dragPhotoId, setDragPhotoId] = useState(null);
+  const [overPhotoId, setOverPhotoId] = useState(null);
+
+  const reorderPhotos = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const list = [...report.scanPhotos];
+    const fromIdx = list.findIndex(p => p.id === fromId);
+    const toIdx   = list.findIndex(p => p.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [item] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, item);
+    update({ scanPhotos: list });
+  };
 
   const addPhotos = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -1057,15 +1071,26 @@ function ScanPhotos({ report, update }) {
         Each photo is grouped by confidence and embedded into the PDF.
       </div>
 
-      <label style={{
-        display: 'block', background: c.cardAlt, border: `1px dashed ${c.borderStrong}`,
-        borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
-        color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 10,
-      }}>
-        📷 Add photos (one or many)
-        <input ref={fileInputRef} type="file" accept="image/*" multiple
-          capture="environment" onChange={addPhotos} style={{ display: 'none' }} />
-      </label>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+        <label style={{
+          display: 'block', background: c.accent, border: `1px solid ${c.accent}`,
+          borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
+          color: '#fff', cursor: 'pointer', fontWeight: 700,
+        }}>
+          📷 Take photo
+          <input ref={cameraRef} type="file" accept="image/*"
+            capture="environment" onChange={addPhotos} style={{ display: 'none' }} />
+        </label>
+        <label style={{
+          display: 'block', background: c.cardAlt, border: `1px dashed ${c.borderStrong}`,
+          borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
+          color: c.text, cursor: 'pointer', fontWeight: 500,
+        }}>
+          📂 From library
+          <input ref={fileInputRef} type="file" accept="image/*" multiple
+            onChange={addPhotos} style={{ display: 'none' }} />
+        </label>
+      </div>
 
       {report.scanPhotos.length === 0 ? (
         <div style={{
@@ -1098,10 +1123,37 @@ function ScanPhotos({ report, update }) {
               const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
               const annotationCount = (photo.annotations || []).length;
               return (
-                <div key={photo.id} className="scan-photo-row" style={{
-                  border: `1px solid ${c.border}`, borderRadius: 6,
-                  padding: 9, marginBottom: 7, background: c.cardAlt,
-                }}>
+                <div key={photo.id}
+                  className={
+                    'scan-photo-row' +
+                    (dragPhotoId === photo.id ? ' dragging' : '') +
+                    (overPhotoId === photo.id && dragPhotoId && dragPhotoId !== photo.id ? ' drop-target' : '')
+                  }
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', photo.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    setDragPhotoId(photo.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragPhotoId) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (overPhotoId !== photo.id) setOverPhotoId(photo.id);
+                  }}
+                  onDragLeave={() => { if (overPhotoId === photo.id) setOverPhotoId(null); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const fromId = e.dataTransfer.getData('text/plain') || dragPhotoId;
+                    reorderPhotos(fromId, photo.id);
+                    setDragPhotoId(null); setOverPhotoId(null);
+                  }}
+                  onDragEnd={() => { setDragPhotoId(null); setOverPhotoId(null); }}
+                  style={{
+                    border: `1px solid ${c.border}`, borderRadius: 6,
+                    padding: 9, marginBottom: 7, background: c.cardAlt,
+                    cursor: 'grab',
+                  }}>
                   <div style={{
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
@@ -1385,6 +1437,44 @@ function ScanLocations({ report, update }) {
     update({ scanLocations: list });
   };
 
+  // Slab-contents quick-pick types
+  const SLAB_TYPES = [
+    { id: 'top-rebar',  label: 'Top mat',    color: '#FAC775' },
+    { id: 'bot-rebar',  label: 'Bottom mat', color: '#E0A340' },
+    { id: 'top-pt',     label: 'Top PT',     color: '#F09595' },
+    { id: 'bot-pt',     label: 'Bottom PT',  color: '#D06060' },
+    { id: 'conduit',    label: 'Conduit',    color: '#9BC5E8' },
+    { id: 'embed',      label: 'Embed/plate', color: '#9C8FE0' },
+    { id: 'cold-joint', label: 'Cold joint', color: '#A0A0A0' },
+    { id: 'anomaly',    label: 'Anomaly',    color: '#E02020' },
+    { id: 'other',      label: 'Other',      color: '#888' },
+  ];
+  const SLAB_TYPE_BY_ID = SLAB_TYPES.reduce((a, t) => { a[t.id] = t; return a; }, {});
+
+  const addSlabContent = (locId, typeId) => {
+    const loc = report.scanLocations.find(l => l.id === locId);
+    if (!loc) return;
+    const next = [...(loc.slabContents || []), {
+      id: `sc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: typeId, depth: '', count: '', notes: '',
+    }];
+    updateLoc(locId, { slabContents: next });
+  };
+  const updateSlabContent = (locId, scId, patch) => {
+    const loc = report.scanLocations.find(l => l.id === locId);
+    if (!loc) return;
+    updateLoc(locId, {
+      slabContents: (loc.slabContents || []).map(s => s.id === scId ? { ...s, ...patch } : s),
+    });
+  };
+  const removeSlabContent = (locId, scId) => {
+    const loc = report.scanLocations.find(l => l.id === locId);
+    if (!loc) return;
+    updateLoc(locId, {
+      slabContents: (loc.slabContents || []).filter(s => s.id !== scId),
+    });
+  };
+
   const addLocation = () => {
     const id = `loc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const idx = report.scanLocations.length;
@@ -1399,6 +1489,7 @@ function ScanLocations({ report, update }) {
         coreCount: '',
         notes: '',
         depthCallouts: [],
+        slabContents: [],
         verdict: 'safe',
         instruction: DEFAULT_INSTRUCTION,
         confidence: 'high',
@@ -1575,6 +1666,79 @@ function ScanLocations({ report, update }) {
                     fontSize: 12, lineHeight: 1.5, marginBottom: 10,
                     whiteSpace: 'pre-wrap',
                   }}>{loc.notes}</div>
+                )}
+
+                {/* What's in the slab — editor */}
+                <div className="loc-edit-only" style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: 10.5, color: c.textDim, marginBottom: 6,
+                    textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
+                  }}>What's in the slab</div>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 7,
+                  }}>
+                    {SLAB_TYPES.map(t => (
+                      <button key={t.id}
+                        onClick={() => addSlabContent(loc.id, t.id)}
+                        style={{
+                          background: c.cardAlt, border: `1px solid ${c.border}`,
+                          borderLeft: `4px solid ${t.color}`, borderRadius: 5,
+                          padding: '6px 6px', fontSize: 11, fontWeight: 700,
+                          color: c.text, cursor: 'pointer', textAlign: 'left',
+                          letterSpacing: 0.2,
+                        }}>+ {t.label}</button>
+                    ))}
+                  </div>
+                  {(loc.slabContents || []).map(sc => {
+                    const t = SLAB_TYPE_BY_ID[sc.type] || SLAB_TYPE_BY_ID.other;
+                    return (
+                      <div key={sc.id} style={{
+                        border: `1px solid ${c.border}`, borderLeft: `4px solid ${t.color}`,
+                        borderRadius: 5, padding: 6, marginBottom: 5, background: c.cardAlt,
+                      }}>
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          marginBottom: 5,
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{t.label}</span>
+                          <Btn variant="ghost" onClick={() => removeSlabContent(loc.id, sc.id)}
+                            style={{ padding: '2px 7px', fontSize: 11 }}>✕</Btn>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                          <Input value={sc.depth}
+                            onChange={e => updateSlabContent(loc.id, sc.id, { depth: e.target.value })}
+                            placeholder='Depth (e.g. 2.5")'
+                            style={{ padding: '5px 8px', fontSize: 12 }} />
+                          <Input value={sc.count}
+                            onChange={e => updateSlabContent(loc.id, sc.id, { count: e.target.value })}
+                            placeholder='Count / spacing'
+                            style={{ padding: '5px 8px', fontSize: 12 }} />
+                        </div>
+                        <Input value={sc.notes}
+                          onChange={e => updateSlabContent(loc.id, sc.id, { notes: e.target.value })}
+                          placeholder='Description / orientation / notes'
+                          style={{ padding: '5px 8px', fontSize: 12 }} />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* What's in the slab — print */}
+                {(loc.slabContents || []).length > 0 && (
+                  <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 10 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 3 }}>What's in the slab:</div>
+                    {(loc.slabContents || []).map((sc, i) => {
+                      const t = SLAB_TYPE_BY_ID[sc.type] || SLAB_TYPE_BY_ID.other;
+                      const bits = [sc.depth, sc.count].filter(Boolean).join(' · ');
+                      return (
+                        <div key={i} style={{ marginBottom: 2 }}>
+                          • <strong>{t.label}</strong>
+                          {bits && ` — ${bits}`}
+                          {sc.notes && ` — ${sc.notes}`}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
 
                 {/* Depth callouts — editor */}
@@ -1923,8 +2087,10 @@ export default function GSSIReportApp() {
     }}>
       <style>{`
         .print-only { display: none; }
-        .scan-location-card.dragging { opacity: 0.35; }
-        .scan-location-card.drop-target {
+        .scan-location-card.dragging,
+        .scan-photo-row.dragging { opacity: 0.35; }
+        .scan-location-card.drop-target,
+        .scan-photo-row.drop-target {
           outline: 2px dashed #e02020;
           outline-offset: -2px;
         }
