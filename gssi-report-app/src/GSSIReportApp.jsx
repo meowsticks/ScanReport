@@ -114,6 +114,7 @@ const c = {
   textFaint:    'var(--ak-text-faint)',
   accent:       'var(--ak-accent)',
   accentDim:    'var(--ak-accent-dim)',
+  onAccentDim:  'var(--ak-on-accent-dim)',  // text/icon on accent-dim bg
   green:        'var(--ak-green)',
   greenBg:      'var(--ak-green-bg)',
   greenStrong:  'var(--ak-green-strong)',
@@ -140,6 +141,7 @@ function ThemeStyles() {
         --ak-text-faint:    #7a7a7a;
         --ak-accent:        #e02020;
         --ak-accent-dim:    #7a0e10;
+        --ak-on-accent-dim: #ffffff;
         --ak-green:         #3fb950;
         --ak-green-bg:      #0d2818;
         --ak-green-strong:  #56d364;
@@ -162,6 +164,7 @@ function ThemeStyles() {
         --ak-text-faint:    #555555;
         --ak-accent:        #b81010;
         --ak-accent-dim:    #fbd6d6;
+        --ak-on-accent-dim: #6a0808;
         --ak-green:         #117a26;
         --ak-green-bg:      #d8f1de;
         --ak-green-strong:  #0b5e1c;
@@ -286,7 +289,7 @@ const Select = ({ children, ...props }) => (
 const Btn = ({ children, variant = 'default', ...props }) => {
   const v = {
     default: { bg: c.cardAlt, bd: c.borderStrong, fg: c.text },
-    primary: { bg: c.accentDim, bd: c.accent, fg: '#fff' },
+    primary: { bg: c.accentDim, bd: c.accent, fg: c.onAccentDim },
     danger:  { bg: c.redBg, bd: c.red, fg: c.redStrong },
     ghost:   { bg: 'transparent', bd: c.border, fg: c.textDim },
   }[variant];
@@ -1041,7 +1044,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                 background: tool === opt.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tool === opt.id ? c.accent : c.border}`,
                 borderRadius: 6, padding: '8px 4px',
-                color: tool === opt.id ? '#fff' : c.text,
+                color: tool === opt.id ? c.onAccentDim : c.text,
                 fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}>{opt.label}</button>
           ))}
@@ -2064,40 +2067,15 @@ function ScanLocations({ report, update }) {
 // KamikazeMark — gear-and-saw brand badge (inline SVG)
 // ============================================================
 
-function KamikazeMark({ size = 56 }) {
-  // 22-tooth circular-saw blade, teeth chiseled forward (clockwise lean)
-  const teeth = 22;
-  const rTip = 49;     // tooth tip radius
-  const rGullet = 41;  // gullet (between-tooth low) radius
-  const skew = 0.55;   // 0 = symmetric, >0.5 = forward-leaning chisel
-  const path = [];
-  for (let i = 0; i < teeth; i++) {
-    const a = (i / teeth) * Math.PI * 2 - Math.PI / 2;
-    const aNext = ((i + 1) / teeth) * Math.PI * 2 - Math.PI / 2;
-    const tipA = a + (aNext - a) * skew;
-    const gx  = 50 + rGullet * Math.cos(a);
-    const gy  = 50 + rGullet * Math.sin(a);
-    const tx  = 50 + rTip    * Math.cos(tipA);
-    const ty  = 50 + rTip    * Math.sin(tipA);
-    const ngx = 50 + rGullet * Math.cos(aNext);
-    const ngy = 50 + rGullet * Math.sin(aNext);
-    if (i === 0) path.push(`M${gx.toFixed(2)} ${gy.toFixed(2)}`);
-    path.push(`L${tx.toFixed(2)} ${ty.toFixed(2)} L${ngx.toFixed(2)} ${ngy.toFixed(2)}`);
-  }
-  path.push('Z');
+function KamikazeMark({ size = 64 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="Aggarwal Kamikazes saw blade">
-      {/* saw blade body (red, with chiseled teeth jutting outward) */}
-      <path d={path.join(' ')} fill="#e02020" stroke="#7a0e10" strokeWidth="0.6" strokeLinejoin="round" />
-      {/* dark hub disc, leaving a thin red ring of gullet visible */}
-      <circle cx="50" cy="50" r="36" fill="#000" stroke="#e02020" strokeWidth="2" />
-      {/* arbor hole hint */}
-      <circle cx="50" cy="50" r="2.5" fill="#e02020" />
-      {/* AK monogram */}
-      <text x="50" y="55" textAnchor="middle" dominantBaseline="central"
-        fontFamily='Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif'
-        fontSize="26" fontWeight="900" fill="#fff" letterSpacing="-0.5">AK</text>
-    </svg>
+    <img
+      src="/kamikaze-logo.png"
+      alt="Aggarwal Kamikazes"
+      width={size}
+      height={size}
+      style={{ display: 'block', objectFit: 'contain', flexShrink: 0 }}
+    />
   );
 }
 
@@ -2383,11 +2361,11 @@ export default function GSSIReportApp() {
                 background: tier === t.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tier === t.id ? c.accent : c.border}`,
                 borderRadius: 6, padding: '8px 4px', cursor: 'pointer',
-                color: tier === t.id ? '#fff' : c.text,
+                color: tier === t.id ? c.onAccentDim : c.text,
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 600 }}>{t.label}</div>
-              <div style={{ fontSize: 10, color: tier === t.id ? '#fff' : c.textDim, marginTop: 2 }}>{t.sub}</div>
+              <div style={{ fontSize: 10, color: tier === t.id ? c.onAccentDim : c.textDim, marginTop: 2 }}>{t.sub}</div>
             </button>
           ))}
         </div>
