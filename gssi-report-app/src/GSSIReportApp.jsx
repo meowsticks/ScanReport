@@ -397,6 +397,8 @@ function SiteDiagram({ report, update }) {
   const [tool, setTool] = useState('pin');
   const [anchor, setAnchor] = useState(null);
   const [hoverPt, setHoverPt] = useState(null);
+  const [strokeWidth, setStrokeWidth] = useState(5);
+  const [pinSize, setPinSize] = useState(18);
 
   const toolColors = {
     'draw-rebar': '#FAC775',
@@ -406,6 +408,10 @@ function SiteDiagram({ report, update }) {
   };
 
   const lineWidthFor = (color) => color === '#F09595' ? 6 : 5;
+  // Resolve the actual line width for an already-saved stroke
+  // (fall back to legacy hardcoded width when the field is absent)
+  const widthOf = (s) => s.width ?? lineWidthFor(s.color);
+  const pinRadius = (pin) => pin.size ?? 18;
 
   const redraw = () => {
     const canvas = canvasRef.current;
@@ -416,7 +422,7 @@ function SiteDiagram({ report, update }) {
     report.diagramStrokes.forEach(s => {
       if (s.points.length < 2) return;
       ctx.strokeStyle = s.color;
-      ctx.lineWidth = lineWidthFor(s.color);
+      ctx.lineWidth = widthOf(s);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -429,7 +435,7 @@ function SiteDiagram({ report, update }) {
       const color = toolColors[tool];
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidthFor(color);
+      ctx.lineWidth = strokeWidth;
       ctx.lineCap = 'round';
       ctx.globalAlpha = 0.55;
       ctx.setLineDash([6, 5]);
@@ -441,7 +447,7 @@ function SiteDiagram({ report, update }) {
 
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(anchor.x, anchor.y, 5, 0, Math.PI * 2);
+      ctx.arc(anchor.x, anchor.y, Math.max(4, strokeWidth * 0.9), 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -452,22 +458,23 @@ function SiteDiagram({ report, update }) {
         nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
       }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
 
+      const r = pinRadius(pin);
       ctx.beginPath();
-      ctx.arc(pin.x, pin.y, 18, 0, Math.PI * 2);
+      ctx.arc(pin.x, pin.y, r, 0, Math.PI * 2);
       ctx.fillStyle = vc.fill;
       ctx.fill();
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(2, r * 0.18);
       ctx.strokeStyle = vc.stroke;
       ctx.stroke();
       ctx.fillStyle = vc.text;
-      ctx.font = 'bold 15px sans-serif';
+      ctx.font = `bold ${Math.max(10, r * 0.85).toFixed(0)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(pin.label, pin.x, pin.y);
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, anchor, hoverPt, tool]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, anchor, hoverPt, tool, strokeWidth, pinSize]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -501,7 +508,7 @@ function SiteDiagram({ report, update }) {
       const n = v.toLowerCase().trim();
       if (!['safe', 'caution', 'nogo'].includes(n)) return;
       update({
-        diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n }],
+        diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n, size: pinSize }],
       });
     } else if (tool.startsWith('draw-')) {
       if (!anchor) {
@@ -510,7 +517,7 @@ function SiteDiagram({ report, update }) {
       } else {
         const color = toolColors[tool];
         update({
-          diagramStrokes: [...report.diagramStrokes, { color, points: [anchor, pt] }],
+          diagramStrokes: [...report.diagramStrokes, { color, points: [anchor, pt], width: strokeWidth }],
         });
         setAnchor(null);
         setHoverPt(null);
@@ -611,6 +618,30 @@ function SiteDiagram({ report, update }) {
         {toolBtn('draw-conduit', 'Conduit', '#9BC5E8')}
         {toolBtn('draw-note', 'Note', '#5DCAA5')}
       </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+        padding: '8px 10px', marginBottom: 6,
+        background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
+      }}>
+        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
+          <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Line thickness: <span style={{ color: c.text }}>{strokeWidth}px</span>
+          </div>
+          <input type="range" min="1" max="16" step="1"
+            value={strokeWidth}
+            onChange={e => setStrokeWidth(Number(e.target.value))}
+            style={{ width: '100%', accentColor: c.accent }} />
+        </label>
+        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
+          <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Pin size: <span style={{ color: c.text }}>{pinSize}px</span>
+          </div>
+          <input type="range" min="10" max="36" step="2"
+            value={pinSize}
+            onChange={e => setPinSize(Number(e.target.value))}
+            style={{ width: '100%', accentColor: c.accent }} />
+        </label>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <Btn onClick={undo} style={{ fontSize: 12 }}>↶ Undo</Btn>
         <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
@@ -684,8 +715,8 @@ function parseScanFilename(name) {
 }
 
 // Draw an arrowhead at (x2, y2) pointing away from (x1, y1)
-function drawArrowHead(ctx, x1, y1, x2, y2, color) {
-  const headLen = Math.max(10, Math.hypot(x2 - x1, y2 - y1) * 0.18);
+function drawArrowHead(ctx, x1, y1, x2, y2, color, lineWidth) {
+  const headLen = Math.max(10, Math.hypot(x2 - x1, y2 - y1) * 0.18, (lineWidth || 0) * 2.4);
   const angle = Math.atan2(y2 - y1, x2 - x1);
   ctx.beginPath();
   ctx.moveTo(x2, y2);
@@ -699,9 +730,13 @@ function drawArrowHead(ctx, x1, y1, x2, y2, color) {
 function drawAnnotation(ctx, a, W, H) {
   const color = ANNOTATION_COLOR_HEX[a.color] || a.color || '#e84a4a';
   const minDim = Math.min(W, H);
+  // strokeScale is the user-picked thickness (1..16, default 5).
+  // 5 reproduces the previous auto-width formula.
+  const strokeScale = (typeof a.strokeScale === 'number' ? a.strokeScale : 5);
+  const drawnLineWidth = Math.max(1.5, minDim * 0.0012 * strokeScale);
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = Math.max(2, minDim * 0.006);
+  ctx.lineWidth = drawnLineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   if (a.type === 'arrow' && a.start && a.end) {
@@ -711,7 +746,7 @@ function drawAnnotation(ctx, a, W, H) {
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
-    drawArrowHead(ctx, x1, y1, x2, y2, color);
+    drawArrowHead(ctx, x1, y1, x2, y2, color, drawnLineWidth);
   } else if (a.type === 'circle' && a.center && typeof a.radius === 'number') {
     ctx.beginPath();
     ctx.arc(a.center.x * W, a.center.y * H, a.radius * minDim, 0, Math.PI * 2);
@@ -722,7 +757,7 @@ function drawAnnotation(ctx, a, W, H) {
     const h = (a.bottomRight.y - a.topLeft.y) * H;
     ctx.strokeRect(x, y, w, h);
   } else if (a.type === 'text' && a.position) {
-    const fontSize = Math.max(10, (a.fontSize || 14) * (minDim / 400));
+    const fontSize = Math.max(10, (a.fontSize || 14) * (minDim / 400) * (strokeScale / 5));
     ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.textBaseline = 'top';
     const text = a.content || '';
@@ -802,6 +837,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [annotations, setAnnotations] = useState(() => [...(photo.annotations || [])]);
   const [tool, setTool] = useState('arrow');
   const [color, setColor] = useState('red');
+  const [strokeScale, setStrokeScale] = useState(5); // 1..16, default = legacy
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
 
@@ -846,7 +882,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       const minDim = Math.min(W, H);
       ctx.strokeStyle = previewColor;
       ctx.fillStyle = previewColor;
-      ctx.lineWidth = Math.max(2, minDim * 0.006);
+      ctx.lineWidth = Math.max(1.5, minDim * 0.0012 * strokeScale);
       if (tool === 'arrow') {
         ctx.beginPath();
         ctx.moveTo(anchor.x * W, anchor.y * H);
@@ -870,7 +906,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     }
   };
 
-  useEffect(redraw, [annotations, anchor, hover, tool, color]);
+  useEffect(redraw, [annotations, anchor, hover, tool, color, strokeScale]);
 
   useEffect(() => {
     const handler = () => redraw();
@@ -887,7 +923,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       if (!content) return;
       pushAnnotation({
         id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: 'text', color, position: pt, content, fontSize: 14,
+        type: 'text', color, position: pt, content, fontSize: 14, strokeScale,
       });
       return;
     }
@@ -898,17 +934,17 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       const id = `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       let ann = null;
       if (tool === 'arrow') {
-        ann = { id, type: 'arrow', color, start: anchor, end: pt };
+        ann = { id, type: 'arrow', color, start: anchor, end: pt, strokeScale };
       } else if (tool === 'circle') {
         const W = canvasRef.current.width, H = canvasRef.current.height;
         const dx = (pt.x - anchor.x) * W;
         const dy = (pt.y - anchor.y) * H;
         const radiusPx = Math.hypot(dx, dy);
         const radius = radiusPx / Math.min(W, H);
-        ann = { id, type: 'circle', color, center: anchor, radius };
+        ann = { id, type: 'circle', color, center: anchor, radius, strokeScale };
       } else if (tool === 'rect') {
         ann = {
-          id, type: 'rect', color,
+          id, type: 'rect', color, strokeScale,
           topLeft:     { x: Math.min(anchor.x, pt.x), y: Math.min(anchor.y, pt.y) },
           bottomRight: { x: Math.max(anchor.x, pt.x), y: Math.max(anchor.y, pt.y) },
         };
@@ -1010,6 +1046,17 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               }}>{opt.label}</button>
           ))}
         </div>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textDim,
+        }}>
+          <span style={{ fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+            Thickness <span style={{ color: c.text }}>{strokeScale}</span>
+          </span>
+          <input type="range" min="1" max="16" step="1"
+            value={strokeScale}
+            onChange={e => setStrokeScale(Number(e.target.value))}
+            style={{ flex: 1, accentColor: c.accent }} />
+        </label>
         <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 5 }}>
             {ANNOTATION_COLORS.map(co => (
