@@ -96,33 +96,86 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — Aggarwal Kamikazes palette (AK Dispatch v5)
-// Pure black canvas, bright red accent, white type, uppercase
-// wide-letter-spaced wordmark. Amber for warning callouts.
+// Design tokens — Aggarwal Kamikazes palette (light + dark)
+// Token values are CSS variables so theme switches without a
+// React re-render. See <ThemeStyles /> for the palette definitions
+// and the data-theme="light" overrides for outdoor readability.
 // ============================================================
 
 const c = {
-  bg: '#000000',           // pure black
-  bgRaised: '#0a0a0a',     // raised black
-  card: '#111111',         // dark card
-  cardAlt: '#161616',      // slightly lighter card
-  border: '#1f1f1f',       // subtle border
-  borderStrong: '#2a2a2a', // stronger border
-  text: '#ffffff',         // white
-  textDim: '#9a9a9a',      // medium gray
-  textFaint: '#5a5a5a',    // muted gray
-  accent: '#e02020',       // Kamikaze red — primary
-  accentDim: '#7a0e10',    // dark red (BOSS-pill bg)
-  green: '#3fb950',
-  greenBg: '#0d2818',
-  greenStrong: '#56d364',
-  amber: '#e0a020',        // amber warning
-  amberBg: '#2a1f08',
-  amberStrong: '#f4ba3f',
-  red: '#e02020',
-  redBg: '#2a1010',
-  redStrong: '#ff5a5a',
+  bg:           'var(--ak-bg)',
+  bgRaised:     'var(--ak-bg-raised)',
+  card:         'var(--ak-card)',
+  cardAlt:      'var(--ak-card-alt)',
+  border:       'var(--ak-border)',
+  borderStrong: 'var(--ak-border-strong)',
+  text:         'var(--ak-text)',
+  textDim:      'var(--ak-text-dim)',
+  textFaint:    'var(--ak-text-faint)',
+  accent:       'var(--ak-accent)',
+  accentDim:    'var(--ak-accent-dim)',
+  green:        'var(--ak-green)',
+  greenBg:      'var(--ak-green-bg)',
+  greenStrong:  'var(--ak-green-strong)',
+  amber:        'var(--ak-amber)',
+  amberBg:      'var(--ak-amber-bg)',
+  amberStrong:  'var(--ak-amber-strong)',
+  red:          'var(--ak-red)',
+  redBg:        'var(--ak-red-bg)',
+  redStrong:    'var(--ak-red-strong)',
 };
+
+function ThemeStyles() {
+  return (
+    <style>{`
+      :root, :root[data-theme="dark"] {
+        --ak-bg:            #000000;
+        --ak-bg-raised:     #0a0a0a;
+        --ak-card:          #111111;
+        --ak-card-alt:      #161616;
+        --ak-border:        #1f1f1f;
+        --ak-border-strong: #2a2a2a;
+        --ak-text:          #ffffff;
+        --ak-text-dim:      #b0b0b0;
+        --ak-text-faint:    #7a7a7a;
+        --ak-accent:        #e02020;
+        --ak-accent-dim:    #7a0e10;
+        --ak-green:         #3fb950;
+        --ak-green-bg:      #0d2818;
+        --ak-green-strong:  #56d364;
+        --ak-amber:         #e0a020;
+        --ak-amber-bg:      #2a1f08;
+        --ak-amber-strong:  #f4ba3f;
+        --ak-red:           #e02020;
+        --ak-red-bg:        #2a1010;
+        --ak-red-strong:    #ff5a5a;
+      }
+      :root[data-theme="light"] {
+        --ak-bg:            #ffffff;
+        --ak-bg-raised:     #f4f4f4;
+        --ak-card:          #ffffff;
+        --ak-card-alt:      #f0f0f0;
+        --ak-border:        #c8c8c8;
+        --ak-border-strong: #909090;
+        --ak-text:          #000000;
+        --ak-text-dim:      #2a2a2a;
+        --ak-text-faint:    #555555;
+        --ak-accent:        #b81010;
+        --ak-accent-dim:    #fbd6d6;
+        --ak-green:         #117a26;
+        --ak-green-bg:      #d8f1de;
+        --ak-green-strong:  #0b5e1c;
+        --ak-amber:         #8a5800;
+        --ak-amber-bg:      #fff0d0;
+        --ak-amber-strong:  #6a4400;
+        --ak-red:           #b81010;
+        --ak-red-bg:        #f5dada;
+        --ak-red-strong:    #8a0d0d;
+      }
+      html, body, #root { background: var(--ak-bg); color: var(--ak-text); }
+    `}</style>
+  );
+}
 
 // ============================================================
 // UI Primitives
@@ -2013,9 +2066,21 @@ export default function GSSIReportApp() {
     } catch { return DEFAULT_REPORT; }
   });
 
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('ak_theme') || 'dark'; }
+    catch { return 'dark'; }
+  });
+
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(report)); } catch {}
   }, [report]);
+
+  useEffect(() => {
+    try { localStorage.setItem('ak_theme', theme); } catch {}
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
   const update = (patch) => setReport(r => ({ ...r, ...patch }));
 
@@ -2085,6 +2150,7 @@ export default function GSSIReportApp() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
     }}>
+      <ThemeStyles />
       <style>{`
         .print-only { display: none; }
         .scan-location-card.dragging,
@@ -2191,7 +2257,7 @@ export default function GSSIReportApp() {
       {/* === HEADER === */}
       <div className="no-print ak-header" style={{
         marginBottom: 14, padding: '12px 14px',
-        background: 'linear-gradient(180deg, #150505 0%, #000 100%)',
+        background: c.bgRaised,
         border: `1px solid ${c.borderStrong}`,
         borderLeft: `4px solid ${c.accent}`,
         borderRadius: 8,
@@ -2201,10 +2267,9 @@ export default function GSSIReportApp() {
           <KamikazeMark size={56} />
           <div style={{ flex: 1, minWidth: 0, lineHeight: 1.05 }}>
             <div className="ak-title" style={{
-              fontSize: 26, color: '#fff', fontWeight: 900,
+              fontSize: 26, color: c.text, fontWeight: 900,
               letterSpacing: 0.8, textTransform: 'uppercase',
               fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
-              textShadow: '0 1px 0 rgba(0,0,0,0.6), 1px 1px 0 rgba(224,32,32,0.25)',
             }}>
               Aggarwal Kamikazes
             </div>
@@ -2218,16 +2283,29 @@ export default function GSSIReportApp() {
             </div>
           </div>
         </div>
-        <label style={{
-          background: c.accent, border: `2px solid ${c.accent}`,
-          borderRadius: 6, padding: '9px 14px', textAlign: 'center', fontSize: 12,
-          color: '#fff', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap',
-          flexShrink: 0, letterSpacing: 1.2, textTransform: 'uppercase',
-          boxShadow: '0 2px 0 rgba(0,0,0,0.5)',
-        }}>
-          📂 Load
-          <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
-        </label>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+            style={{
+              background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '9px 11px', fontSize: 16,
+              color: c.text, cursor: 'pointer', fontWeight: 900,
+              whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+          <label style={{
+            background: c.accent, border: `2px solid ${c.accent}`,
+            borderRadius: 6, padding: '9px 14px', textAlign: 'center', fontSize: 12,
+            color: '#fff', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap',
+            letterSpacing: 1.2, textTransform: 'uppercase',
+            boxShadow: '0 2px 0 rgba(0,0,0,0.5)',
+          }}>
+            📂 Load
+            <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
+          </label>
+        </div>
       </div>
       <style>{`
         /* Responsive shell — phone first, breathes on wider screens */

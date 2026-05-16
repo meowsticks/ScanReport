@@ -7,11 +7,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" href="/favicon.svg" />
     <title>AK ScanReport</title>
+    <script>
+      // Honor saved theme before React mounts to avoid a flash
+      (function() {
+        try {
+          var t = localStorage.getItem('ak_theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.dataset.theme = t;
+          }
+        } catch (e) {}
+      })();
+    </script>
     <style>
+      :root, :root[data-theme="dark"] { --ak-init-bg: #000; }
+      :root[data-theme="light"]       { --ak-init-bg: #fff; }
       html, body, #root {
         margin: 0;
         padding: 0;
-        background: #000000;
+        background: var(--ak-init-bg, #000);
         min-height: 100vh;
         -webkit-tap-highlight-color: transparent;
       }
