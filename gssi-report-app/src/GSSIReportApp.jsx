@@ -129,6 +129,11 @@ const DEFAULT_REPORT = {
     reportIssued: '',
     clearedForCoring: '',
   },
+
+  // Per-section include/exclude for PDF export.
+  // Empty object means "all sections on" — only exclusions are stored.
+  // Section ids match the SECTION_IDS list rendered in the Print setup card.
+  sectionVisibility: {},
 };
 
 // ============================================================
@@ -220,14 +225,15 @@ function ThemeStyles() {
 // UI Primitives
 // ============================================================
 
-const Card = ({ title, badge, children, dense, accent }) => (
-  <div style={{
+const Card = ({ title, badge, children, dense, accent, className, style }) => (
+  <div className={className} style={{
     background: c.card,
     border: `1px solid ${accent ? c.accent : c.border}`,
     borderRadius: 10,
     padding: dense ? 12 : 14,
     marginBottom: 12,
     ...(accent && { boxShadow: `0 0 0 1px ${c.accentDim}` }),
+    ...style,
   }}>
     {title && (
       <div style={{
@@ -2501,6 +2507,50 @@ export default function GSSIReportApp() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
+  // ---------- Print preview + per-section include/exclude ----------
+  const [previewMode, setPreviewMode] = useState(false);
+  // Each section id used by the Print setup card. Order = order on print.
+  const SECTION_IDS = [
+    { id: 'workflowStatus', label: 'Workflow status (timestamps)' },
+    { id: 'summary',        label: 'Executive summary' },
+    { id: 'cover',          label: 'Project info (cover)' },
+    { id: 'slab',           label: 'Slab context' },
+    { id: 'targets',        label: 'Targets identified' },
+    { id: 'findings',       label: 'Findings schedule (table)' },
+    { id: 'coverSummary',   label: 'Cover thickness summary' },
+    { id: 'diagram',        label: 'Site diagram' },
+    { id: 'drawingNotes',   label: 'Drawing notes (CAD page editor)' },
+    { id: 'scanPhotos',     label: 'Scan photos' },
+    { id: 'zones',          label: 'Named zones list' },
+    { id: 'locations',      label: 'Scan locations (Concrete Scanning Data cards)' },
+    { id: 'proposedCores',  label: 'Proposed core schedule' },
+    { id: 'gprScans',       label: 'GPR scans · full size' },
+    { id: 'cores',          label: 'Core verdicts' },
+    { id: 'uncertainty',    label: 'Areas of uncertainty' },
+    { id: 'equipment',      label: 'Equipment & calibration' },
+    { id: 'methods',        label: 'Methods narrative' },
+    { id: 'limitations',    label: 'Limitations & assumptions' },
+    { id: 'standardNotes',  label: 'Standard notes' },
+    { id: 'cadPage',        label: 'CAD-style drawing page (landscape)' },
+    { id: 'disclaimer',     label: 'Legal disclaimer' },
+    { id: 'signoff',        label: 'Authorship & review' },
+  ];
+  const vis = (id) => report.sectionVisibility?.[id] !== false;
+  const setVis = (id, on) => update({
+    sectionVisibility: { ...(report.sectionVisibility || {}), [id]: on },
+  });
+  const setAllVis = (on) => update({
+    sectionVisibility: on ? {} : SECTION_IDS.reduce((a, s) => { a[s.id] = false; return a; }, {}),
+  });
+  // CSS class to drop a section from print/preview while keeping it visible on screen
+  const ph = (id) => vis(id) ? '' : 'print-hidden';
+
+  useEffect(() => {
+    if (previewMode) document.body.classList.add('preview-mode');
+    else document.body.classList.remove('preview-mode');
+    return () => document.body.classList.remove('preview-mode');
+  }, [previewMode]);
+
   const update = (patch) => setReport(r => ({ ...r, ...patch }));
 
   // ---------- Targets ----------
@@ -2570,6 +2620,25 @@ export default function GSSIReportApp() {
       padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
     }}>
       <ThemeStyles />
+      {previewMode && (
+        <div className="preview-bar">
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
+            👁 PDF Preview · {SECTION_IDS.filter(s => vis(s.id)).length} of {SECTION_IDS.length} sections
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setPreviewMode(false)} style={{
+              background: 'transparent', color: '#fff', border: '1px solid #555',
+              borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+            }}>✕ Exit preview</button>
+            <button onClick={() => window.print()} style={{
+              background: '#e02020', color: '#fff', border: '1px solid #e02020',
+              borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 800,
+              cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+            }}>📄 Save / send PDF</button>
+          </div>
+        </div>
+      )}
       <style>{`
         .print-only { display: none; }
         .scan-location-card.dragging,
@@ -2586,6 +2655,46 @@ export default function GSSIReportApp() {
           margin-bottom: 14px;
           padding: 16px;
         }
+        /* Per-section drop from PDF: hide on print AND in preview mode,
+           keep visible on screen so the editor stays usable. */
+        @media print { .print-hidden { display: none !important; } }
+        body.preview-mode .print-hidden { display: none !important; }
+        body.preview-mode .no-print     { display: none !important; }
+        body.preview-mode {
+          background: #6a6a6a !important;
+          padding: 0 !important;
+          color: #000;
+        }
+        body.preview-mode .ak-shell {
+          background: #fff !important;
+          color: #000 !important;
+          max-width: 8.5in !important;
+          margin: 64px auto 64px !important;
+          padding: 0.7in !important;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+          border: 1px solid #aaa;
+          min-height: 11in;
+        }
+        body.preview-mode .ak-shell .scan-photo-row,
+        body.preview-mode .ak-shell .gpr-scan-figure,
+        body.preview-mode .ak-shell .scan-location-card,
+        body.preview-mode .ak-shell input,
+        body.preview-mode .ak-shell select,
+        body.preview-mode .ak-shell textarea {
+          border-color: #ccc !important;
+          background: #fff !important;
+          color: #000 !important;
+        }
+        .preview-bar {
+          position: fixed; top: 0; left: 0; right: 0;
+          z-index: 9999;
+          background: #1a1a1a; color: #fff;
+          padding: 10px 14px;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 12px;
+          border-bottom: 2px solid #e02020;
+        }
+        @media print { .preview-bar { display: none !important; } }
         @media print {
           @page { size: A4; margin: 1.5cm; }
           @page cad { size: A4 landscape; margin: 1.0cm; }
@@ -2856,7 +2965,7 @@ export default function GSSIReportApp() {
       `}</style>
 
       {/* === TIER PICKER === */}
-      <Card title="Report tier" dense>
+      <Card title="Report tier" dense className="no-print">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
           {[
             { id: 'quick', label: 'Quick Mark', sub: 'Field 1-pg' },
@@ -2888,7 +2997,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === REPORT SECTIONS (Xradar-style togglable features) === */}
-      <Card title="Report sections" dense>
+      <Card title="Report sections" dense className="no-print">
         <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
           Switch each Xradar-style feature on or off independently. Tier sets sensible
           defaults; you can override per report.
@@ -2925,8 +3034,47 @@ export default function GSSIReportApp() {
         ))}
       </Card>
 
+      {/* === PRINT SETUP (per-section include/exclude + preview) === */}
+      <Card title="Print setup · sections to include in the PDF" dense className="no-print">
+        <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          Pick which sections appear when you export the PDF. The Preview button shows
+          exactly what will print before you save or send.
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
+          <Btn variant="ghost" onClick={() => setAllVis(true)}
+            style={{ flex: 1, fontSize: 11 }}>✓ Select all</Btn>
+          <Btn variant="ghost" onClick={() => setAllVis(false)}
+            style={{ flex: 1, fontSize: 11 }}>✕ Clear all</Btn>
+          <Btn variant="primary" onClick={() => setPreviewMode(true)}
+            style={{ flex: 1.4, fontSize: 11 }}>👁 Preview</Btn>
+        </div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4,
+          maxHeight: 280, overflowY: 'auto',
+          border: `1px solid ${c.border}`, borderRadius: 6, padding: 6,
+        }}>
+          {SECTION_IDS.map(s => {
+            const on = vis(s.id);
+            return (
+              <label key={s.id} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 6px', borderRadius: 4,
+                background: on ? c.cardAlt : 'transparent',
+                fontSize: 11, color: on ? c.text : c.textFaint,
+                cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
+              }}>
+                <input type="checkbox" checked={on}
+                  onChange={e => setVis(s.id, e.target.checked)}
+                  style={{ accentColor: c.accent, flexShrink: 0 }} />
+                <span>{s.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </Card>
+
       {/* === SAME-DAY WORKFLOW STATUS === */}
-      <Card title="Workflow status" dense>
+      <Card title="Workflow status" dense className={ph('workflowStatus')}>
         <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
           Track the same-day cycle: when scanning finished, when this report was issued,
           and when the area was cleared for coring. Prints as a small status block at the
@@ -2976,10 +3124,12 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === EXECUTIVE SUMMARY (always at top) === */}
-      <ExecutiveSummary report={report} />
+      <div className={ph('summary')}>
+        <ExecutiveSummary report={report} />
+      </div>
 
       {/* === COVER === */}
-      <Card title="Project info">
+      <Card title="Project info" className={ph('cover')}>
         <Field label="Project number">
           <Input value={report.projectNo} onChange={e => update({ projectNo: e.target.value })} placeholder="VAN-2026-0341" />
         </Field>
@@ -3003,7 +3153,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === SLAB CONTEXT === */}
-      <Card title="Slab context">
+      <Card title="Slab context" className={ph('slab')}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Slab thickness">
             <Input value={report.slabThickness} onChange={e => update({ slabThickness: e.target.value })} placeholder="200 mm" />
@@ -3039,7 +3189,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === FINDINGS === */}
-      <Card title="Targets identified" badge={
+      <Card title="Targets identified" className={ph('targets')} badge={
         <span style={{
           background: c.cardAlt, color: c.textDim, fontSize: 11,
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -3138,7 +3288,7 @@ export default function GSSIReportApp() {
 
       {/* === FINDINGS SCHEDULE (print-only structured table) === */}
       {report.targets.length > 0 && (
-        <Card title="Findings schedule">
+        <Card title="Findings schedule" className={ph('findings')}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
             Prints as a formal tabular schedule (engineering deliverable format). Edit individual targets above.
           </div>
@@ -3172,7 +3322,7 @@ export default function GSSIReportApp() {
       )}
 
       {/* === COVER-THICKNESS SUMMARY === */}
-      <Card title="Cover thickness summary">
+      <Card title="Cover thickness summary" className={ph('coverSummary')}>
         <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
           Single-block summary of cover (concrete over rebar) for the top and bottom mats.
           Auto-fill from your Targets list, or override manually.
@@ -3276,11 +3426,13 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === SITE DIAGRAM === */}
-      <SiteDiagram report={report} update={update} />
+      <div className={ph('diagram')}>
+        <SiteDiagram report={report} update={update} />
+      </div>
 
       {/* === DRAWING NOTES (CAD page) === */}
       {report.enableCadPage && (
-        <Card title="Drawing notes (CAD page)">
+        <Card title="Drawing notes (CAD page)" className={ph('drawingNotes')}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
             Project-specific notes that print in the right-side column of the landscape
             CAD page. Use one paragraph per zone or finding.
@@ -3308,11 +3460,13 @@ export default function GSSIReportApp() {
       )}
 
       {/* === SCAN PHOTOS === */}
-      <ScanPhotos report={report} update={update} />
+      <div className={ph('scanPhotos')}>
+        <ScanPhotos report={report} update={update} />
+      </div>
 
       {/* === ZONES (named area groupings) === */}
       {report.enableNamedZones && (
-        <Card title="Zones">
+        <Card title="Zones" className={ph('zones')}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
             Group scan locations under named areas (e.g. "Back of House", "Zone 4 — north corridor").
             Each location can be assigned a zone in its card.
@@ -3378,11 +3532,13 @@ export default function GSSIReportApp() {
       )}
 
       {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
-      <ScanLocations report={report} update={update} />
+      <div className={ph('locations')}>
+        <ScanLocations report={report} update={update} />
+      </div>
 
       {/* === PROPOSED CORE SCHEDULE (print-only) === */}
       {report.scanLocations.length > 0 && (
-        <Card title="Proposed core schedule">
+        <Card title="Proposed core schedule" className={ph('proposedCores')}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
             Prints as a numbered schedule pulling label + verdict + instruction from each
             Scan Location. Useful for engineer sign-off and the coring crew's day-of checklist.
@@ -3422,10 +3578,12 @@ export default function GSSIReportApp() {
       )}
 
       {/* === GPR SCANS (full-size grouping for the PDF) === */}
-      <GPRScans report={report} />
+      <div className={ph('gprScans')}>
+        <GPRScans report={report} />
+      </div>
 
       {/* === CORE VERDICTS === */}
-      <Card title="Drill / core verdicts" badge={
+      <Card title="Drill / core verdicts" className={ph('cores')} badge={
         <span style={{
           background: c.cardAlt, color: c.textDim, fontSize: 11,
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -3471,7 +3629,7 @@ export default function GSSIReportApp() {
 
       {/* === UNCERTAINTY ZONES (standard + full only) === */}
       {showUncertainty && (
-        <Card title="Areas of uncertainty">
+        <Card title="Areas of uncertainty" className={ph('uncertainty')}>
           <Field label="Daylighting recommended in" hint="Per Terraprobe-style practice — call out zones where GPR resolution is insufficient for definitive interpretation.">
             <Textarea
               value={report.uncertaintyZones}
@@ -3484,7 +3642,7 @@ export default function GSSIReportApp() {
 
       {/* === EQUIPMENT & CALIBRATION (standard + full) === */}
       {showCalibration && (
-        <Card title="Equipment & calibration">
+        <Card title="Equipment & calibration" className={ph('equipment')}>
           {showFullEquipment && (
             <>
               <Field label="Scanner">
@@ -3549,7 +3707,7 @@ export default function GSSIReportApp() {
           '. The technician marked subsurface features directly on the slab with paint and crayon prior to client coring/cutting; locations were also recorded photographically and digitally for this report.',
         ].filter(Boolean).join('');
         return (
-          <Card title="Methods">
+          <Card title="Methods" className={ph('methods')}>
             <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
               Auto-generated from your Equipment &amp; calibration entries. Override only
               if you need custom phrasing.
@@ -3574,7 +3732,7 @@ export default function GSSIReportApp() {
 
       {/* === LIMITATIONS (standard + full) === */}
       {showLimitations && (
-        <Card title="Limitations & assumptions">
+        <Card title="Limitations & assumptions" className={ph('limitations')}>
           {report.limitations.map((line, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
               <span style={{ color: c.accent, marginTop: 9, fontSize: 11 }}>▸</span>
@@ -3596,7 +3754,7 @@ export default function GSSIReportApp() {
 
       {/* === STANDARD NOTES (Xradar-style numbered general notes) === */}
       {report.enableStandardNotes && (
-        <Card title="Standard notes">
+        <Card title="Standard notes" className={ph('standardNotes')}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
             Numbered general notes printed alongside the drawing (CAD page) or as a
             standalone block before the legal disclaimer.
@@ -3658,7 +3816,7 @@ export default function GSSIReportApp() {
 
       {/* === CAD-STYLE LANDSCAPE DRAWING PAGE (print-only) === */}
       {report.enableCadPage && (
-        <div className="cad-page print-only">
+        <div className={`cad-page print-only ${ph('cadPage')}`}>
           <div className="cad-letterhead">
             <img src="/kamikaze-logo.png" alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
@@ -3718,7 +3876,7 @@ export default function GSSIReportApp() {
       )}
 
       {/* === LEGAL DISCLAIMER === */}
-      <Card title="Legal disclaimer">
+      <Card title="Legal disclaimer" className={ph('disclaimer')}>
         <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 7, lineHeight: 1.5 }}>
           Printed at the end of every report. Have your own counsel review before
           relying on this language for production work.
@@ -3734,7 +3892,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === SIGN-OFF === */}
-      <Card title="Authorship & review">
+      <Card title="Authorship & review" className={ph('signoff')}>
         <Field label="Prepared by">
           <Input value={report.preparedBy} onChange={e => update({ preparedBy: e.target.value })} placeholder="Technician name" />
         </Field>
