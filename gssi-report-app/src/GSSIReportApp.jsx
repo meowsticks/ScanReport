@@ -93,6 +93,28 @@ const DEFAULT_REPORT = {
   egbcEnabled: false,   // Off by default — most scan reports aren't P.Eng stamped
   permitNo: '',
   signDate: new Date().toISOString().slice(0, 10),
+
+  // ----- Xradar-style togglable features -----
+  enableZones: false,         // hatched fill regions on the site diagram
+  enableCadPage: false,       // landscape "drawing" page with title block
+  enableStandardNotes: false, // numbered general-notes block alongside the diagram
+  enableNamedZones: false,    // group scan locations under named zones (e.g. "Back of House")
+
+  diagramZones: [],           // graphical hatched/filled polygons on the diagram
+  diagramNotes: '',           // project-specific notes column on the CAD page
+  drawingScale: '1 : 50',
+  drawingNo: '',
+  zones: [],                  // organizational zones (Back of House, Zone 4...)
+  standardNotes: [
+    'GPR is an interpretive method; subsurface conditions may differ from those depicted.',
+    'Depths are derived from an assumed dielectric constant. Actual depths may vary ±10%.',
+    'All marked locations must be verified by daylighting (small exploratory hole) before coring or cutting.',
+    'The 2.7 GHz antenna has an effective depth of approximately 600 mm. Targets below this depth are not assessed.',
+    'T-R offset creates a 0–58 mm near-surface resolution zone; shallow targets verified visually where possible.',
+    'Service channels and post-tensioning cables shall be treated as live until physically confirmed inactive.',
+    'Slab-band hatched areas are NOT suitable for coring, drilling, or anchoring without engineer approval.',
+    'Report is valid only for the scan area, date, equipment and conditions specified herein.',
+  ],
 };
 
 // ============================================================
@@ -394,6 +416,155 @@ const StatTile = ({ color, bg, value, label }) => (
 // Site Diagram (photo + sketch + pins)
 // ============================================================
 
+// Hatched-zone styles. Shared between the live editor canvas and the
+// print-only CAD-page snapshot canvas.
+const ZONE_PATTERNS = {
+  'hatch-red':       { color: '#e02020', label: 'Red hatch — not suitable for coring',  angle: 45 },
+  'hatch-yellow':    { color: '#e0a020', label: 'Yellow hatch — service channel',        angle: 135 },
+  'fill-amber':      { color: '#e0a020', label: 'Amber fill — caution',                  angle: null },
+  'dashed-boundary': { color: '#9BC5E8', label: 'Dashed boundary — complete-scan area',  angle: 'dashed' },
+};
+
+function buildZonePattern(ctx, patternId) {
+  const meta = ZONE_PATTERNS[patternId];
+  if (!meta) return null;
+  const tile = document.createElement('canvas');
+  tile.width = 14; tile.height = 14;
+  const tctx = tile.getContext('2d');
+  if (meta.angle === null) {
+    tctx.fillStyle = meta.color;
+    tctx.globalAlpha = 0.22;
+    tctx.fillRect(0, 0, 14, 14);
+  } else if (meta.angle === 'dashed') {
+    // no fill
+  } else {
+    tctx.strokeStyle = meta.color;
+    tctx.lineWidth = 2;
+    tctx.lineCap = 'round';
+    const a = meta.angle === 45;
+    tctx.beginPath();
+    if (a) {
+      tctx.moveTo(-2, 16); tctx.lineTo(16, -2);
+      tctx.moveTo(4, 18);  tctx.lineTo(18, 4);
+    } else {
+      tctx.moveTo(-2, -2); tctx.lineTo(16, 16);
+      tctx.moveTo(-2, 12); tctx.lineTo(4, 18);
+    }
+    tctx.stroke();
+  }
+  return ctx.createPattern(tile, 'repeat');
+}
+
+// Pure rendering of the site diagram into any canvas context.
+// Used by both the live editor (SiteDiagram) and the CAD-page snapshot.
+function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
+  const { backgroundImage = null } = opts;
+  ctx.clearRect(0, 0, W, H);
+  if (backgroundImage && backgroundImage.complete && backgroundImage.naturalWidth > 0) {
+    // Letterbox the image to fit
+    const ir = backgroundImage.naturalWidth / backgroundImage.naturalHeight;
+    const cr = W / H;
+    let dw, dh, dx, dy;
+    if (ir > cr) { dw = W; dh = W / ir; dx = 0; dy = (H - dh) / 2; }
+    else         { dh = H; dw = H * ir; dy = 0; dx = (W - dw) / 2; }
+    ctx.drawImage(backgroundImage, dx, dy, dw, dh);
+  }
+  if (report.enableZones) {
+    (report.diagramZones || []).forEach(z => {
+      if (!z.points || z.points.length < 3) return;
+      const meta = ZONE_PATTERNS[z.pattern] || ZONE_PATTERNS['hatch-red'];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(z.points[0].x, z.points[0].y);
+      z.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+      if (z.pattern !== 'dashed-boundary') {
+        const pat = buildZonePattern(ctx, z.pattern);
+        if (pat) { ctx.fillStyle = pat; ctx.fill(); }
+      }
+      ctx.strokeStyle = meta.color;
+      ctx.lineWidth = 2.4;
+      if (z.pattern === 'dashed-boundary') ctx.setLineDash([10, 6]);
+      ctx.stroke();
+      ctx.restore();
+      if (z.label) {
+        const cx = z.points.reduce((s, p) => s + p.x, 0) / z.points.length;
+        const cy = z.points.reduce((s, p) => s + p.y, 0) / z.points.length;
+        ctx.save();
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const m = ctx.measureText(z.label);
+        ctx.fillStyle = 'rgba(255,255,255,0.88)';
+        ctx.fillRect(cx - m.width / 2 - 5, cy - 10, m.width + 10, 20);
+        ctx.fillStyle = meta.color;
+        ctx.fillText(z.label, cx, cy);
+        ctx.restore();
+      }
+    });
+  }
+  (report.diagramStrokes || []).forEach(s => {
+    if (!s.points || s.points.length < 2) return;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width ?? (s.color === '#F09595' ? 6 : 5);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    s.points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  });
+  (report.diagramPins || []).forEach(pin => {
+    const vc = {
+      safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
+      caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
+      nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
+    }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
+    const r = pin.size ?? 18;
+    ctx.beginPath();
+    ctx.arc(pin.x, pin.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = vc.fill; ctx.fill();
+    ctx.lineWidth = Math.max(2, r * 0.18);
+    ctx.strokeStyle = vc.stroke; ctx.stroke();
+    ctx.fillStyle = vc.text;
+    ctx.font = `bold ${Math.max(10, r * 0.85).toFixed(0)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pin.label, pin.x, pin.y);
+  });
+}
+
+// Print-only snapshot canvas — drawn from report data, independent
+// of the live editor canvas. Used inside the CAD page.
+function DiagramSnapshot({ report, width = 1100, height = 750 }) {
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    drawSiteDiagramTo(ctx, width, height, report, { backgroundImage: imgRef.current });
+  }, [report.diagramImage, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
+  return (
+    <>
+      {report.diagramImage && (
+        <img ref={imgRef} src={report.diagramImage} alt=""
+          style={{ display: 'none' }}
+          onLoad={() => {
+            const c = canvasRef.current;
+            if (!c) return;
+            const ctx = c.getContext('2d');
+            drawSiteDiagramTo(ctx, c.width, c.height, report, { backgroundImage: imgRef.current });
+          }} />
+      )}
+      <canvas ref={canvasRef}
+        style={{ width: '100%', height: 'auto', display: 'block', background: '#2a2a28' }} />
+    </>
+  );
+}
+
 function SiteDiagram({ report, update }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -402,6 +573,8 @@ function SiteDiagram({ report, update }) {
   const [hoverPt, setHoverPt] = useState(null);
   const [strokeWidth, setStrokeWidth] = useState(5);
   const [pinSize, setPinSize] = useState(18);
+  const [zonePattern, setZonePattern] = useState('hatch-red');
+  const [zoneDraft, setZoneDraft] = useState(null); // { points: [], pattern }
 
   const toolColors = {
     'draw-rebar': '#FAC775',
@@ -409,6 +582,9 @@ function SiteDiagram({ report, update }) {
     'draw-conduit': '#9BC5E8',
     'draw-note': '#5DCAA5',
   };
+
+  // ZONE_PATTERNS + buildZonePattern are defined at module scope above.
+  const getZonePattern = (ctx, patternId) => buildZonePattern(ctx, patternId);
 
   const lineWidthFor = (color) => color === '#F09595' ? 6 : 5;
   // Resolve the actual line width for an already-saved stroke
@@ -421,6 +597,71 @@ function SiteDiagram({ report, update }) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Hatched zones render UNDER strokes/pins
+    if (report.enableZones) {
+      (report.diagramZones || []).forEach(z => {
+        if (!z.points || z.points.length < 3) return;
+        const meta = ZONE_PATTERNS[z.pattern] || ZONE_PATTERNS['hatch-red'];
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(z.points[0].x, z.points[0].y);
+        z.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        if (z.pattern !== 'dashed-boundary') {
+          const pat = getZonePattern(ctx, z.pattern);
+          if (pat) {
+            ctx.fillStyle = pat;
+            ctx.fill();
+          }
+        }
+        ctx.strokeStyle = meta.color;
+        ctx.lineWidth = 2.4;
+        if (z.pattern === 'dashed-boundary') ctx.setLineDash([10, 6]);
+        ctx.stroke();
+        ctx.restore();
+        // Label centered
+        if (z.label) {
+          const cx = z.points.reduce((s, p) => s + p.x, 0) / z.points.length;
+          const cy = z.points.reduce((s, p) => s + p.y, 0) / z.points.length;
+          ctx.save();
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const text = z.label;
+          const m = ctx.measureText(text);
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillRect(cx - m.width / 2 - 5, cy - 10, m.width + 10, 20);
+          ctx.fillStyle = meta.color;
+          ctx.fillText(text, cx, cy);
+          ctx.restore();
+        }
+      });
+
+      // In-progress zone draft preview
+      if (zoneDraft && zoneDraft.points.length > 0) {
+        const meta = ZONE_PATTERNS[zoneDraft.pattern] || ZONE_PATTERNS['hatch-red'];
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = meta.color;
+        ctx.fillStyle = meta.color;
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(zoneDraft.points[0].x, zoneDraft.points[0].y);
+        zoneDraft.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        if (hoverPt) ctx.lineTo(hoverPt.x, hoverPt.y);
+        ctx.stroke();
+        // Vertex markers
+        ctx.setLineDash([]);
+        zoneDraft.points.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+    }
 
     report.diagramStrokes.forEach(s => {
       if (s.points.length < 2) return;
@@ -477,7 +718,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, anchor, hoverPt, tool, strokeWidth, pinSize]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -513,6 +754,12 @@ function SiteDiagram({ report, update }) {
       update({
         diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n, size: pinSize }],
       });
+    } else if (tool === 'draw-zone') {
+      // Each click appends a vertex to the working zone draft
+      setZoneDraft(prev => ({
+        pattern: prev?.pattern || zonePattern,
+        points:  [...(prev?.points || []), pt],
+      }));
     } else if (tool.startsWith('draw-')) {
       if (!anchor) {
         setAnchor(pt);
@@ -528,7 +775,31 @@ function SiteDiagram({ report, update }) {
     }
   };
 
+  const finishZone = () => {
+    if (!zoneDraft || zoneDraft.points.length < 3) {
+      alert('A zone needs at least 3 points. Tap the diagram to add points first.');
+      return;
+    }
+    const labelDefault = `Z${(report.diagramZones || []).length + 1}`;
+    const label = prompt('Zone label (e.g. "Z1", "Slab band", "BoH"):', labelDefault) || labelDefault;
+    const id = `dz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    update({
+      diagramZones: [...(report.diagramZones || []), {
+        id, label, points: zoneDraft.points, pattern: zoneDraft.pattern,
+      }],
+    });
+    setZoneDraft(null);
+    setHoverPt(null);
+  };
+
+  const cancelZone = () => { setZoneDraft(null); setHoverPt(null); };
+
   const handleMove = (e) => {
+    if (tool === 'draw-zone' && zoneDraft) {
+      e.preventDefault();
+      setHoverPt(getCoords(e));
+      return;
+    }
     if (!anchor || !tool.startsWith('draw-')) return;
     e.preventDefault();
     setHoverPt(getCoords(e));
@@ -550,6 +821,16 @@ function SiteDiagram({ report, update }) {
   };
 
   const undo = () => {
+    // Prefer popping from the in-progress zone draft first
+    if (zoneDraft && zoneDraft.points.length > 0) {
+      const next = zoneDraft.points.slice(0, -1);
+      setZoneDraft(next.length ? { ...zoneDraft, points: next } : null);
+      return;
+    }
+    if ((report.diagramZones || []).length > 0 && report.enableZones) {
+      update({ diagramZones: report.diagramZones.slice(0, -1) });
+      return;
+    }
     if (report.diagramPins.length > 0) {
       update({ diagramPins: report.diagramPins.slice(0, -1) });
     } else if (report.diagramStrokes.length > 0) {
@@ -620,7 +901,47 @@ function SiteDiagram({ report, update }) {
         {toolBtn('draw-pt', 'PT cable', '#F09595')}
         {toolBtn('draw-conduit', 'Conduit', '#9BC5E8')}
         {toolBtn('draw-note', 'Note', '#5DCAA5')}
+        {report.enableZones && toolBtn('draw-zone', '▦ Zone', '#e02020')}
       </div>
+      {report.enableZones && tool === 'draw-zone' && (
+        <div style={{
+          background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: '8px 10px', marginBottom: 6,
+        }}>
+          <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 5,
+            textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+            Zone pattern
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 6 }}>
+            {Object.entries(ZONE_PATTERNS).map(([id, meta]) => (
+              <button key={id}
+                onClick={() => setZonePattern(id)}
+                style={{
+                  background: zonePattern === id ? c.accentDim : c.card,
+                  color: zonePattern === id ? c.onAccentDim : c.text,
+                  border: `1px solid ${zonePattern === id ? c.accent : c.border}`,
+                  borderLeft: `4px solid ${meta.color}`,
+                  borderRadius: 5, padding: '6px 7px',
+                  fontSize: 11, fontWeight: 600, textAlign: 'left', cursor: 'pointer',
+                }}>{meta.label}</button>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <Btn variant="primary" onClick={finishZone}
+              disabled={!zoneDraft || zoneDraft.points.length < 3}
+              style={{ fontSize: 12 }}>
+              ✓ Finish zone {zoneDraft ? `(${zoneDraft.points.length} pts)` : ''}
+            </Btn>
+            <Btn variant="ghost" onClick={cancelZone}
+              disabled={!zoneDraft}
+              style={{ fontSize: 12 }}>Cancel zone</Btn>
+          </div>
+          <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5, lineHeight: 1.4 }}>
+            Tap the diagram to drop polygon vertices; tap Finish when the outline is closed
+            (need 3+ points). Undo pops the last vertex.
+          </div>
+        </div>
+      )}
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
         padding: '8px 10px', marginBottom: 6,
@@ -663,6 +984,11 @@ function SiteDiagram({ report, update }) {
           <span style={{ color: c.green }}>● Safe</span>
           <span style={{ color: c.amber }}>● Caution</span>
           <span style={{ color: c.red }}>● No drill</span>
+          {report.enableZones && Object.entries(ZONE_PATTERNS).map(([id, meta]) => (
+            <span key={id}>
+              <span style={{ color: meta.color }}>▦</span> {meta.label}
+            </span>
+          ))}
         </div>
       </div>
     </Card>
@@ -1596,6 +1922,7 @@ function ScanLocations({ report, update }) {
         verdict: 'safe',
         instruction: DEFAULT_INSTRUCTION,
         confidence: 'high',
+        zoneId: null,
       }],
     });
   };
@@ -1662,10 +1989,53 @@ function ScanLocations({ report, update }) {
         standard "Concrete Scanning Data" format.
       </div>
 
-      {report.scanLocations.map((loc, idx) => {
-        const vm = verdictMeta[loc.verdict] || verdictMeta.safe;
-        return (
-          <div key={loc.id}
+      {(() => {
+        // Optionally sort by named zone for grouped rendering
+        let ordered = report.scanLocations;
+        if (report.enableNamedZones) {
+          const zoneOrder = new Map((report.zones || []).map((z, i) => [z.id, i]));
+          ordered = report.scanLocations
+            .map((loc, idx) => ({ loc, idx }))
+            .sort((a, b) => {
+              const ai = zoneOrder.has(a.loc.zoneId) ? zoneOrder.get(a.loc.zoneId) : Infinity;
+              const bi = zoneOrder.has(b.loc.zoneId) ? zoneOrder.get(b.loc.zoneId) : Infinity;
+              if (ai !== bi) return ai - bi;
+              return a.idx - b.idx;
+            })
+            .map(o => o.loc);
+        }
+        const seenZones = new Set();
+        return ordered.map((loc, idx) => {
+          const vm = verdictMeta[loc.verdict] || verdictMeta.safe;
+          let zoneHeader = null;
+          if (report.enableNamedZones && !seenZones.has(loc.zoneId ?? '__unzoned__')) {
+            seenZones.add(loc.zoneId ?? '__unzoned__');
+            const zone = (report.zones || []).find(z => z.id === loc.zoneId);
+            const label = zone ? zone.label : 'Unzoned';
+            const notes = zone ? zone.notes : '';
+            const isLast = idx > 0;
+            zoneHeader = (
+              <div className="zone-group-header" style={{
+                marginTop: isLast ? 16 : 0, marginBottom: 8,
+                padding: '8px 12px', borderRadius: 6,
+                background: c.amberBg, borderLeft: `4px solid ${c.amber}`,
+              }}>
+                <div style={{
+                  fontSize: 13, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
+                  color: c.amberStrong,
+                }}>{label}</div>
+                {notes && (
+                  <div style={{ fontSize: 11.5, color: c.text, lineHeight: 1.45, marginTop: 4, whiteSpace: 'pre-wrap' }}>
+                    {notes}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return (
+            <React.Fragment key={loc.id}>
+              {zoneHeader}
+          <div
             className={
               'scan-location-card' +
               (dragId === loc.id ? ' dragging' : '') +
@@ -1894,6 +2264,20 @@ function ScanLocations({ report, update }) {
                   }}>- {loc.instruction}</div>
                 )}
 
+                {report.enableNamedZones && (
+                  <div className="loc-edit-only" style={{ marginBottom: 7 }}>
+                    <Field label="Zone">
+                      <Select value={loc.zoneId || ''}
+                        onChange={e => updateLoc(loc.id, { zoneId: e.target.value || null })}>
+                        <option value="">— Unzoned —</option>
+                        {(report.zones || []).map(z => (
+                          <option key={z.id} value={z.id}>{z.label}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                )}
+
                 <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   <Field label="Verdict">
                     <Select value={loc.verdict}
@@ -2046,8 +2430,10 @@ function ScanLocations({ report, update }) {
               </div>
             </div>
           </div>
-        );
-      })}
+            </React.Fragment>
+          );
+        });
+      })()}
 
       {report.scanLocations.length === 0 && (
         <div style={{
@@ -2169,11 +2555,84 @@ export default function GSSIReportApp() {
           outline: 2px dashed #e02020;
           outline-offset: -2px;
         }
+        /* CAD-page on-screen container (matches the print landscape look loosely) */
+        .cad-page {
+          background: #fff; color: #000;
+          border: 1px solid #999;
+          margin-bottom: 14px;
+          padding: 16px;
+        }
         @media print {
           @page { size: A4; margin: 1.5cm; }
+          @page cad { size: A4 landscape; margin: 1.0cm; }
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
+          .cad-page {
+            page: cad;
+            page-break-before: always;
+            page-break-after: always;
+            position: relative;
+            padding: 6mm 8mm;
+            border: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }
+          .cad-letterhead {
+            display: grid;
+            grid-template-columns: 60px 1fr auto;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+          }
+          .cad-logo { width: 56px; height: auto; }
+          .cad-company { font-size: 14pt; font-weight: 900; letter-spacing: 0.5px; }
+          .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
+          .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
+          .cad-body {
+            display: grid;
+            grid-template-columns: 1fr 240px;
+            gap: 10px;
+            height: calc(100% - 92mm);
+            min-height: 130mm;
+          }
+          .cad-diagram { border: 1px solid #555; padding: 4px; }
+          .cad-diagram canvas { width: 100% !important; height: auto !important; }
+          .cad-notes { font-size: 8.5pt; line-height: 1.4; }
+          .cad-notes-block { margin-bottom: 8px; }
+          .cad-notes-heading {
+            font-size: 8pt; font-weight: 900; letter-spacing: 1.2px;
+            border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 4px;
+          }
+          .cad-notes-body { white-space: pre-wrap; }
+          .cad-notes-list { margin: 0; padding-left: 18px; }
+          .cad-notes-list li { margin-bottom: 3px; }
+          .cad-legend { list-style: none; margin: 0; padding: 0; }
+          .cad-legend li { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+          .cad-legend-swatch {
+            display: inline-block; width: 14px; height: 10px;
+            border: 1px solid #000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .cad-titleblock {
+            position: absolute;
+            bottom: 6mm; right: 8mm;
+            width: 70mm;
+            border: 1.5px solid #000;
+            font-size: 8pt;
+          }
+          .cad-tb-row {
+            display: grid;
+            grid-template-columns: 24mm 1fr;
+            border-bottom: 1px solid #000;
+            padding: 3px 6px;
+          }
+          .cad-tb-row:last-child { border-bottom: none; }
+          .cad-tb-row span { color: #666; letter-spacing: 0.5px; text-transform: uppercase; font-size: 7pt; }
+          .cad-tb-row strong { font-size: 9pt; }
+        }
           input, select, textarea {
             border: 1px solid #ddd !important;
             background: white !important; color: black !important;
@@ -2359,7 +2818,14 @@ export default function GSSIReportApp() {
           ].map(t => (
             <button
               key={t.id}
-              onClick={() => update({ tier: t.id })}
+              onClick={() => {
+                const presets = {
+                  quick:    { enableZones: false, enableCadPage: false, enableStandardNotes: false, enableNamedZones: false },
+                  standard: { enableZones: false, enableCadPage: false, enableStandardNotes: true,  enableNamedZones: false },
+                  full:     { enableZones: true,  enableCadPage: true,  enableStandardNotes: true,  enableNamedZones: true  },
+                };
+                update({ tier: t.id, ...presets[t.id] });
+              }}
               style={{
                 background: tier === t.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tier === t.id ? c.accent : c.border}`,
@@ -2372,6 +2838,44 @@ export default function GSSIReportApp() {
             </button>
           ))}
         </div>
+      </Card>
+
+      {/* === REPORT SECTIONS (Xradar-style togglable features) === */}
+      <Card title="Report sections" dense>
+        <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          Switch each Xradar-style feature on or off independently. Tier sets sensible
+          defaults; you can override per report.
+        </div>
+        {[
+          { id: 'enableStandardNotes', label: 'Standard notes column',     hint: 'Numbered general-notes block printed with the report.' },
+          { id: 'enableNamedZones',    label: 'Named zones',                hint: 'Group scan locations under zones like "Back of House".' },
+          { id: 'enableZones',         label: 'Hatched zones on diagram',   hint: 'Red / yellow / amber fill areas marking unsuitable, caution, or boundary regions on the site diagram.' },
+          { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
+        ].map(f => (
+          <label key={f.id} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 9,
+            padding: '7px 8px', marginBottom: 4,
+            background: report[f.id] ? c.accentDim : c.cardAlt,
+            border: `1px solid ${report[f.id] ? c.accent : c.border}`,
+            borderRadius: 6, cursor: 'pointer',
+          }}>
+            <input type="checkbox"
+              checked={!!report[f.id]}
+              onChange={e => update({ [f.id]: e.target.checked })}
+              style={{ marginTop: 2, flexShrink: 0, accentColor: c.accent }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 13, fontWeight: 700,
+                color: report[f.id] ? c.onAccentDim : c.text,
+              }}>{f.label}</div>
+              <div style={{
+                fontSize: 11, lineHeight: 1.4, marginTop: 1,
+                color: report[f.id] ? c.onAccentDim : c.textFaint,
+                opacity: report[f.id] ? 0.85 : 1,
+              }}>{f.hint}</div>
+            </div>
+          </label>
+        ))}
       </Card>
 
       {/* === EXECUTIVE SUMMARY (always at top) === */}
@@ -2538,8 +3042,104 @@ export default function GSSIReportApp() {
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} />
 
+      {/* === DRAWING NOTES (CAD page) === */}
+      {report.enableCadPage && (
+        <Card title="Drawing notes (CAD page)">
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+            Project-specific notes that print in the right-side column of the landscape
+            CAD page. Use one paragraph per zone or finding.
+          </div>
+          <Field label="Notes">
+            <AutoGrowTextarea
+              value={report.diagramNotes || ''}
+              onChange={e => update({ diagramNotes: e.target.value })}
+              style={{ minHeight: 140 }}
+            />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Field label="Drawing scale">
+              <Input value={report.drawingScale || ''}
+                onChange={e => update({ drawingScale: e.target.value })}
+                placeholder="e.g. 1 : 50 or NTS" />
+            </Field>
+            <Field label="Drawing no.">
+              <Input value={report.drawingNo || ''}
+                onChange={e => update({ drawingNo: e.target.value })}
+                placeholder={`${report.projectNo || 'PROJ'}-D01`} />
+            </Field>
+          </div>
+        </Card>
+      )}
+
       {/* === SCAN PHOTOS === */}
       <ScanPhotos report={report} update={update} />
+
+      {/* === ZONES (named area groupings) === */}
+      {report.enableNamedZones && (
+        <Card title="Zones">
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+            Group scan locations under named areas (e.g. "Back of House", "Zone 4 — north corridor").
+            Each location can be assigned a zone in its card.
+          </div>
+          {(report.zones || []).map((z, i) => (
+            <div key={z.id} style={{
+              border: `1px solid ${c.border}`, borderRadius: 6,
+              padding: 9, marginBottom: 7, background: c.cardAlt,
+            }}>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+                <Input value={z.label}
+                  onChange={e => update({
+                    zones: report.zones.map(zz => zz.id === z.id ? { ...zz, label: e.target.value } : zz),
+                  })}
+                  placeholder="Zone name (e.g. Back of House)"
+                  style={{ fontSize: 13, fontWeight: 600 }} />
+                <Btn variant="ghost"
+                  onClick={() => {
+                    if (i === 0) return;
+                    const next = [...report.zones];
+                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                    update({ zones: next });
+                  }}
+                  disabled={i === 0}
+                  style={{ padding: '6px 9px', fontSize: 11 }}>↑</Btn>
+                <Btn variant="ghost"
+                  onClick={() => {
+                    if (i === report.zones.length - 1) return;
+                    const next = [...report.zones];
+                    [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                    update({ zones: next });
+                  }}
+                  disabled={i === report.zones.length - 1}
+                  style={{ padding: '6px 9px', fontSize: 11 }}>↓</Btn>
+                <Btn variant="danger"
+                  onClick={() => {
+                    if (!confirm(`Remove zone "${z.label}"? Locations assigned to it will become Unzoned.`)) return;
+                    update({
+                      zones: report.zones.filter(zz => zz.id !== z.id),
+                      scanLocations: report.scanLocations.map(l =>
+                        l.zoneId === z.id ? { ...l, zoneId: null } : l
+                      ),
+                    });
+                  }}
+                  style={{ padding: '6px 9px', fontSize: 11 }}>✕</Btn>
+              </div>
+              <Textarea value={z.notes || ''}
+                onChange={e => update({
+                  zones: report.zones.map(zz => zz.id === z.id ? { ...zz, notes: e.target.value } : zz),
+                })}
+                placeholder="Zone-level notes (overall conditions, scope, hazards…)"
+                style={{ minHeight: 56, fontSize: 12 }} />
+              <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 4 }}>
+                {report.scanLocations.filter(l => l.zoneId === z.id).length} location(s) assigned
+              </div>
+            </div>
+          ))}
+          <Btn onClick={() => {
+            const id = `zone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            update({ zones: [...(report.zones || []), { id, label: `Zone ${(report.zones || []).length + 1}`, notes: '' }] });
+          }} style={{ width: '100%' }}>+ Add zone</Btn>
+        </Card>
+      )}
 
       {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
       <ScanLocations report={report} update={update} />
@@ -2680,6 +3280,129 @@ export default function GSSIReportApp() {
             + Add limitation
           </Btn>
         </Card>
+      )}
+
+      {/* === STANDARD NOTES (Xradar-style numbered general notes) === */}
+      {report.enableStandardNotes && (
+        <Card title="Standard notes">
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+            Numbered general notes printed alongside the drawing (CAD page) or as a
+            standalone block before the legal disclaimer.
+          </div>
+          {(report.standardNotes || []).map((line, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
+              <span style={{
+                color: c.accent, marginTop: 7, fontSize: 11, fontWeight: 700, minWidth: 22, textAlign: 'right',
+              }}>{i + 1}.</span>
+              <Input value={line} onChange={e => {
+                const next = [...report.standardNotes];
+                next[i] = e.target.value;
+                update({ standardNotes: next });
+              }} style={{ fontSize: 12, padding: '6px 9px' }} />
+              <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                <Btn variant="ghost"
+                  onClick={() => {
+                    if (i === 0) return;
+                    const next = [...report.standardNotes];
+                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                    update({ standardNotes: next });
+                  }}
+                  disabled={i === 0}
+                  style={{ padding: '6px 7px', fontSize: 11 }}>↑</Btn>
+                <Btn variant="ghost"
+                  onClick={() => {
+                    if (i === report.standardNotes.length - 1) return;
+                    const next = [...report.standardNotes];
+                    [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                    update({ standardNotes: next });
+                  }}
+                  disabled={i === report.standardNotes.length - 1}
+                  style={{ padding: '6px 7px', fontSize: 11 }}>↓</Btn>
+                <Btn variant="ghost"
+                  onClick={() => update({ standardNotes: report.standardNotes.filter((_, j) => j !== i) })}
+                  style={{ padding: '6px 8px', fontSize: 11 }}>✕</Btn>
+              </div>
+            </div>
+          ))}
+          <Btn onClick={() => update({ standardNotes: [...(report.standardNotes || []), ''] })} style={{ width: '100%', fontSize: 12 }}>
+            + Add standard note
+          </Btn>
+
+          {/* Print rendering when CAD page is OFF — standalone block */}
+          {!report.enableCadPage && (
+            <div className="print-only std-notes-print" style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+                STANDARD NOTES
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 22, fontSize: 10.5, lineHeight: 1.55, color: '#000' }}>
+                {(report.standardNotes || []).filter(s => s.trim()).map((s, i) => (
+                  <li key={i} style={{ marginBottom: 3 }}>{s}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* === CAD-STYLE LANDSCAPE DRAWING PAGE (print-only) === */}
+      {report.enableCadPage && (
+        <div className="cad-page print-only">
+          <div className="cad-letterhead">
+            <img src="/kamikaze-logo.png" alt="" className="cad-logo" />
+            <div className="cad-letterhead-text">
+              <div className="cad-company">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
+              <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>
+            </div>
+            <div className="cad-letterhead-meta">
+              <div>Project: <strong>{report.projectNo || '—'}</strong></div>
+              <div>Date: <strong>{report.scanDate || '—'}</strong></div>
+            </div>
+          </div>
+          <div className="cad-body">
+            <div className="cad-diagram">
+              <DiagramSnapshot report={report} width={1100} height={750} />
+            </div>
+            <div className="cad-notes">
+              {report.diagramNotes && (
+                <div className="cad-notes-block">
+                  <div className="cad-notes-heading">PROJECT NOTES</div>
+                  <div className="cad-notes-body">{report.diagramNotes}</div>
+                </div>
+              )}
+              {report.enableStandardNotes && (report.standardNotes || []).filter(s => s.trim()).length > 0 && (
+                <div className="cad-notes-block">
+                  <div className="cad-notes-heading">STANDARD NOTES</div>
+                  <ol className="cad-notes-list">
+                    {(report.standardNotes || []).filter(s => s.trim()).map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {report.enableZones && (report.diagramZones || []).length > 0 && (
+                <div className="cad-notes-block">
+                  <div className="cad-notes-heading">LEGEND</div>
+                  <ul className="cad-legend">
+                    {Object.entries(ZONE_PATTERNS).map(([id, meta]) => (
+                      <li key={id}>
+                        <span className="cad-legend-swatch" style={{ background: meta.color }} />
+                        {meta.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="cad-titleblock">
+            <div className="cad-tb-row"><span>Client</span><strong>{report.client || '—'}</strong></div>
+            <div className="cad-tb-row"><span>Site</span><strong>{report.siteAddress || '—'}</strong></div>
+            <div className="cad-tb-row"><span>Project no</span><strong>{report.projectNo || '—'}</strong></div>
+            <div className="cad-tb-row"><span>Date</span><strong>{report.scanDate || '—'}</strong></div>
+            <div className="cad-tb-row"><span>Scale</span><strong>{report.drawingScale || 'NTS'}</strong></div>
+            <div className="cad-tb-row"><span>Drawing no</span><strong>{report.drawingNo || `${report.projectNo || 'PROJ'}-D01`}</strong></div>
+          </div>
+        </div>
       )}
 
       {/* === LEGAL DISCLAIMER === */}
