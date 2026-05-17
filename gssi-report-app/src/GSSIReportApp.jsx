@@ -2777,70 +2777,67 @@ export default function GSSIReportApp() {
       <div className="no-print ak-header" style={{
         position: 'relative',
         marginBottom: 14,
-        padding: '14px 14px 14px 122px',
-        minHeight: 92,
+        padding: '12px 14px 14px',
         background: c.bgRaised,
         border: `1px solid ${c.borderStrong}`,
         borderLeft: `4px solid ${c.accent}`,
         borderRadius: 8,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        textAlign: 'center',
         overflow: 'visible',
       }}>
-        <img
-          src="/kamikaze-logo.png"
-          alt="Aggarwal Kamikazes Cutting & Coring Ltd"
-          className="ak-logo"
-          style={{
-            position: 'absolute',
-            left: 6,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            height: 108,
-            width: 'auto',
-            maxWidth: 'none',
-            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))',
-            pointerEvents: 'none',
-          }}
-        />
-        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.05 }}>
-          <div className="ak-title" style={{
-            fontSize: 26, color: c.text, fontWeight: 900,
-            letterSpacing: 0.8, textTransform: 'uppercase',
-            fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
-          }}>
-            Aggarwal Kamikazes
-          </div>
-          <div style={{
-            fontSize: 13, color: c.accent, fontWeight: 800,
-            letterSpacing: 3, textTransform: 'uppercase',
-            marginTop: 2,
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-          }}>
-            Cutting &amp; Coring&nbsp;Ltd
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        {/* Action buttons sit in their own row, right-aligned */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
           <button onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
             style={{
               background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '9px 11px', fontSize: 16,
+              borderRadius: 6, padding: '7px 10px', fontSize: 15,
               color: c.text, cursor: 'pointer', fontWeight: 900,
               whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             {theme === 'dark' ? '☀' : '☾'}
           </button>
           <label style={{
-            background: c.accent, border: `2px solid ${c.accent}`,
-            borderRadius: 6, padding: '9px 14px', textAlign: 'center', fontSize: 12,
-            color: '#fff', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap',
-            letterSpacing: 1.2, textTransform: 'uppercase',
-            boxShadow: '0 2px 0 rgba(0,0,0,0.5)',
+            background: c.accent, border: `1px solid ${c.accent}`,
+            borderRadius: 6, padding: '7px 12px', textAlign: 'center', fontSize: 11,
+            color: '#fff', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
+            letterSpacing: 1, textTransform: 'uppercase',
           }}>
             📂 Load
             <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
           </label>
+        </div>
+
+        {/* Logo centered as its own hero element */}
+        <img
+          src="/kamikaze-logo.png"
+          alt="Aggarwal Kamikazes Cutting & Coring Ltd"
+          className="ak-logo"
+          style={{
+            display: 'block',
+            height: 112,
+            width: 'auto',
+            maxWidth: '100%',
+            margin: '0 auto 6px',
+            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))',
+          }}
+        />
+
+        {/* Company name centered, on its own */}
+        <div className="ak-title" style={{
+          fontSize: 26, color: c.text, fontWeight: 900,
+          letterSpacing: 0.8, textTransform: 'uppercase', lineHeight: 1.05,
+          fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
+        }}>
+          Aggarwal Kamikazes
+        </div>
+        <div style={{
+          fontSize: 13, color: c.accent, fontWeight: 800,
+          letterSpacing: 3, textTransform: 'uppercase', marginTop: 2,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}>
+          Cutting &amp; Coring&nbsp;Ltd
         </div>
       </div>
       <style>{`
@@ -2850,9 +2847,8 @@ export default function GSSIReportApp() {
         @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
-          .ak-header { padding-left: 96px !important; min-height: 80px !important; }
           .ak-header .ak-logo { height: 86px !important; }
-          .ak-header .ak-title { font-size: 19px !important; letter-spacing: 0.4px !important; }
+          .ak-header .ak-title { font-size: 21px !important; letter-spacing: 0.4px !important; }
         }
         @media print {
           .ak-shell { max-width: none !important; padding: 0 !important; }
