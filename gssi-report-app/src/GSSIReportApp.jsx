@@ -2064,22 +2064,6 @@ function ScanLocations({ report, update }) {
 }
 
 // ============================================================
-// KamikazeMark — gear-and-saw brand badge (inline SVG)
-// ============================================================
-
-function KamikazeMark({ size = 72 }) {
-  return (
-    <img
-      src="/kamikaze-logo.png"
-      alt="Aggarwal Kamikazes Cutting & Coring Ltd"
-      width={size}
-      height={Math.round(size * 340 / 360)}
-      style={{ display: 'block', objectFit: 'contain', flexShrink: 0 }}
-    />
-  );
-}
-
-// ============================================================
 // Main App
 // ============================================================
 
@@ -2281,31 +2265,48 @@ export default function GSSIReportApp() {
 
       {/* === HEADER === */}
       <div className="no-print ak-header" style={{
-        marginBottom: 14, padding: '12px 14px',
+        position: 'relative',
+        marginBottom: 14,
+        padding: '14px 14px 14px 122px',
+        minHeight: 92,
         background: c.bgRaised,
         border: `1px solid ${c.borderStrong}`,
         borderLeft: `4px solid ${c.accent}`,
         borderRadius: 8,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        overflow: 'visible',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-          <KamikazeMark size={56} />
-          <div style={{ flex: 1, minWidth: 0, lineHeight: 1.05 }}>
-            <div className="ak-title" style={{
-              fontSize: 26, color: c.text, fontWeight: 900,
-              letterSpacing: 0.8, textTransform: 'uppercase',
-              fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
-            }}>
-              Aggarwal Kamikazes
-            </div>
-            <div style={{
-              fontSize: 13, color: c.accent, fontWeight: 800,
-              letterSpacing: 3, textTransform: 'uppercase',
-              marginTop: 2,
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-            }}>
-              Cutting &amp; Coring&nbsp;Ltd
-            </div>
+        <img
+          src="/kamikaze-logo.png"
+          alt="Aggarwal Kamikazes Cutting & Coring Ltd"
+          className="ak-logo"
+          style={{
+            position: 'absolute',
+            left: 6,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            height: 108,
+            width: 'auto',
+            maxWidth: 'none',
+            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))',
+            pointerEvents: 'none',
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.05 }}>
+          <div className="ak-title" style={{
+            fontSize: 26, color: c.text, fontWeight: 900,
+            letterSpacing: 0.8, textTransform: 'uppercase',
+            fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
+          }}>
+            Aggarwal Kamikazes
+          </div>
+          <div style={{
+            fontSize: 13, color: c.accent, fontWeight: 800,
+            letterSpacing: 3, textTransform: 'uppercase',
+            marginTop: 2,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          }}>
+            Cutting &amp; Coring&nbsp;Ltd
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -2339,6 +2340,8 @@ export default function GSSIReportApp() {
         @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
+          .ak-header { padding-left: 96px !important; min-height: 80px !important; }
+          .ak-header .ak-logo { height: 86px !important; }
           .ak-header .ak-title { font-size: 19px !important; letter-spacing: 0.4px !important; }
         }
         @media print {
