@@ -115,6 +115,20 @@ const DEFAULT_REPORT = {
     'Slab-band hatched areas are NOT suitable for coring, drilling, or anchoring without engineer approval.',
     'Report is valid only for the scan area, date, equipment and conditions specified herein.',
   ],
+
+  // ----- Engineered-deliverable extras (Xradar / GPRS / United Scanning) -----
+  methodsOverride: '',        // when set, replaces the auto-generated methods paragraph
+  coverSummary: {
+    topMin: '', topAvg: '', topTarget: '',
+    botMin: '', botAvg: '', botTarget: '',
+    note: '',
+    autoFromTargets: true,
+  },
+  workflow: {
+    scanComplete: '',         // 'YYYY-MM-DDTHH:MM' (datetime-local)
+    reportIssued: '',
+    clearedForCoring: '',
+  },
 };
 
 // ============================================================
@@ -505,14 +519,17 @@ function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
   }
   (report.diagramStrokes || []).forEach(s => {
     if (!s.points || s.points.length < 2) return;
+    ctx.save();
     ctx.strokeStyle = s.color;
     ctx.lineWidth = s.width ?? (s.color === '#F09595' ? 6 : 5);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    if (s.dashed) ctx.setLineDash([Math.max(6, (s.width || 3) * 2), Math.max(4, (s.width || 3) * 1.6)]);
     ctx.beginPath();
     ctx.moveTo(s.points[0].x, s.points[0].y);
     s.points.forEach(p => ctx.lineTo(p.x, p.y));
     ctx.stroke();
+    ctx.restore();
   });
   (report.diagramPins || []).forEach(pin => {
     const vc = {
@@ -581,7 +598,9 @@ function SiteDiagram({ report, update }) {
     'draw-pt': '#F09595',
     'draw-conduit': '#9BC5E8',
     'draw-note': '#5DCAA5',
+    'draw-crack': '#cccccc',
   };
+  const dashedTools = new Set(['draw-crack']);
 
   // ZONE_PATTERNS + buildZonePattern are defined at module scope above.
   const getZonePattern = (ctx, patternId) => buildZonePattern(ctx, patternId);
@@ -767,7 +786,10 @@ function SiteDiagram({ report, update }) {
       } else {
         const color = toolColors[tool];
         update({
-          diagramStrokes: [...report.diagramStrokes, { color, points: [anchor, pt], width: strokeWidth }],
+          diagramStrokes: [...report.diagramStrokes, {
+            color, points: [anchor, pt], width: strokeWidth,
+            dashed: dashedTools.has(tool),
+          }],
         });
         setAnchor(null);
         setHoverPt(null);
@@ -901,6 +923,7 @@ function SiteDiagram({ report, update }) {
         {toolBtn('draw-pt', 'PT cable', '#F09595')}
         {toolBtn('draw-conduit', 'Conduit', '#9BC5E8')}
         {toolBtn('draw-note', 'Note', '#5DCAA5')}
+        {toolBtn('draw-crack', '⋯ Crack', '#cccccc')}
         {report.enableZones && toolBtn('draw-zone', '▦ Zone', '#e02020')}
       </div>
       {report.enableZones && tool === 'draw-zone' && (
@@ -981,6 +1004,7 @@ function SiteDiagram({ report, update }) {
           <span><span style={{ color: '#F09595' }}>━</span> PT cable</span>
           <span><span style={{ color: '#9BC5E8' }}>━</span> Conduit</span>
           <span><span style={{ color: '#5DCAA5' }}>━</span> Note</span>
+          <span><span style={{ color: '#cccccc' }}>┄</span> Crack</span>
           <span style={{ color: c.green }}>● Safe</span>
           <span style={{ color: c.amber }}>● Caution</span>
           <span style={{ color: c.red }}>● No drill</span>
@@ -2647,6 +2671,33 @@ export default function GSSIReportApp() {
             margin-top: 12px;
             padding-top: 10px;
           }
+          .findings-table, .cover-summary-print table {
+            border: 1px solid #555;
+            page-break-inside: auto;
+            break-inside: auto;
+          }
+          .findings-table th, .findings-table td,
+          .cover-summary-print th, .cover-summary-print td {
+            border: 1px solid #888;
+            padding: 4px 7px;
+            text-align: left;
+            vertical-align: top;
+          }
+          .findings-table th, .cover-summary-print th {
+            background: #eee !important;
+            font-size: 8pt;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .findings-table tr, .cover-summary-print tr,
+          .proposed-cores-print li, .methods-print, .std-notes-print,
+          .workflow-status-print {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
           .scan-photo-row {
             page-break-inside: avoid;
             break-inside: avoid;
@@ -2878,6 +2929,56 @@ export default function GSSIReportApp() {
         ))}
       </Card>
 
+      {/* === SAME-DAY WORKFLOW STATUS === */}
+      <Card title="Workflow status" dense>
+        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          Track the same-day cycle: when scanning finished, when this report was issued,
+          and when the area was cleared for coring. Prints as a small status block at the
+          top of the report when any timestamp is set.
+        </div>
+        <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          {[
+            { id: 'scanComplete',      label: 'Scan complete' },
+            { id: 'reportIssued',      label: 'Report issued' },
+            { id: 'clearedForCoring',  label: 'Cleared for coring' },
+          ].map(f => (
+            <Field key={f.id} label={f.label}>
+              <Input type="datetime-local"
+                value={(report.workflow || {})[f.id] || ''}
+                onChange={e => update({
+                  workflow: { ...(report.workflow || {}), [f.id]: e.target.value },
+                })}
+                style={{ fontSize: 12 }} />
+            </Field>
+          ))}
+        </div>
+        {(report.workflow?.scanComplete || report.workflow?.reportIssued || report.workflow?.clearedForCoring) && (
+          <div className="print-only workflow-status-print" style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10,
+            border: '1px solid #888', padding: '8px 10px', marginTop: 4,
+            fontSize: '9pt', color: '#000',
+          }}>
+            {[
+              { id: 'scanComplete',      label: 'SCAN COMPLETE' },
+              { id: 'reportIssued',      label: 'REPORT ISSUED' },
+              { id: 'clearedForCoring',  label: 'CLEARED FOR CORING' },
+            ].map(f => {
+              const v = (report.workflow || {})[f.id];
+              const fmt = v ? new Date(v).toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              }) : '—';
+              return (
+                <div key={f.id}>
+                  <div style={{ fontSize: '7.5pt', letterSpacing: 1, color: '#666' }}>{f.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: '10pt' }}>{fmt}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
       {/* === EXECUTIVE SUMMARY (always at top) === */}
       <ExecutiveSummary report={report} />
 
@@ -3039,6 +3140,145 @@ export default function GSSIReportApp() {
         <Btn onClick={addTarget} style={{ width: '100%' }}>+ Add target</Btn>
       </Card>
 
+      {/* === FINDINGS SCHEDULE (print-only structured table) === */}
+      {report.targets.length > 0 && (
+        <Card title="Findings schedule">
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
+            Prints as a formal tabular schedule (engineering deliverable format). Edit individual targets above.
+          </div>
+          <table className="print-only findings-table" style={{
+            width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000', marginTop: 4,
+          }}>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Depth</th>
+                <th>Cover</th>
+                <th>Conf.</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.targets.map(t => (
+                <tr key={t.id}>
+                  <td><strong>{t.id}</strong></td>
+                  <td>{t.type}</td>
+                  <td>{t.depth || '—'}</td>
+                  <td>{t.cover || '—'}</td>
+                  <td>{(t.confidence || 'high').toUpperCase()}</td>
+                  <td>{t.note || ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* === COVER-THICKNESS SUMMARY === */}
+      <Card title="Cover thickness summary">
+        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          Single-block summary of cover (concrete over rebar) for the top and bottom mats.
+          Auto-fill from your Targets list, or override manually.
+        </div>
+        <label className="no-print" style={{
+          display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, marginBottom: 8,
+          color: c.text,
+        }}>
+          <input type="checkbox"
+            checked={!!(report.coverSummary?.autoFromTargets)}
+            onChange={e => update({
+              coverSummary: { ...(report.coverSummary || {}), autoFromTargets: e.target.checked },
+            })}
+            style={{ accentColor: c.accent }} />
+          Auto-compute min / avg from Targets where type matches "rebar (top mat)" / "rebar (bot mat)"
+        </label>
+        {(() => {
+          const cs = report.coverSummary || {};
+          // Auto-compute from targets when enabled
+          let topMin = cs.topMin, topAvg = cs.topAvg;
+          let botMin = cs.botMin, botAvg = cs.botAvg;
+          if (cs.autoFromTargets) {
+            const numericCover = (t) => {
+              const m = String(t.cover || '').match(/[\d.]+/);
+              return m ? parseFloat(m[0]) : null;
+            };
+            const tops = report.targets.filter(t => /top/i.test(t.type) && numericCover(t) != null);
+            const bots = report.targets.filter(t => /bot/i.test(t.type) && numericCover(t) != null);
+            const stats = (arr) => {
+              const vals = arr.map(numericCover);
+              if (!vals.length) return { min: '', avg: '' };
+              const min = Math.min(...vals);
+              const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+              return {
+                min: `${min.toFixed(0)} mm`,
+                avg: `${avg.toFixed(0)} mm`,
+              };
+            };
+            const t = stats(tops), b = stats(bots);
+            topMin = t.min; topAvg = t.avg;
+            botMin = b.min; botAvg = b.avg;
+          }
+          const set = (k, v) => update({ coverSummary: { ...(report.coverSummary || {}), [k]: v } });
+          const ro = !!cs.autoFromTargets;
+          return (
+            <>
+              <div style={{ fontSize: 10.5, color: c.textDim, textTransform: 'uppercase',
+                letterSpacing: 0.6, fontWeight: 700, marginBottom: 4 }}>Top mat</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                <Field label="Min cover"><Input value={topMin || ''} readOnly={ro}
+                  onChange={e => set('topMin', e.target.value)} placeholder="e.g. 28 mm" /></Field>
+                <Field label="Avg cover"><Input value={topAvg || ''} readOnly={ro}
+                  onChange={e => set('topAvg', e.target.value)} placeholder="e.g. 36 mm" /></Field>
+                <Field label="Target cover"><Input value={cs.topTarget || ''}
+                  onChange={e => set('topTarget', e.target.value)} placeholder="e.g. 40 mm" /></Field>
+              </div>
+              <div style={{ fontSize: 10.5, color: c.textDim, textTransform: 'uppercase',
+                letterSpacing: 0.6, fontWeight: 700, marginBottom: 4 }}>Bottom mat</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                <Field label="Min cover"><Input value={botMin || ''} readOnly={ro}
+                  onChange={e => set('botMin', e.target.value)} placeholder="e.g. 22 mm" /></Field>
+                <Field label="Avg cover"><Input value={botAvg || ''} readOnly={ro}
+                  onChange={e => set('botAvg', e.target.value)} placeholder="e.g. 30 mm" /></Field>
+                <Field label="Target cover"><Input value={cs.botTarget || ''}
+                  onChange={e => set('botTarget', e.target.value)} placeholder="e.g. 40 mm" /></Field>
+              </div>
+              <Field label="Notes (overall cover commentary)">
+                <Textarea value={cs.note || ''} onChange={e => set('note', e.target.value)}
+                  style={{ minHeight: 56 }} />
+              </Field>
+
+              {/* Print summary block */}
+              <div className="print-only cover-summary-print" style={{ marginTop: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+                  COVER THICKNESS SUMMARY
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000' }}>
+                  <thead>
+                    <tr>
+                      <th>Mat</th><th>Min cover</th><th>Avg cover</th><th>Target cover</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Top</td><td>{topMin || '—'}</td><td>{topAvg || '—'}</td><td>{cs.topTarget || '—'}</td>
+                    </tr>
+                    <tr>
+                      <td>Bottom</td><td>{botMin || '—'}</td><td>{botAvg || '—'}</td><td>{cs.botTarget || '—'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {cs.note && (
+                  <div style={{ marginTop: 6, fontSize: '9pt', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                    {cs.note}
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
+      </Card>
+
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} />
 
@@ -3143,6 +3383,47 @@ export default function GSSIReportApp() {
 
       {/* === SCAN LOCATIONS (per-location cards · prints side-by-side) === */}
       <ScanLocations report={report} update={update} />
+
+      {/* === PROPOSED CORE SCHEDULE (print-only) === */}
+      {report.scanLocations.length > 0 && (
+        <Card title="Proposed core schedule">
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
+            Prints as a numbered schedule pulling label + verdict + instruction from each
+            Scan Location. Useful for engineer sign-off and the coring crew's day-of checklist.
+          </div>
+          <div className="print-only proposed-cores-print" style={{ marginTop: 6 }}>
+            <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+              PROPOSED CORE SCHEDULE
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 22, fontSize: '10pt', lineHeight: 1.5, color: '#000' }}>
+              {report.scanLocations.map(loc => {
+                const verdictLabel = {
+                  safe: '✓ Safe to drill',
+                  caution: '⚠ Caution',
+                  nogo: '✕ Do not drill',
+                }[loc.verdict] || loc.verdict;
+                const spec = [loc.coreCount, loc.coreSize, loc.overCut && `over-cut ${loc.overCut}`]
+                  .filter(Boolean).join(' · ');
+                return (
+                  <li key={loc.id} style={{ marginBottom: 5 }}>
+                    <strong>{loc.label || '—'}</strong>
+                    {spec && <> · {spec}</>}
+                    {' · '}<em>{verdictLabel}</em>
+                    {loc.instruction && (
+                      <div style={{ marginTop: 2, fontWeight: 600 }}>↳ {loc.instruction}</div>
+                    )}
+                    {loc.notes && (
+                      <div style={{ marginTop: 1, color: '#444', whiteSpace: 'pre-wrap' }}>
+                        {loc.notes}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </Card>
+      )}
 
       {/* === GPR SCANS (full-size grouping for the PDF) === */}
       <GPRScans report={report} />
@@ -3259,6 +3540,41 @@ export default function GSSIReportApp() {
           </div>
         </Card>
       )}
+
+      {/* === METHODS NARRATIVE (auto-prose from equipment + calibration) === */}
+      {showCalibration && (() => {
+        const auto = [
+          `Scanning performed with a ${report.scanner || 'GPR system'}`,
+          report.antenna ? ` (${report.antenna})` : '',
+          ` in ${report.scanMode || 'Scan3D'} mode`,
+          report.scanDensity ? ` at ${report.scanDensity}` : '',
+          report.dielectric ? `, assuming a dielectric constant of εr = ${report.dielectric}` : '',
+          report.depthRange ? `. Effective depth range ${report.depthRange}` : '',
+          '. The technician marked subsurface features directly on the slab with paint and crayon prior to client coring/cutting; locations were also recorded photographically and digitally for this report.',
+        ].filter(Boolean).join('');
+        return (
+          <Card title="Methods">
+            <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+              Auto-generated from your Equipment &amp; calibration entries. Override only
+              if you need custom phrasing.
+            </div>
+            <Field label="Override (leave blank to use auto-generated)">
+              <Textarea value={report.methodsOverride || ''}
+                onChange={e => update({ methodsOverride: e.target.value })}
+                style={{ minHeight: 80 }}
+                placeholder={auto} />
+            </Field>
+            <div className="print-only methods-print" style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+                METHODS
+              </div>
+              <div style={{ fontSize: '10pt', lineHeight: 1.5, color: '#000', whiteSpace: 'pre-wrap' }}>
+                {(report.methodsOverride && report.methodsOverride.trim()) || auto}
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* === LIMITATIONS (standard + full) === */}
       {showLimitations && (
