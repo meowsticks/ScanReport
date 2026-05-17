@@ -2067,13 +2067,13 @@ function ScanLocations({ report, update }) {
 // KamikazeMark — gear-and-saw brand badge (inline SVG)
 // ============================================================
 
-function KamikazeMark({ size = 64 }) {
+function KamikazeMark({ size = 72 }) {
   return (
     <img
       src="/kamikaze-logo.png"
-      alt="Aggarwal Kamikazes"
+      alt="Aggarwal Kamikazes Cutting & Coring Ltd"
       width={size}
-      height={size}
+      height={Math.round(size * 340 / 360)}
       style={{ display: 'block', objectFit: 'contain', flexShrink: 0 }}
     />
   );
