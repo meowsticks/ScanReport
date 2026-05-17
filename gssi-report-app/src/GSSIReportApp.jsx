@@ -1880,10 +1880,23 @@ function NorthArrow({ rotation, size = 36 }) {
   );
 }
 
+const photoMenuBtnStyle = (c) => ({
+  background: c.card, color: c.text,
+  border: `1px solid ${c.borderStrong}`,
+  borderRadius: 8, padding: '14px 6px',
+  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+  textAlign: 'center', lineHeight: 1.2,
+});
+
 function ScanLocations({ report, update }) {
   const fileInputRefs = useRef({});
+  const takePhotoRefs = useRef({});
+  const libraryRefs = useRef({});
   const [dragId, setDragId] = useState(null);
   const [overId, setOverId] = useState(null);
+  const [menuLocId, setMenuLocId] = useState(null);          // location whose photo menu is open
+  const [annotLocId, setAnnotLocId] = useState(null);        // location whose annotation editor is open
+  const [pendingSyncs, setPendingSyncs] = useState([]);      // proposed cross-section updates awaiting approval
 
   const reorderLocs = (fromId, toId) => {
     if (!fromId || !toId || fromId === toId) return;
@@ -1953,16 +1966,89 @@ function ScanLocations({ report, update }) {
         instruction: DEFAULT_INSTRUCTION,
         confidence: 'high',
         zoneId: null,
+        photoAnnotations: [],
       }],
     });
   };
 
   const updateLoc = (id, patch) => {
+    const oldLoc = report.scanLocations.find(l => l.id === id);
+
+    // Apply the change to the location immediately
     update({
       scanLocations: report.scanLocations.map(l =>
         l.id === id ? { ...l, ...patch } : l
       ),
     });
+
+    // Detect cross-section sync candidates so the user can approve/skip each one
+    if (!oldLoc) return;
+    const newLoc = { ...oldLoc, ...patch };
+    const proposed = [];
+
+    // 1) Label change → propose updating any scanPhoto whose locationRef was the old label
+    if ('label' in patch && patch.label !== oldLoc.label && oldLoc.label) {
+      (report.scanPhotos || []).forEach(p => {
+        if ((p.locationRef || '').toUpperCase() === oldLoc.label.toUpperCase()) {
+          proposed.push({
+            id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${p.id}`,
+            kind: 'scanPhoto-locationRef',
+            targetId: p.id,
+            what: `Scan photo "${p.caption || p.id}" → location reference`,
+            oldValue: p.locationRef,
+            newValue: newLoc.label,
+            apply: () => update({
+              scanPhotos: report.scanPhotos.map(x =>
+                x.id === p.id ? { ...x, locationRef: newLoc.label } : x
+              ),
+            }),
+          });
+        }
+      });
+    }
+
+    // 2) Verdict / coreSize / coreCount change → propose updating a core entry whose
+    //    label matches this location's label (e.g. core labelled "L1" gets synced)
+    [
+      { locField: 'verdict',   coreField: 'verdict' },
+      { locField: 'coreSize',  coreField: 'size'    },
+      { locField: 'coreCount', coreField: 'count'   },
+    ].forEach(({ locField, coreField }) => {
+      if (locField in patch && patch[locField] !== oldLoc[locField] && newLoc.label) {
+        (report.cores || []).forEach((core, idx) => {
+          if ((core.label || '').toUpperCase() === (newLoc.label || '').toUpperCase()
+              && core[coreField] !== patch[locField]) {
+            proposed.push({
+              id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-c${idx}-${coreField}`,
+              kind: 'core-' + coreField,
+              targetId: idx,
+              what: `Core "${core.label}" → ${coreField}`,
+              oldValue: core[coreField] || '—',
+              newValue: patch[locField],
+              apply: () => {
+                const next = [...report.cores];
+                next[idx] = { ...next[idx], [coreField]: patch[locField] };
+                update({ cores: next });
+              },
+            });
+          }
+        });
+      }
+    });
+
+    if (proposed.length) {
+      setPendingSyncs(prev => [...prev, ...proposed]);
+    }
+  };
+
+  const approveSyncs = (ids) => {
+    const idSet = new Set(ids);
+    pendingSyncs.filter(s => idSet.has(s.id)).forEach(s => s.apply());
+    setPendingSyncs(prev => prev.filter(s => !idSet.has(s.id)));
+  };
+  const skipSyncs = (ids) => {
+    const idSet = new Set(ids);
+    setPendingSyncs(prev => prev.filter(s => !idSet.has(s.id)));
   };
 
   const removeLoc = (id) => {
@@ -2358,14 +2444,32 @@ function ScanLocations({ report, update }) {
                   position: 'relative', background: c.cardAlt, borderRadius: 6,
                   aspectRatio: '4 / 3', overflow: 'hidden',
                   border: `1px solid ${c.border}`, marginBottom: 8,
-                }}>
+                  cursor: 'pointer',
+                }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuLocId(menuLocId === loc.id ? null : loc.id);
+                  }}
+                  title={loc.photo ? 'Click to edit / replace / annotate' : 'Click to add a photo'}
+                >
                   {loc.photo ? (
                     <>
-                      <img src={loc.photo} alt={loc.label}
-                        style={{
-                          width: '100%', height: '100%', objectFit: 'cover',
-                          position: 'absolute', inset: 0,
-                        }} />
+                      {(loc.photoAnnotations && loc.photoAnnotations.length > 0) ? (
+                        <div style={{ position: 'absolute', inset: 0 }}>
+                          <AnnotatedImage
+                            src={loc.photo}
+                            annotations={loc.photoAnnotations}
+                            alt={loc.label}
+                            style={{ width: '100%', height: '100%' }}
+                          />
+                        </div>
+                      ) : (
+                        <img src={loc.photo} alt={loc.label}
+                          style={{
+                            width: '100%', height: '100%', objectFit: 'cover',
+                            position: 'absolute', inset: 0,
+                          }} />
+                      )}
                       <NorthArrow rotation={loc.northRotation} />
                       <div style={{
                         position: 'absolute', bottom: 6, right: 6,
@@ -2373,17 +2477,97 @@ function ScanLocations({ report, update }) {
                         padding: '3px 8px', borderRadius: 4,
                         fontSize: 12, fontWeight: 700, letterSpacing: 0.5,
                       }}>{loc.label}</div>
+                      <div className="no-print" style={{
+                        position: 'absolute', top: 6, left: 6,
+                        background: 'rgba(0,0,0,0.7)', color: '#fff',
+                        padding: '3px 8px', borderRadius: 4,
+                        fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
+                        textTransform: 'uppercase',
+                      }}>🖊 Click to edit</div>
                     </>
                   ) : (
-                    <div style={{
+                    <div className="no-print" style={{
                       position: 'absolute', inset: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column', gap: 4,
                       color: c.textFaint, fontSize: 12, padding: 16, textAlign: 'center',
                     }}>
-                      No photo yet
+                      <div style={{ fontSize: 28 }}>📷</div>
+                      <div style={{ fontWeight: 600, color: c.text }}>Click to add a photo</div>
+                      <div style={{ fontSize: 10.5 }}>Take · From library · Annotate</div>
+                    </div>
+                  )}
+
+                  {menuLocId === loc.id && (
+                    <div
+                      className="no-print"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: 'absolute', inset: 0,
+                        background: 'rgba(0, 0, 0, 0.78)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 10,
+                      }}>
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
+                        padding: 12, width: '88%', maxWidth: 320,
+                      }}>
+                        <button
+                          onClick={() => { takePhotoRefs.current[loc.id]?.click(); setMenuLocId(null); }}
+                          style={photoMenuBtnStyle(c)}>
+                          📷<br /><span style={{ fontSize: 11 }}>Take photo</span>
+                        </button>
+                        <button
+                          onClick={() => { libraryRefs.current[loc.id]?.click(); setMenuLocId(null); }}
+                          style={photoMenuBtnStyle(c)}>
+                          📂<br /><span style={{ fontSize: 11 }}>From library</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loc.photo) { alert('Add a photo first, then annotate it.'); return; }
+                            setAnnotLocId(loc.id);
+                            setMenuLocId(null);
+                          }}
+                          style={photoMenuBtnStyle(c)}>
+                          🖊<br /><span style={{ fontSize: 11 }}>Annotate</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loc.photo) { setMenuLocId(null); return; }
+                            if (!confirm('Remove this location\'s photo (and annotations)?')) return;
+                            updateLoc(loc.id, { photo: null, photoAnnotations: [] });
+                            setMenuLocId(null);
+                          }}
+                          style={{ ...photoMenuBtnStyle(c), color: '#ff7b7b' }}>
+                          ✕<br /><span style={{ fontSize: 11 }}>Remove</span>
+                        </button>
+                        <button
+                          onClick={() => setMenuLocId(null)}
+                          style={{
+                            ...photoMenuBtnStyle(c),
+                            gridColumn: '1 / -1',
+                            background: 'transparent',
+                            border: '1px solid #555',
+                            color: '#ddd',
+                          }}>
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
+
+                {/* Hidden inputs that the menu triggers */}
+                <input
+                  ref={el => { if (el) takePhotoRefs.current[loc.id] = el; }}
+                  type="file" accept="image/*" capture="environment"
+                  onChange={e => handlePhoto(loc.id, e)}
+                  style={{ display: 'none' }} />
+                <input
+                  ref={el => { if (el) libraryRefs.current[loc.id] = el; }}
+                  type="file" accept="image/*"
+                  onChange={e => handlePhoto(loc.id, e)}
+                  style={{ display: 'none' }} />
 
                 {/* Inline scan thumbnails referenced at this location */}
                 {(() => {
@@ -2475,6 +2659,71 @@ function ScanLocations({ report, update }) {
       )}
 
       <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+
+      {/* Pending cross-section sync proposals */}
+      {pendingSyncs.length > 0 && (
+        <div className="no-print" style={{
+          position: 'fixed', bottom: 12, left: 12, right: 12,
+          zIndex: 800, maxWidth: 680, margin: '0 auto',
+          background: c.bgRaised, color: c.text,
+          border: `2px solid ${c.accent}`, borderRadius: 10,
+          padding: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+        }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            marginBottom: 8, gap: 8,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+              🔗 Sync changes to the rest of the report ({pendingSyncs.length})
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <Btn variant="ghost" onClick={() => skipSyncs(pendingSyncs.map(s => s.id))}
+                style={{ fontSize: 11 }}>Skip all</Btn>
+              <Btn variant="primary" onClick={() => approveSyncs(pendingSyncs.map(s => s.id))}
+                style={{ fontSize: 11 }}>✓ Approve all</Btn>
+            </div>
+          </div>
+          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 5 }}>
+            {pendingSyncs.map(s => (
+              <div key={s.id} style={{
+                display: 'flex', gap: 6, alignItems: 'center',
+                padding: '6px 8px', background: c.cardAlt,
+                border: `1px solid ${c.border}`, borderRadius: 6,
+                fontSize: 11.5,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: c.text }}>{s.what}</div>
+                  <div style={{ color: c.textDim, marginTop: 1 }}>
+                    <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{s.oldValue || '—'}</span>
+                    {' → '}
+                    <strong style={{ color: c.accent }}>{s.newValue}</strong>
+                  </div>
+                </div>
+                <Btn variant="ghost" onClick={() => skipSyncs([s.id])}
+                  style={{ padding: '4px 8px', fontSize: 11 }}>Skip</Btn>
+                <Btn variant="primary" onClick={() => approveSyncs([s.id])}
+                  style={{ padding: '4px 8px', fontSize: 11 }}>✓ Apply</Btn>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Annotation editor for the per-location photo */}
+      {annotLocId && (() => {
+        const loc = report.scanLocations.find(l => l.id === annotLocId);
+        if (!loc || !loc.photo) return null;
+        return (
+          <AnnotationEditor
+            photo={{ dataUrl: loc.photo, annotations: loc.photoAnnotations || [] }}
+            onSave={(annotations) => {
+              updateLoc(loc.id, { photoAnnotations: annotations });
+              setAnnotLocId(null);
+            }}
+            onClose={() => setAnnotLocId(null)}
+          />
+        );
+      })()}
     </Card>
   );
 }
