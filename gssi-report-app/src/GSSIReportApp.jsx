@@ -1064,6 +1064,46 @@ const ANNOTATION_COLORS = [
 ];
 const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = c.hex; return acc; }, {});
 
+// One-click target presets — engineers don't want to dial color/thickness/tool
+// for every conduit they trace. Persisted in localStorage so each tech's
+// workflow defaults travel with them.
+const DEFAULT_PRESETS = [
+  { id: 'rebar',   label: 'Rebar',    tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
+  { id: 'conduit', label: 'Conduit',  tool: 'freehand', color: '#e84a4a', strokeScale: 5 },
+  { id: 'pt',      label: 'PT Cable', tool: 'freehand', color: '#e89c3a', strokeScale: 8 },
+  { id: 'core',    label: 'Core ⊙',   tool: 'circle',   color: '#e84a4a', strokeScale: 4 },
+  { id: 'anomaly', label: 'Anomaly',  tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+];
+const PRESETS_STORAGE_KEY = 'ak_annotation_presets';
+function loadAnnotationPresets() {
+  try {
+    const s = localStorage.getItem(PRESETS_STORAGE_KEY);
+    if (s) {
+      const p = JSON.parse(s);
+      if (Array.isArray(p) && p.length > 0) return p;
+    }
+  } catch {}
+  return DEFAULT_PRESETS;
+}
+function saveAnnotationPresets(presets) {
+  try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets)); } catch {}
+}
+
+// Snap an endpoint to the nearest N° increment from the anchor (held Shift)
+function snapToAngle(anchor, pt, snapDeg = 15) {
+  const dx = pt.x - anchor.x;
+  const dy = pt.y - anchor.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0) return pt;
+  const rad = Math.atan2(dy, dx);
+  const step = (snapDeg * Math.PI) / 180;
+  const snapped = Math.round(rad / step) * step;
+  return {
+    x: Math.max(0, Math.min(1, anchor.x + Math.cos(snapped) * dist)),
+    y: Math.max(0, Math.min(1, anchor.y + Math.sin(snapped) * dist)),
+  };
+}
+
 function parseScanFilename(name) {
   if (!name) return {};
   const lower = name.toLowerCase();
@@ -1115,6 +1155,11 @@ function drawAnnotation(ctx, a, W, H) {
     ctx.lineTo(x2, y2);
     ctx.stroke();
     drawArrowHead(ctx, x1, y1, x2, y2, color, drawnLineWidth);
+  } else if (a.type === 'line' && a.start && a.end) {
+    ctx.beginPath();
+    ctx.moveTo(a.start.x * W, a.start.y * H);
+    ctx.lineTo(a.end.x * W, a.end.y * H);
+    ctx.stroke();
   } else if (a.type === 'circle' && a.center && typeof a.radius === 'number') {
     ctx.beginPath();
     ctx.arc(a.center.x * W, a.center.y * H, a.radius * minDim, 0, Math.PI * 2);
@@ -1222,6 +1267,28 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
   const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
+  const [presets, setPresets] = useState(loadAnnotationPresets);
+  const [showPresetEditor, setShowPresetEditor] = useState(false);
+  useEffect(() => { saveAnnotationPresets(presets); }, [presets]);
+
+  const applyPreset = (p) => {
+    setTool(p.tool);
+    setColor(p.color);
+    setStrokeScale(p.strokeScale);
+  };
+  const isActivePreset = (p) =>
+    tool === p.tool && color === p.color && strokeScale === p.strokeScale;
+  const updatePreset = (id, patch) =>
+    setPresets(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  const removePreset = (id) =>
+    setPresets(prev => prev.filter(p => p.id !== id));
+  const addPreset = () => {
+    const id = `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setPresets(prev => [...prev, {
+      id, label: 'New preset', tool: 'freehand', color: '#3a8de8', strokeScale: 5,
+    }]);
+  };
+  const resetPresets = () => setPresets(DEFAULT_PRESETS);
 
   const getFractionalCoords = (e) => {
     const canvas = canvasRef.current;
@@ -1289,7 +1356,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       ctx.strokeStyle = previewColor;
       ctx.fillStyle = previewColor;
       ctx.lineWidth = Math.max(1.5, minDim * 0.0012 * strokeScale);
-      if (tool === 'arrow') {
+      if (tool === 'arrow' || tool === 'line') {
         ctx.beginPath();
         ctx.moveTo(anchor.x * W, anchor.y * H);
         ctx.lineTo(hover.x * W, hover.y * H);
@@ -1341,8 +1408,12 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const handleClick = (e) => {
     if (tool === 'freehand') return;
     e.preventDefault();
-    const pt = getFractionalCoords(e);
+    let pt = getFractionalCoords(e);
     if (!pt) return;
+    // Shift snaps line/arrow endpoints to 15° increments
+    if (e.shiftKey && anchor && (tool === 'line' || tool === 'arrow')) {
+      pt = snapToAngle(anchor, pt, 15);
+    }
     if (tool === 'text') {
       const content = prompt('Label text:', '');
       if (!content) return;
@@ -1360,6 +1431,8 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       let ann = null;
       if (tool === 'arrow') {
         ann = { id, type: 'arrow', color, start: anchor, end: pt, strokeScale };
+      } else if (tool === 'line') {
+        ann = { id, type: 'line', color, start: anchor, end: pt, strokeScale };
       } else if (tool === 'circle') {
         const W = canvasRef.current.width, H = canvasRef.current.height;
         const dx = (pt.x - anchor.x) * W;
@@ -1392,8 +1465,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     }
     if (!anchor || tool === 'text') return;
     e.preventDefault();
-    const pt = getFractionalCoords(e);
-    if (pt) setHover(pt);
+    let pt = getFractionalCoords(e);
+    if (!pt) return;
+    // Shift snaps lines/arrows to 15° increments
+    if (e.shiftKey && (tool === 'line' || tool === 'arrow') && anchor) {
+      pt = snapToAngle(anchor, pt, 15);
+    }
+    setHover(pt);
   };
 
   const undo = () => setAnnotations(prev => prev.slice(0, -1));
@@ -1466,9 +1544,108 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         borderTop: `1px solid ${c.borderStrong}`,
         display: 'flex', flexDirection: 'column', gap: 8,
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+        {/* === Preset chips — quick-switch color/thickness/tool combos === */}
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {presets.map(p => {
+            const active = isActivePreset(p);
+            return (
+              <button key={p.id} onClick={() => applyPreset(p)}
+                title={`${p.label} · ${p.tool} · thickness ${p.strokeScale}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: active ? c.accentDim : c.cardAlt,
+                  border: `1px solid ${active ? c.accent : c.border}`,
+                  borderRadius: 14, padding: '4px 9px',
+                  cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  color: active ? c.onAccentDim : c.text, whiteSpace: 'nowrap',
+                }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: p.color, border: '1px solid rgba(255,255,255,0.15)',
+                }} />
+                {p.label}
+              </button>
+            );
+          })}
+          <button onClick={() => setShowPresetEditor(s => !s)}
+            title={showPresetEditor ? 'Close preset editor' : 'Customize presets'}
+            style={{
+              background: showPresetEditor ? c.cardAlt : 'transparent',
+              border: `1px dashed ${c.border}`,
+              borderRadius: 14, padding: '4px 9px',
+              cursor: 'pointer', fontSize: 11, color: c.textDim,
+            }}>
+            ⚙ {showPresetEditor ? 'Close' : 'Edit'}
+          </button>
+        </div>
+
+        {showPresetEditor && (
+          <div style={{
+            background: c.cardAlt, border: `1px solid ${c.border}`,
+            borderRadius: 6, padding: 8, fontSize: 11,
+          }}>
+            <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Customize presets (saved on this device)
+            </div>
+            {presets.map(p => (
+              <div key={p.id} style={{
+                display: 'grid', gridTemplateColumns: '1fr auto auto auto auto',
+                gap: 5, alignItems: 'center', marginBottom: 4,
+              }}>
+                <input value={p.label}
+                  onChange={e => updatePreset(p.id, { label: e.target.value })}
+                  style={{
+                    background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+                    borderRadius: 4, padding: '4px 6px', fontSize: 11, minWidth: 0,
+                  }} />
+                <select value={p.tool}
+                  onChange={e => updatePreset(p.id, { tool: e.target.value })}
+                  style={{
+                    background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+                    borderRadius: 4, padding: '4px 4px', fontSize: 11,
+                  }}>
+                  <option value="freehand">Draw</option>
+                  <option value="line">Line</option>
+                  <option value="arrow">Arrow</option>
+                  <option value="circle">Circle</option>
+                  <option value="rect">Rect</option>
+                </select>
+                <input type="color" value={p.color}
+                  onChange={e => updatePreset(p.id, { color: e.target.value })}
+                  style={{
+                    width: 28, height: 24, padding: 0, cursor: 'pointer',
+                    background: 'transparent', border: `1px solid ${c.border}`,
+                    borderRadius: 4,
+                  }} />
+                <input type="range" min="1" max="16" value={p.strokeScale}
+                  onChange={e => updatePreset(p.id, { strokeScale: Number(e.target.value) })}
+                  title={`Thickness ${p.strokeScale}`}
+                  style={{ width: 70, accentColor: c.accent }} />
+                <button onClick={() => removePreset(p.id)}
+                  title="Delete preset"
+                  style={{
+                    background: 'transparent', border: 'none', color: c.textFaint,
+                    cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                  }}>✕</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+              <Btn variant="ghost" onClick={addPreset} style={{ fontSize: 11, flex: 1 }}>
+                + Add preset
+              </Btn>
+              <Btn variant="ghost" onClick={resetPresets}
+                style={{ fontSize: 11, color: c.textFaint }}
+                title="Restore the original 5 presets">
+                ↺ Reset
+              </Btn>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
           {[
             { id: 'freehand', label: '✎ Draw' },
+            { id: 'line',     label: '— Line' },
             { id: 'arrow',    label: '→ Arrow' },
             { id: 'circle',   label: '○ Circle' },
             { id: 'rect',     label: '▭ Rect' },
@@ -1532,14 +1709,14 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center' }}>
+        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', lineHeight: 1.45 }}>
           {tool === 'freehand'
             ? 'Press and drag to draw a smooth line. Release to finish.'
             : tool === 'text'
               ? 'Tap to place a text label.'
               : anchor
-                ? `Tap to finish the ${tool}.`
-                : `Tap to start the ${tool}.`}
+                ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
+                : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
         </div>
       </div>
     </div>
