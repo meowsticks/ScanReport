@@ -8,6 +8,10 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 const STORAGE_KEY = 'gssi_report_v2';
 
+// Subtle company tagline used by the optional Brand Flourishes flag.
+// Plays on the company name (cutting & coring) and what GPR actually does.
+const BRAND_TAGLINE = 'Cutting through what others can’t see.';
+
 const DEFAULT_REPORT = {
   // Tier
   tier: 'standard',  // quick | standard | full
@@ -103,6 +107,7 @@ const DEFAULT_REPORT = {
   enableCadPage: false,       // landscape "drawing" page with title block
   enableStandardNotes: false, // numbered general-notes block alongside the diagram
   enableNamedZones: false,    // group scan locations under named zones (e.g. "Back of House")
+  brandFlourishes: false,     // subtle company-personality ribbon + footer sig on the PDF
 
   diagramZones: [],           // graphical hatched/filled polygons on the diagram
   diagramNotes: '',           // project-specific notes column on the CAD page
@@ -3103,6 +3108,64 @@ export default function GSSIReportApp() {
     setConfirmReset(false);
   };
 
+  // ---------- Email-this-report dialog ----------
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const buildEmailDraft = () => {
+    const subject =
+      `Scan Report — ${report.projectNo || 'Draft'}` +
+      (report.client ? ` · ${report.client}` : '') +
+      (report.scanDate ? ` · ${report.scanDate}` : '');
+    const findings = (report.targets || []).length;
+    const cores = (report.cores || []).length;
+    const summary = (findings || cores)
+      ? `Summary: ${findings} target${findings === 1 ? '' : 's'} identified, ${cores} core verdict${cores === 1 ? '' : 's'} issued.`
+      : 'Summary: see attached report.';
+    const body = [
+      'Hi,',
+      '',
+      'Please find the GSSI Ground Penetrating Radar scan report attached.',
+      '',
+      `Project: ${report.projectNo || '—'}`,
+      `Client: ${report.client || '—'}`,
+      `Site: ${report.siteAddress || '—'}`,
+      `Scan area: ${report.scanArea || '—'}`,
+      `Scan date: ${report.scanDate || '—'}`,
+      report.preparedBy ? `Prepared by: ${report.preparedBy}` : null,
+      '',
+      summary,
+      '',
+      '(Attach the saved PDF before sending — the report does not auto-attach from the browser.)',
+      '',
+      '— Aggarwal Kamikazes Cutting & Coring Ltd',
+    ].filter(l => l !== null).join('\n');
+    return { subject, body };
+  };
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  useEffect(() => {
+    if (emailDialogOpen) {
+      const d = buildEmailDraft();
+      setEmailSubject(d.subject);
+      setEmailBody(d.body);
+    }
+  }, [emailDialogOpen]); // eslint-disable-line
+  const openMailto = () => {
+    const url =
+      `mailto:${encodeURIComponent(emailTo)}` +
+      `?subject=${encodeURIComponent(emailSubject)}` +
+      `&body=${encodeURIComponent(emailBody)}`;
+    window.location.href = url;
+    setEmailDialogOpen(false);
+  };
+
+  // Reflect project number in the browser tab so multiple drafts stay sortable
+  useEffect(() => {
+    document.title = report.projectNo
+      ? `Scan Report — ${report.projectNo}`
+      : 'GSSI Scan Report';
+  }, [report.projectNo]);
+
   // ---------- Print preview + per-section include/exclude ----------
   const [previewMode, setPreviewMode] = useState(false);
   // Each section id used by the Print setup card. Order = order on print.
@@ -3237,6 +3300,39 @@ export default function GSSIReportApp() {
       )}
       <style>{`
         .print-only { display: none; }
+        /* === Brand flourishes (opt-in via report.brandFlourishes) === */
+        .brand-ribbon {
+          display: flex; align-items: center; gap: 12px;
+          padding: 10px 14px; margin-bottom: 12px;
+          background: linear-gradient(90deg, rgba(212,69,69,0.08), rgba(212,69,69,0));
+          border-left: 3px solid var(--ak-accent);
+          border-radius: 6px;
+        }
+        .brand-ribbon-mark {
+          height: 44px; width: auto; flex-shrink: 0;
+          filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
+        }
+        .brand-ribbon-text { line-height: 1.2; }
+        .brand-ribbon-title {
+          font-size: 11pt; font-weight: 800;
+          color: var(--ak-text); letter-spacing: 0.3px;
+        }
+        .brand-ribbon-tagline {
+          font-size: 9.5pt; font-style: italic;
+          color: var(--ak-accent); margin-top: 2px;
+        }
+        .brand-signoff {
+          margin-top: 18px; padding-top: 10px;
+          border-top: 1px solid var(--ak-border);
+          font-size: 9pt; font-style: italic; text-align: center;
+          color: var(--ak-text-faint);
+        }
+        @media print {
+          .brand-ribbon { background: #fafafa; }
+          .brand-ribbon-title { color: #111; }
+          .brand-ribbon-tagline { color: #a32626; }
+          .brand-signoff { color: #555; border-top-color: #ccc; }
+        }
         .scan-location-card.dragging,
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
@@ -3609,6 +3705,7 @@ export default function GSSIReportApp() {
           { id: 'enableNamedZones',    label: 'Named zones',                hint: 'Group scan locations under zones like "Back of House".' },
           { id: 'enableZones',         label: 'Hatched zones on diagram',   hint: 'Red / yellow / amber fill areas marking unsuitable, caution, or boundary regions on the site diagram.' },
           { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
+          { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
             display: 'flex', alignItems: 'flex-start', gap: 9,
@@ -3724,6 +3821,17 @@ export default function GSSIReportApp() {
           </div>
         )}
       </Card>
+
+      {/* === BRAND FLOURISH RIBBON (print/preview only, opt-in) === */}
+      {report.brandFlourishes && (
+        <div className="print-only brand-ribbon">
+          <img src="/kamikaze-logo.png" alt="" className="brand-ribbon-mark" />
+          <div className="brand-ribbon-text">
+            <div className="brand-ribbon-title">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
+            <div className="brand-ribbon-tagline">{BRAND_TAGLINE}</div>
+          </div>
+        </div>
+      )}
 
       {/* === EXECUTIVE SUMMARY (always at top) === */}
       <div className={ph('summary')}>
@@ -4547,13 +4655,21 @@ export default function GSSIReportApp() {
         </Field>
       </Card>
 
+      {/* === BRAND FLOURISH FOOTER SIGNATURE (print/preview only, opt-in) === */}
+      {report.brandFlourishes && (
+        <div className="print-only brand-signoff">
+          Prepared with care by the AKCC crew · {BRAND_TAGLINE}
+        </div>
+      )}
+
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
         <Btn variant="primary" onClick={printPDF}>📄 PDF</Btn>
+        <Btn onClick={() => setEmailDialogOpen(true)}>📧 Email</Btn>
         <Btn onClick={exportJSON}>💾 Save draft</Btn>
       </div>
 
@@ -4563,6 +4679,57 @@ export default function GSSIReportApp() {
       </div>
 
       <Assistant report={report} update={update} />
+
+      {emailDialogOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setEmailDialogOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 18,
+            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              📧 Email this report
+            </div>
+            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+              Opens your default mail app with a draft pre-filled from the project info.
+              <strong style={{ color: c.amberStrong }}> Browsers can't auto-attach the PDF</strong> —
+              tap 📄 PDF first, save it, then attach the file after the email opens.
+            </div>
+
+            <Field label="To (optional)">
+              <Input value={emailTo} onChange={e => setEmailTo(e.target.value)}
+                placeholder="reviewer@example.com" />
+            </Field>
+            <Field label="Subject">
+              <Input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
+            </Field>
+            <Field label="Body">
+              <Textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                style={{ minHeight: 200, fontFamily: 'inherit', fontSize: 12 }} />
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>
+              <Btn variant="ghost" onClick={() => { printPDF(); }}
+                title="Triggers Save as PDF — keep this dialog open while you save">
+                📄 Save PDF first
+              </Btn>
+              <Btn variant="primary" onClick={openMailto}>
+                ✉ Open Email
+              </Btn>
+            </div>
+            <Btn variant="ghost" onClick={() => setEmailDialogOpen(false)}
+              style={{ width: '100%', marginTop: 6 }}>
+              Cancel
+            </Btn>
+          </div>
+        </div>
+      )}
 
       {confirmReset && (
         <div className="no-print" style={{
