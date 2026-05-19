@@ -175,50 +175,50 @@ function ThemeStyles() {
   return (
     <style>{`
       :root, :root[data-theme="dark"] {
-        --ak-bg:            #000000;
-        --ak-bg-raised:     #0a0a0a;
-        --ak-card:          #111111;
-        --ak-card-alt:      #161616;
-        --ak-border:        #1f1f1f;
-        --ak-border-strong: #2a2a2a;
-        --ak-text:          #ffffff;
-        --ak-text-dim:      #b0b0b0;
-        --ak-text-faint:    #7a7a7a;
-        --ak-accent:        #e02020;
-        --ak-accent-dim:    #7a0e10;
-        --ak-on-accent-dim: #ffffff;
-        --ak-green:         #3fb950;
-        --ak-green-bg:      #0d2818;
-        --ak-green-strong:  #56d364;
-        --ak-amber:         #e0a020;
-        --ak-amber-bg:      #2a1f08;
-        --ak-amber-strong:  #f4ba3f;
-        --ak-red:           #e02020;
-        --ak-red-bg:        #2a1010;
-        --ak-red-strong:    #ff5a5a;
+        --ak-bg:            #14171c;
+        --ak-bg-raised:     #1a1e24;
+        --ak-card:          #1e232a;
+        --ak-card-alt:      #242a32;
+        --ak-border:        #2c333c;
+        --ak-border-strong: #3a4250;
+        --ak-text:          #e8e4dc;
+        --ak-text-dim:      #a8a59e;
+        --ak-text-faint:    #6e6c66;
+        --ak-accent:        #d44545;
+        --ak-accent-dim:    #5a1c1f;
+        --ak-on-accent-dim: #f4ece0;
+        --ak-green:         #4fb86a;
+        --ak-green-bg:      #16291e;
+        --ak-green-strong:  #6cd082;
+        --ak-amber:         #d9a35a;
+        --ak-amber-bg:      #2a2114;
+        --ak-amber-strong:  #ecbf6e;
+        --ak-red:           #d44545;
+        --ak-red-bg:        #2c1818;
+        --ak-red-strong:    #e96868;
       }
       :root[data-theme="light"] {
-        --ak-bg:            #ffffff;
-        --ak-bg-raised:     #f4f4f4;
-        --ak-card:          #ffffff;
-        --ak-card-alt:      #f0f0f0;
-        --ak-border:        #c8c8c8;
-        --ak-border-strong: #909090;
-        --ak-text:          #000000;
-        --ak-text-dim:      #2a2a2a;
-        --ak-text-faint:    #555555;
-        --ak-accent:        #b81010;
-        --ak-accent-dim:    #fbd6d6;
-        --ak-on-accent-dim: #6a0808;
-        --ak-green:         #117a26;
-        --ak-green-bg:      #d8f1de;
-        --ak-green-strong:  #0b5e1c;
-        --ak-amber:         #8a5800;
-        --ak-amber-bg:      #fff0d0;
-        --ak-amber-strong:  #6a4400;
-        --ak-red:           #b81010;
-        --ak-red-bg:        #f5dada;
-        --ak-red-strong:    #8a0d0d;
+        --ak-bg:            #f6f3ec;
+        --ak-bg-raised:     #ede9df;
+        --ak-card:          #fbf8f1;
+        --ak-card-alt:      #e8e4d8;
+        --ak-border:        #cfcabc;
+        --ak-border-strong: #9c9685;
+        --ak-text:          #1f1d18;
+        --ak-text-dim:      #46423a;
+        --ak-text-faint:    #6e6a5e;
+        --ak-accent:        #a32626;
+        --ak-accent-dim:    #f0d4d2;
+        --ak-on-accent-dim: #5e1416;
+        --ak-green:         #2b6e3a;
+        --ak-green-bg:      #d8ecdc;
+        --ak-green-strong:  #1d5028;
+        --ak-amber:         #7a5510;
+        --ak-amber-bg:      #f4e4c4;
+        --ak-amber-strong:  #5e4308;
+        --ak-red:           #a32626;
+        --ak-red-bg:        #efd8d6;
+        --ak-red-strong:    #7c1818;
       }
       html, body, #root { background: var(--ak-bg); color: var(--ak-text); }
     `}</style>
@@ -1119,6 +1119,19 @@ function drawAnnotation(ctx, a, W, H) {
     const w = (a.bottomRight.x - a.topLeft.x) * W;
     const h = (a.bottomRight.y - a.topLeft.y) * H;
     ctx.strokeRect(x, y, w, h);
+  } else if (a.type === 'freehand' && Array.isArray(a.points) && a.points.length >= 2) {
+    const pts = a.points;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x * W, pts[0].y * H);
+    // Smooth midpoint-quadratic-bezier through the polyline
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xc = ((pts[i].x + pts[i + 1].x) / 2) * W;
+      const yc = ((pts[i].y + pts[i + 1].y) / 2) * H;
+      ctx.quadraticCurveTo(pts[i].x * W, pts[i].y * H, xc, yc);
+    }
+    const last = pts[pts.length - 1];
+    ctx.lineTo(last.x * W, last.y * H);
+    ctx.stroke();
   } else if (a.type === 'text' && a.position) {
     const fontSize = Math.max(10, (a.fontSize || 14) * (minDim / 400) * (strokeScale / 5));
     ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
@@ -1203,6 +1216,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [strokeScale, setStrokeScale] = useState(5); // 1..16, default = legacy
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
+  const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
 
   const getFractionalCoords = (e) => {
     const canvas = canvasRef.current;
@@ -1236,9 +1250,33 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     ctx.clearRect(0, 0, W, H);
     annotations.forEach(a => drawAnnotation(ctx, a, W, H));
 
-    // Preview of in-progress shape
+    // Preview of in-progress freehand path (solid, full opacity — feels like real ink)
+    if (drawingPath && drawingPath.length > 0) {
+      const previewColor = ANNOTATION_COLOR_HEX[color] || color;
+      ctx.save();
+      const minDim = Math.min(W, H);
+      ctx.strokeStyle = previewColor;
+      ctx.lineWidth = Math.max(1.5, minDim * 0.0012 * strokeScale);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(drawingPath[0].x * W, drawingPath[0].y * H);
+      for (let i = 1; i < drawingPath.length - 1; i++) {
+        const xc = ((drawingPath[i].x + drawingPath[i + 1].x) / 2) * W;
+        const yc = ((drawingPath[i].y + drawingPath[i + 1].y) / 2) * H;
+        ctx.quadraticCurveTo(drawingPath[i].x * W, drawingPath[i].y * H, xc, yc);
+      }
+      if (drawingPath.length > 1) {
+        const last = drawingPath[drawingPath.length - 1];
+        ctx.lineTo(last.x * W, last.y * H);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Preview of in-progress shape (arrow/circle/rect — dashed during drag)
     if (anchor && hover) {
-      const previewColor = ANNOTATION_COLOR_HEX[color];
+      const previewColor = ANNOTATION_COLOR_HEX[color] || color;
       ctx.save();
       ctx.globalAlpha = 0.6;
       ctx.setLineDash([5, 4]);
@@ -1269,7 +1307,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     }
   };
 
-  useEffect(redraw, [annotations, anchor, hover, tool, color, strokeScale]);
+  useEffect(redraw, [annotations, anchor, hover, tool, color, strokeScale, drawingPath]);
 
   useEffect(() => {
     const handler = () => redraw();
@@ -1277,7 +1315,26 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     return () => window.removeEventListener('resize', handler);
   }, [annotations, anchor, hover]);
 
+  const handleStart = (e) => {
+    if (tool !== 'freehand') return;
+    e.preventDefault();
+    const pt = getFractionalCoords(e);
+    if (!pt) return;
+    setDrawingPath([pt]);
+  };
+
+  const handleEnd = (e) => {
+    if (tool !== 'freehand' || !drawingPath) return;
+    e.preventDefault();
+    if (drawingPath.length >= 2) {
+      const id = `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      pushAnnotation({ id, type: 'freehand', color, points: drawingPath, strokeScale });
+    }
+    setDrawingPath(null);
+  };
+
   const handleClick = (e) => {
+    if (tool === 'freehand') return;
     e.preventDefault();
     const pt = getFractionalCoords(e);
     if (!pt) return;
@@ -1321,6 +1378,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const pushAnnotation = (a) => setAnnotations(prev => [...prev, a]);
 
   const handleMove = (e) => {
+    if (tool === 'freehand') {
+      if (!drawingPath) return;
+      e.preventDefault();
+      const pt = getFractionalCoords(e);
+      if (pt) setDrawingPath(prev => (prev ? [...prev, pt] : [pt]));
+      return;
+    }
     if (!anchor || tool === 'text') return;
     e.preventDefault();
     const pt = getFractionalCoords(e);
@@ -1337,6 +1401,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   useEffect(() => {
     setAnchor(null);
     setHover(null);
+    setDrawingPath(null);
   }, [tool]);
 
   return (
@@ -1377,12 +1442,17 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           ref={canvasRef}
           style={{
             position: 'absolute',
-            touchAction: 'none', cursor: tool === 'text' ? 'text' : 'crosshair',
+            touchAction: 'none',
+            cursor: tool === 'text' ? 'text' : (tool === 'freehand' ? 'crosshair' : 'crosshair'),
           }}
           onClick={handleClick}
+          onMouseDown={handleStart}
           onMouseMove={handleMove}
-          onTouchStart={handleClick}
+          onMouseUp={handleEnd}
+          onMouseLeave={handleEnd}
+          onTouchStart={tool === 'freehand' ? handleStart : handleClick}
           onTouchMove={handleMove}
+          onTouchEnd={handleEnd}
         />
       </div>
 
@@ -1391,12 +1461,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         borderTop: `1px solid ${c.borderStrong}`,
         display: 'flex', flexDirection: 'column', gap: 8,
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
           {[
-            { id: 'arrow',  label: '→ Arrow' },
-            { id: 'circle', label: '○ Circle' },
-            { id: 'rect',   label: '▭ Rect' },
-            { id: 'text',   label: 'T Text' },
+            { id: 'freehand', label: '✎ Draw' },
+            { id: 'arrow',    label: '→ Arrow' },
+            { id: 'circle',   label: '○ Circle' },
+            { id: 'rect',     label: '▭ Rect' },
+            { id: 'text',     label: 'T Text' },
           ].map(opt => (
             <button key={opt.id}
               onClick={() => setTool(opt.id)}
@@ -1420,8 +1491,8 @@ function AnnotationEditor({ photo, onSave, onClose }) {
             onChange={e => setStrokeScale(Number(e.target.value))}
             style={{ flex: 1, accentColor: c.accent }} />
         </label>
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 5 }}>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
             {ANNOTATION_COLORS.map(co => (
               <button key={co.id}
                 onClick={() => setColor(co.id)}
@@ -1432,6 +1503,22 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                   border: color === co.id ? `3px solid ${c.text}` : `1px solid ${c.border}`,
                 }} />
             ))}
+            <label title="Custom color"
+              style={{
+                position: 'relative', display: 'inline-flex',
+                width: 28, height: 28, borderRadius: '50%',
+                background: typeof color === 'string' && color.startsWith('#') ? color : 'conic-gradient(red, orange, yellow, green, blue, purple, red)',
+                cursor: 'pointer', overflow: 'hidden',
+                border: typeof color === 'string' && color.startsWith('#') ? `3px solid ${c.text}` : `1px solid ${c.border}`,
+              }}>
+              <input type="color"
+                value={typeof color === 'string' && color.startsWith('#') ? color : '#e84a4a'}
+                onChange={e => setColor(e.target.value)}
+                style={{
+                  position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer',
+                  width: '100%', height: '100%',
+                }} />
+            </label>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="ghost" onClick={undo}
@@ -1441,11 +1528,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           </div>
         </div>
         <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center' }}>
-          {tool === 'text'
-            ? 'Tap to place a text label.'
-            : anchor
-              ? `Tap to finish the ${tool}.`
-              : `Tap to start the ${tool}.`}
+          {tool === 'freehand'
+            ? 'Press and drag to draw a smooth line. Release to finish.'
+            : tool === 'text'
+              ? 'Tap to place a text label.'
+              : anchor
+                ? `Tap to finish the ${tool}.`
+                : `Tap to start the ${tool}.`}
         </div>
       </div>
     </div>
@@ -3007,6 +3096,13 @@ export default function GSSIReportApp() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
+  // ---------- Reset/refresh form (with save-first guard) ----------
+  const [confirmReset, setConfirmReset] = useState(false);
+  const doReset = () => {
+    setReport(DEFAULT_REPORT);
+    setConfirmReset(false);
+  };
+
   // ---------- Print preview + per-section include/exclude ----------
   const [previewMode, setPreviewMode] = useState(false);
   // Each section id used by the Print setup card. Order = order on print.
@@ -3419,6 +3515,17 @@ export default function GSSIReportApp() {
             }}>
             🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
+          <button onClick={() => setConfirmReset(true)}
+            title="Reset the form (with save-first prompt)"
+            aria-label="Reset form"
+            style={{
+              background: c.cardAlt, color: c.text,
+              border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            ↻
+          </button>
           <label style={{
             background: c.accent, border: `1px solid ${c.accent}`,
             borderRadius: 6, padding: '7px 12px', textAlign: 'center', fontSize: 11,
@@ -3430,36 +3537,20 @@ export default function GSSIReportApp() {
           </label>
         </div>
 
-        {/* Logo centered as its own hero element */}
+        {/* Logo centered as its own hero element (now carries the brand on its own) */}
         <img
           src="/kamikaze-logo.png"
           alt="Aggarwal Kamikazes Cutting & Coring Ltd"
           className="ak-logo"
           style={{
             display: 'block',
-            height: 112,
+            height: 140,
             width: 'auto',
             maxWidth: '100%',
-            margin: '0 auto 6px',
+            margin: '0 auto',
             filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))',
           }}
         />
-
-        {/* Company name centered, on its own */}
-        <div className="ak-title" style={{
-          fontSize: 26, color: c.text, fontWeight: 900,
-          letterSpacing: 0.8, textTransform: 'uppercase', lineHeight: 1.05,
-          fontFamily: 'Impact, "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif',
-        }}>
-          Aggarwal Kamikazes
-        </div>
-        <div style={{
-          fontSize: 13, color: c.accent, fontWeight: 800,
-          letterSpacing: 3, textTransform: 'uppercase', marginTop: 2,
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        }}>
-          Cutting &amp; Coring&nbsp;Ltd
-        </div>
       </div>
       <style>{`
         /* Responsive shell — phone first, breathes on wider screens */
@@ -3468,8 +3559,7 @@ export default function GSSIReportApp() {
         @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
-          .ak-header .ak-logo { height: 86px !important; }
-          .ak-header .ak-title { font-size: 21px !important; letter-spacing: 0.4px !important; }
+          .ak-header .ak-logo { height: 110px !important; }
         }
         @media print {
           .ak-shell { max-width: none !important; padding: 0 !important; }
@@ -4473,6 +4563,43 @@ export default function GSSIReportApp() {
       </div>
 
       <Assistant report={report} update={update} />
+
+      {confirmReset && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setConfirmReset(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 18,
+            width: 'min(440px, 100%)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 6 }}>
+              ↻ Reset the form?
+            </div>
+            <div style={{ fontSize: 12.5, color: c.textDim, lineHeight: 1.5, marginBottom: 14 }}>
+              This clears every field — project info, targets, cores, photos, annotations, custom reminders, everything.
+              Once cleared, it can't be undone. Save a draft first so you have a copy.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <Btn variant="primary" onClick={() => { exportJSON(); setTimeout(doReset, 250); }}>
+                💾 Save first, then reset
+              </Btn>
+              <Btn variant="ghost" onClick={doReset}
+                style={{ borderColor: c.red, color: c.red }}>
+                ↻ Already saved — reset
+              </Btn>
+            </div>
+            <Btn variant="ghost" onClick={() => setConfirmReset(false)}
+              style={{ width: '100%', marginTop: 6 }}>
+              Cancel
+            </Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
