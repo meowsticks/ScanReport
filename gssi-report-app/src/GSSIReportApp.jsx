@@ -12,6 +12,9 @@ const DEFAULT_REPORT = {
   // Tier
   tier: 'standard',  // quick | standard | full
 
+  // Assistant UI
+  assistantOn: true,
+
   // Cover
   projectNo: '',
   scanDate: new Date().toISOString().slice(0, 10),
@@ -2732,6 +2735,162 @@ function ScanLocations({ report, update }) {
 // Main App
 // ============================================================
 
+// ============================================================
+// In-app Assistant — rule-based, offline, no network
+// Surfaces the next-most-useful nudge based on report state.
+// ============================================================
+
+function getAssistantTips(report) {
+  const tips = [];
+  const need = (cond, level, text) => { if (cond) tips.push({ level, text }); };
+
+  // Critical: PT slab needs explicit exclusion language
+  if (report.slabType === 'PT') {
+    const hasPtNote = (report.cores || []).some(co =>
+      ((co.note || '') + ' ' + (co.clearance || '')).toLowerCase().includes('pt') ||
+      ((co.note || '') + ' ' + (co.clearance || '')).toLowerCase().includes('tendon')
+    );
+    need(!hasPtNote && (report.cores || []).length > 0, 'high',
+      'PT slab: at least one core should explicitly call out the tendon exclusion zone (e.g. "no cores within 300 mm of tendon band").');
+    const hasPtTarget = (report.targets || []).some(t => t.type && t.type.includes('PT'));
+    need(!hasPtTarget && (report.targets || []).length > 0, 'med',
+      'PT slab but no PT cable target logged. If tendons are present, log them; if not visible on radargram, note it in uncertainty zones.');
+  }
+
+  // Cure status vs. depth confidence
+  if (report.slabAge && report.slabAge.includes('green')) {
+    need(true, 'med',
+      'Green concrete (<7 days): GPR signal is attenuated. Add a limitation noting reduced depth confidence and consider a follow-up scan after cure.');
+  }
+
+  // Dielectric sanity check
+  const eps = parseFloat(report.dielectric);
+  need(!isNaN(eps) && (eps < 4 || eps > 12), 'med',
+    `Dielectric εr=${report.dielectric} is outside the typical concrete range (4–12). Verify calibration on a known target before relying on depths.`);
+
+  // Coverage polygon: pins outside the scanned area
+  const cov = report.coveragePolygon?.points || [];
+  if (cov.length >= 3) {
+    const pip = (pt) => {
+      let inside = false;
+      for (let i = 0, j = cov.length - 1; i < cov.length; j = i++) {
+        const xi = cov[i].x, yi = cov[i].y, xj = cov[j].x, yj = cov[j].y;
+        const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi + 1e-9) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    };
+    const outside = (report.diagramPins || []).filter(p => !pip(p));
+    need(outside.length > 0, 'high',
+      `${outside.length} pin(s) sit outside the scanned coverage area. Either extend the scan or relocate the cores — drilling outside the scanned zone is high-risk.`);
+  } else if ((report.diagramPins || []).length > 0 && (report.coveragePolygon?.points || []).length < 3) {
+    need(true, 'low',
+      'Consider outlining the scanned coverage area on the diagram so the reviewer can tell what was vs. wasn\'t surveyed.');
+  }
+
+  // Rebar mat summary populated?
+  const rs = report.rebarSummary;
+  if (rs && (report.targets || []).some(t => (t.type || '').toLowerCase().includes('rebar'))) {
+    const blank = !rs.topBarSize && !rs.bottomBarSize && !rs.topSpacing && !rs.bottomSpacing;
+    need(blank, 'low',
+      'Rebar targets logged but the mat summary is empty. Add bar size / spacing estimates so the EoR can back-calc capacity.');
+  }
+
+  // Pin / core consistency
+  const coresArr = report.cores || [];
+  const pinsArr = report.diagramPins || [];
+  need(coresArr.length > 0 && pinsArr.length === 0, 'med',
+    'You have core verdicts but no pins on the diagram. Pin each core location so the crew can find them.');
+  need(coresArr.length > pinsArr.length && pinsArr.length > 0, 'low',
+    `${coresArr.length - pinsArr.length} core(s) without a matching pin on the diagram.`);
+
+  // Pin datum references
+  const pinsMissingDatum = pinsArr.filter(p => !p.datumA && !p.datumB);
+  need(pinsMissingDatum.length > 0, 'med',
+    `${pinsMissingDatum.length} pin(s) missing datum offset. Chalk washes off — add at least one measured offset per pin.`);
+
+  // Drill envelope on safe cores
+  const safeUnscoped = coresArr.filter(co =>
+    co.verdict === 'safe' && (!co.drillMaxDepth || !co.drillDia)
+  );
+  need(safeUnscoped.length > 0, 'med',
+    `${safeUnscoped.length} safe core(s) without a drill envelope. State max bit Ø and max depth — the crew shouldn't have to guess.`);
+
+  // Cover essentials
+  need(!report.projectNo, 'low', 'Project number is blank.');
+  need(!report.client, 'low', 'Client field is blank.');
+  need(!report.siteAddress, 'low', 'Site address is blank.');
+  need(!report.preparedBy, 'med', 'Sign-off: prepared-by name is empty.');
+
+  // Revision sanity
+  need(report.rev && report.rev !== '0' && !report.revNotes, 'low',
+    'Revision is past 0 — add a "Changes since last rev" note for the reviewer.');
+
+  // Found nothing? Praise.
+  if (tips.length === 0) {
+    return [{ level: 'ok', text: 'Report looks complete. Print to PDF when ready.' }];
+  }
+  // Sort high → low
+  const order = { high: 0, med: 1, low: 2, ok: 3 };
+  tips.sort((a, b) => order[a.level] - order[b.level]);
+  return tips;
+}
+
+function Assistant({ report, update }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const tips = useMemo(() => getAssistantTips(report), [report]);
+  if (!report.assistantOn) return null;
+
+  const tone = {
+    high: { bd: c.red, bg: c.redBg, fg: c.redStrong, icon: '⚠' },
+    med:  { bd: c.amber, bg: c.amberBg, fg: c.amberStrong, icon: '•' },
+    low:  { bd: c.border, bg: c.cardAlt, fg: c.textDim, icon: '·' },
+    ok:   { bd: c.green, bg: c.greenBg, fg: c.greenStrong, icon: '✓' },
+  };
+
+  return (
+    <div className="no-print" style={{
+      position: 'fixed', right: 14, bottom: 80, zIndex: 50,
+      width: 'min(360px, calc(100vw - 28px))',
+      background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+      borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+      overflow: 'hidden',
+    }}>
+      <button onClick={() => setCollapsed(x => !x)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: c.accentDim, color: '#fff', border: 'none',
+          padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+        }}>
+        <span>🤖 Assistant {tips[0]?.level === 'ok' ? '· all good' : `· ${tips.length} tip${tips.length === 1 ? '' : 's'}`}</span>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 16 }}>{collapsed ? '▴' : '▾'}</span>
+          <span onClick={(e) => { e.stopPropagation(); update({ assistantOn: false }); }}
+            style={{ fontSize: 14, opacity: 0.8 }}>✕</span>
+        </span>
+      </button>
+      {!collapsed && (
+        <div style={{ maxHeight: 280, overflowY: 'auto', padding: 8 }}>
+          {tips.map((t, i) => {
+            const s = tone[t.level];
+            return (
+              <div key={i} style={{
+                background: s.bg, borderLeft: `3px solid ${s.bd}`,
+                padding: '7px 9px', marginBottom: 6, borderRadius: '0 6px 6px 0',
+                fontSize: 12, color: c.text, lineHeight: 1.4,
+              }}>
+                <span style={{ color: s.fg, fontWeight: 700, marginRight: 6 }}>{s.icon}</span>
+                {t.text}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GSSIReportApp() {
   const [report, setReport] = useState(() => {
     try {
@@ -3155,6 +3314,18 @@ export default function GSSIReportApp() {
               whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             {theme === 'dark' ? '☀' : '☾'}
+          </button>
+          <button onClick={() => update({ assistantOn: !report.assistantOn })}
+            title={report.assistantOn ? 'Hide assistant' : 'Show assistant'}
+            aria-label="Toggle assistant"
+            style={{
+              background: report.assistantOn ? c.accentDim : c.cardAlt,
+              color: report.assistantOn ? '#fff' : c.textDim,
+              border: `1px solid ${report.assistantOn ? c.accent : c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
           <label style={{
             background: c.accent, border: `1px solid ${c.accent}`,
@@ -4208,6 +4379,8 @@ export default function GSSIReportApp() {
         Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/>
         GSSI StructureScan Mini XT · British Columbia engineering edition
       </div>
+
+      <Assistant report={report} update={update} />
     </div>
   );
 }
