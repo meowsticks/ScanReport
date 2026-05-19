@@ -14,6 +14,7 @@ const DEFAULT_REPORT = {
 
   // Assistant UI
   assistantOn: true,
+  customReminders: [],  // [{ id, text, level: 'high'|'med'|'low' }]
 
   // Cover
   projectNo: '',
@@ -2827,18 +2828,27 @@ function getAssistantTips(report) {
   need(report.rev && report.rev !== '0' && !report.revNotes, 'low',
     'Revision is past 0 — add a "Changes since last rev" note for the reviewer.');
 
-  // Found nothing? Praise.
-  if (tips.length === 0) {
+  // Custom user-added reminders — always shown, tagged so UI can offer delete
+  const customs = (report.customReminders || []).map(r => ({
+    level: r.level || 'med', text: r.text, customId: r.id,
+  }));
+
+  // Found nothing? Praise (only when there are no auto-tips AND no customs)
+  if (tips.length === 0 && customs.length === 0) {
     return [{ level: 'ok', text: 'Report looks complete. Print to PDF when ready.' }];
   }
-  // Sort high → low
+  // Sort high → low (customs share the same priority lanes)
   const order = { high: 0, med: 1, low: 2, ok: 3 };
-  tips.sort((a, b) => order[a.level] - order[b.level]);
-  return tips;
+  const all = [...tips, ...customs];
+  all.sort((a, b) => order[a.level] - order[b.level]);
+  return all;
 }
 
 function Assistant({ report, update }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [draftText, setDraftText] = useState('');
+  const [draftLevel, setDraftLevel] = useState('med');
   const tips = useMemo(() => getAssistantTips(report), [report]);
   if (!report.assistantOn) return null;
 
@@ -2847,6 +2857,23 @@ function Assistant({ report, update }) {
     med:  { bd: c.amber, bg: c.amberBg, fg: c.amberStrong, icon: '•' },
     low:  { bd: c.border, bg: c.cardAlt, fg: c.textDim, icon: '·' },
     ok:   { bd: c.green, bg: c.greenBg, fg: c.greenStrong, icon: '✓' },
+  };
+
+  const addCustom = () => {
+    const t = draftText.trim();
+    if (!t) return;
+    const id = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    update({
+      customReminders: [...(report.customReminders || []), { id, text: t, level: draftLevel }],
+    });
+    setDraftText('');
+    setDraftLevel('med');
+    setShowAdd(false);
+  };
+  const removeCustom = (id) => {
+    update({
+      customReminders: (report.customReminders || []).filter(r => r.id !== id),
+    });
   };
 
   return (
@@ -2871,20 +2898,85 @@ function Assistant({ report, update }) {
         </span>
       </button>
       {!collapsed && (
-        <div style={{ maxHeight: 280, overflowY: 'auto', padding: 8 }}>
+        <div style={{ maxHeight: 320, overflowY: 'auto', padding: 8 }}>
           {tips.map((t, i) => {
             const s = tone[t.level];
             return (
-              <div key={i} style={{
+              <div key={t.customId || i} style={{
                 background: s.bg, borderLeft: `3px solid ${s.bd}`,
                 padding: '7px 9px', marginBottom: 6, borderRadius: '0 6px 6px 0',
                 fontSize: 12, color: c.text, lineHeight: 1.4,
+                display: 'flex', alignItems: 'flex-start', gap: 6,
               }}>
-                <span style={{ color: s.fg, fontWeight: 700, marginRight: 6 }}>{s.icon}</span>
-                {t.text}
+                <span style={{ color: s.fg, fontWeight: 700, flexShrink: 0 }}>{s.icon}</span>
+                <span style={{ flex: 1 }}>{t.text}</span>
+                {t.customId && (
+                  <button onClick={() => removeCustom(t.customId)}
+                    title="Delete this custom reminder"
+                    style={{
+                      background: 'transparent', border: 'none', color: c.textFaint,
+                      cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                      flexShrink: 0,
+                    }}>✕</button>
+                )}
               </div>
             );
           })}
+
+          {showAdd ? (
+            <div style={{
+              marginTop: 4, padding: 8, background: c.cardAlt,
+              border: `1px solid ${c.border}`, borderRadius: 6,
+            }}>
+              <textarea
+                value={draftText}
+                onChange={e => setDraftText(e.target.value)}
+                placeholder="e.g. Confirm PT layout with EoR before any cores in Zone B"
+                style={{
+                  width: '100%', minHeight: 52, boxSizing: 'border-box',
+                  background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+                  borderRadius: 4, padding: 6, fontSize: 12, fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                <select
+                  value={draftLevel}
+                  onChange={e => setDraftLevel(e.target.value)}
+                  style={{
+                    background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+                    borderRadius: 4, padding: '4px 6px', fontSize: 12,
+                  }}>
+                  <option value="high">High ⚠</option>
+                  <option value="med">Med •</option>
+                  <option value="low">Low ·</option>
+                </select>
+                <button onClick={addCustom}
+                  disabled={!draftText.trim()}
+                  style={{
+                    background: c.accent, color: '#fff', border: 'none',
+                    borderRadius: 4, padding: '5px 10px', fontSize: 12, fontWeight: 700,
+                    cursor: draftText.trim() ? 'pointer' : 'not-allowed',
+                    opacity: draftText.trim() ? 1 : 0.5,
+                  }}>Add</button>
+                <button onClick={() => { setShowAdd(false); setDraftText(''); }}
+                  style={{
+                    background: 'transparent', color: c.textDim, border: `1px solid ${c.border}`,
+                    borderRadius: 4, padding: '5px 10px', fontSize: 12, cursor: 'pointer',
+                  }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowAdd(true)}
+              style={{
+                width: '100%', marginTop: 2,
+                background: 'transparent', color: c.textDim,
+                border: `1px dashed ${c.border}`, borderRadius: 6,
+                padding: '6px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+              }}>
+              + Add custom reminder
+            </button>
+          )}
         </div>
       )}
     </div>
