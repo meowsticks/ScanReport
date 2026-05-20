@@ -60,7 +60,7 @@ const slugify = (s, cap = 40) => (s || '')
 
 // Subtle company tagline used by the optional Brand Flourishes flag.
 // Plays on the company name (cutting & coring) and what GPR actually does.
-const BRAND_TAGLINE = 'Cutting through what others can’t see.';
+const BRAND_TAGLINE = 'Know before you cut.';
 
 const DEFAULT_REPORT = {
   // Tier
@@ -3804,7 +3804,7 @@ export default function GSSIReportApp() {
   return (
     <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontFamily: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
     }}>
       <ThemeStyles />
@@ -3868,6 +3868,18 @@ export default function GSSIReportApp() {
         .scan-photo-row.drop-target {
           outline: 2px dashed #e02020;
           outline-offset: -2px;
+        }
+        /* Typography polish — crisp rendering and aligned figures for a more
+           professional printed report (font itself is the bundled Inter). */
+        .ak-shell {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+          font-feature-settings: "kern" 1, "liga" 1, "tnum" 1;
+          font-variant-numeric: tabular-nums;
+        }
+        @media print {
+          .ak-shell { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         /* Report body is a flex column so section print order can be set via
            CSS 'order'. Brand letterhead pins to the very top, footer to bottom. */
@@ -3934,7 +3946,7 @@ export default function GSSIReportApp() {
             position: relative;
             padding: 6mm 8mm;
             border: none;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           }
           .cad-letterhead {
             display: grid;
