@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import QRGen from './qrcode.js';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -108,6 +109,11 @@ const DEFAULT_REPORT = {
   enableStandardNotes: false, // numbered general-notes block alongside the diagram
   enableNamedZones: false,    // group scan locations under named zones (e.g. "Back of House")
   brandFlourishes: false,     // subtle company-personality ribbon + footer sig on the PDF
+  enableColorLegend: true,    // print the APWA-aligned markup color key
+  enableConfidenceBand: true, // roll per-core confidence into an overall band on the summary
+  coreStandoff: '25 mm',      // recommended standoff margin to keep off any marked target
+  enableQR: false,            // stamp a QR code on the report (off by default)
+  qrUrl: 'https://scan-report.vercel.app', // what the QR points to
 
   diagramZones: [],           // graphical hatched/filled polygons on the diagram
   diagramNotes: '',           // project-specific notes column on the CAD page
@@ -368,6 +374,20 @@ function ExecutiveSummary({ report }) {
     return { safe, caution, nogo, targets, total: report.cores.length };
   }, [report.cores, report.targets]);
 
+  // Overall confidence = the lowest per-core confidence (weakest link governs)
+  const confidence = useMemo(() => {
+    const cs = (report.cores || []).map(x => x.confidence || 'high');
+    if (cs.length === 0) return null;
+    if (cs.includes('low')) return 'low';
+    if (cs.includes('med')) return 'med';
+    return 'high';
+  }, [report.cores]);
+  const confMeta = {
+    high: { label: 'HIGH', color: c.green, bg: c.greenBg },
+    med:  { label: 'MEDIUM', color: c.amber, bg: c.amberBg },
+    low:  { label: 'LOW', color: c.red, bg: c.redBg },
+  }[confidence] || null;
+
   const overallVerdict =
     stats.nogo > 0 ? 'ATTENTION REQUIRED' :
     stats.caution > 0 ? 'PROCEED WITH CAUTION' :
@@ -426,6 +446,28 @@ function ExecutiveSummary({ report }) {
           Cores assessed:
         </strong>{' '}
         {stats.total}
+        {report.enableConfidenceBand && confMeta && (
+          <>
+            <br/>
+            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Overall confidence:
+            </strong>{' '}
+            <span style={{
+              display: 'inline-block', padding: '1px 8px', borderRadius: 4,
+              background: confMeta.bg, color: confMeta.color,
+              fontWeight: 700, fontSize: 12, letterSpacing: 0.5,
+            }}>{confMeta.label}</span>
+          </>
+        )}
+        {report.coreStandoff && (
+          <>
+            <br/>
+            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Standoff margin:
+            </strong>{' '}
+            Keep all coring/cutting at least <strong>{report.coreStandoff}</strong> clear of any marked target. Daylight to verify before drilling.
+          </>
+        )}
       </div>
     </Card>
   );
@@ -1067,12 +1109,29 @@ const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = 
 // One-click target presets — engineers don't want to dial color/thickness/tool
 // for every conduit they trace. Persisted in localStorage so each tech's
 // workflow defaults travel with them.
+// Defaults aligned to the APWA Uniform Color Code + concrete-scanning danger
+// convention: red = PT/tendon (the hard-stop hazard), orange = conduit/comms,
+// black = rebar, blue = water/reference. See APWA_LEGEND below.
 const DEFAULT_PRESETS = [
-  { id: 'rebar',   label: 'Rebar',    tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
-  { id: 'conduit', label: 'Conduit',  tool: 'freehand', color: '#e84a4a', strokeScale: 5 },
-  { id: 'pt',      label: 'PT Cable', tool: 'freehand', color: '#e89c3a', strokeScale: 8 },
-  { id: 'core',    label: 'Core ⊙',   tool: 'circle',   color: '#e84a4a', strokeScale: 4 },
-  { id: 'anomaly', label: 'Anomaly',  tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+  { id: 'rebar',   label: 'Rebar',        tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
+  { id: 'pt',      label: 'PT Cable',     tool: 'freehand', color: '#e84a4a', strokeScale: 8 },
+  { id: 'conduit', label: 'Conduit',      tool: 'freehand', color: '#e89c3a', strokeScale: 5 },
+  { id: 'water',   label: 'Water line',   tool: 'freehand', color: '#3a8de8', strokeScale: 5 },
+  { id: 'core',    label: 'Core ⊙',       tool: 'circle',   color: '#45c97a', strokeScale: 4 },
+  { id: 'anomaly', label: 'Anomaly',      tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+  { id: 'depth',   label: 'Depth marker', tool: 'text',     color: '#3a8de8', strokeScale: 5 },
+  { id: 'nocore',  label: 'No-core zone', tool: 'rect',     color: '#e84a4a', strokeScale: 5 },
+  { id: 'grid',    label: 'Grid line',    tool: 'line',     color: '#3a8de8', strokeScale: 3 },
+];
+
+// Printed markup key — blends the APWA Uniform Color Code (utility locating
+// standard across North America incl. BC) with concrete-scanning convention.
+const APWA_LEGEND = [
+  { color: '#1a1a1a', label: 'Reinforcing steel (rebar)' },
+  { color: '#e84a4a', label: 'Post-tension cable / power — DANGER' },
+  { color: '#e89c3a', label: 'Conduit / communication / anomaly' },
+  { color: '#3a8de8', label: 'Water line / depth / reference grid' },
+  { color: '#45c97a', label: 'Proposed core — cleared to drill' },
 ];
 const PRESETS_STORAGE_KEY = 'ak_annotation_presets';
 function loadAnnotationPresets() {
@@ -1203,6 +1262,42 @@ function drawAnnotation(ctx, a, W, H) {
 }
 
 // ============================================================
+// QRCode — renders a QR matrix to a canvas (offline, no deps)
+// ============================================================
+
+function QRCode({ value, size = 110 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!value || !canvasRef.current) return;
+    try {
+      const matrix = QRGen.generate(value);
+      const n = matrix.length;
+      const quiet = 4;
+      const total = n + quiet * 2;
+      const cell = Math.max(1, Math.floor(size / total));
+      const dim = cell * total;
+      const canvas = canvasRef.current;
+      canvas.width = dim;
+      canvas.height = dim;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, dim, dim);
+      ctx.fillStyle = '#000000';
+      for (let r = 0; r < n; r++) {
+        for (let cc = 0; cc < n; cc++) {
+          if (matrix[r][cc] === 1) {
+            ctx.fillRect((cc + quiet) * cell, (r + quiet) * cell, cell, cell);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('QR generation failed:', e);
+    }
+  }, [value, size]);
+  return <canvas ref={canvasRef} style={{ width: size, height: size, display: 'block' }} />;
+}
+
+// ============================================================
 // AnnotatedImage — img with overlay canvas of annotations
 // ============================================================
 
@@ -1267,6 +1362,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
   const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
+  const [redoStack, setRedoStack] = useState([]);        // undone annotations, for redo
   const [presets, setPresets] = useState(loadAnnotationPresets);
   const [showPresetEditor, setShowPresetEditor] = useState(false);
   useEffect(() => { saveAnnotationPresets(presets); }, [presets]);
@@ -1453,7 +1549,15 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     }
   };
 
-  const pushAnnotation = (a) => setAnnotations(prev => [...prev, a]);
+  // Tag each new annotation with the preset it was drawn under (if the current
+  // tool+color+thickness still matches one) so undo can name what it removes.
+  const pushAnnotation = (a) => {
+    const match = presets.find(p =>
+      p.tool === tool && p.color === color && p.strokeScale === strokeScale);
+    const tagged = match ? { ...a, presetLabel: match.label } : a;
+    setAnnotations(prev => [...prev, tagged]);
+    setRedoStack([]); // a fresh action invalidates the redo history
+  };
 
   const handleMove = (e) => {
     if (tool === 'freehand') {
@@ -1474,10 +1578,28 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     setHover(pt);
   };
 
-  const undo = () => setAnnotations(prev => prev.slice(0, -1));
-  const clearAll = () => {
-    if (confirm('Clear all annotations on this scan?')) setAnnotations([]);
+  const undo = () => {
+    if (annotations.length === 0) return;
+    setRedoStack(r => [...r, annotations[annotations.length - 1]]);
+    setAnnotations(prev => prev.slice(0, -1));
   };
+  const redo = () => {
+    if (redoStack.length === 0) return;
+    const last = redoStack[redoStack.length - 1];
+    setAnnotations(prev => [...prev, last]);
+    setRedoStack(prev => prev.slice(0, -1));
+  };
+  const clearAll = () => {
+    if (confirm('Clear all annotations on this scan?')) {
+      setAnnotations([]);
+      setRedoStack([]);
+    }
+  };
+
+  // Human-friendly name for what undo will remove next
+  const TYPE_NAMES = { freehand: 'draw', line: 'line', arrow: 'arrow', circle: 'circle', rect: 'box', text: 'label' };
+  const lastAnn = annotations[annotations.length - 1];
+  const undoLabel = lastAnn ? (lastAnn.presetLabel || TYPE_NAMES[lastAnn.type] || lastAnn.type) : '';
 
   const save = () => onSave(annotations);
 
@@ -1704,7 +1826,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="ghost" onClick={undo}
-              style={{ fontSize: 12 }} disabled={annotations.length === 0}>↶ Undo</Btn>
+              title={undoLabel ? `Undo ${undoLabel}` : 'Nothing to undo'}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>
+              ↶ Undo{undoLabel ? ` ${undoLabel}` : ''}
+            </Btn>
+            <Btn variant="ghost" onClick={redo}
+              title="Redo last undone annotation"
+              style={{ fontSize: 12 }} disabled={redoStack.length === 0}>↷ Redo</Btn>
             <Btn variant="ghost" onClick={clearAll}
               style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
           </div>
@@ -3882,6 +4010,9 @@ export default function GSSIReportApp() {
           { id: 'enableNamedZones',    label: 'Named zones',                hint: 'Group scan locations under zones like "Back of House".' },
           { id: 'enableZones',         label: 'Hatched zones on diagram',   hint: 'Red / yellow / amber fill areas marking unsuitable, caution, or boundary regions on the site diagram.' },
           { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
+          { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
+          { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
+          { id: 'enableQR',            label: 'QR code on report',          hint: 'Stamps a scannable QR code on the report linking to the live report tool (or any URL you set below). Off by default.' },
           { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
@@ -3908,6 +4039,13 @@ export default function GSSIReportApp() {
             </div>
           </label>
         ))}
+        {report.enableQR && (
+          <div style={{ marginTop: 6 }}>
+            <Field label="QR code links to" hint="Pasted onto the report when QR code is on. Default points to the live report tool.">
+              <Input value={report.qrUrl} onChange={e => update({ qrUrl: e.target.value })} placeholder="https://scan-report.vercel.app" />
+            </Field>
+          </div>
+        )}
       </Card>
 
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
@@ -4037,6 +4175,20 @@ export default function GSSIReportApp() {
         <Field label="Scan area / description">
           <Input value={report.scanArea} onChange={e => update({ scanArea: e.target.value })} placeholder="P2 parkade slab, grid C4" />
         </Field>
+        {report.enableQR && report.qrUrl && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, marginTop: 10,
+            paddingTop: 10, borderTop: `1px solid ${c.border}`,
+          }}>
+            <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
+              <QRCode value={report.qrUrl} size={96} />
+            </div>
+            <div style={{ fontSize: 11.5, color: c.textDim, lineHeight: 1.5 }}>
+              <strong style={{ color: c.text }}>Scan to open the live report tool.</strong><br/>
+              Point any phone camera at the code.
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* === SLAB CONTEXT === */}
@@ -4073,6 +4225,9 @@ export default function GSSIReportApp() {
             </Select>
           </Field>
         </div>
+        <Field label="Recommended core standoff" hint="Min clearance to keep off any marked target. Prints on the summary. Clear to hide.">
+          <Input value={report.coreStandoff} onChange={e => update({ coreStandoff: e.target.value })} placeholder="25 mm" />
+        </Field>
       </Card>
 
       {/* === FINDINGS === */}
@@ -4342,6 +4497,27 @@ export default function GSSIReportApp() {
                 onChange={e => update({ drawingNo: e.target.value })}
                 placeholder={`${report.projectNo || 'PROJ'}-D01`} />
             </Field>
+          </div>
+        </Card>
+      )}
+
+      {/* === MARKUP COLOR KEY (APWA-aligned) === */}
+      {report.enableColorLegend && (
+        <Card title="Markup color key" dense>
+          <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+            Aligned to the APWA Uniform Color Code (utility-locating standard) plus concrete-scanning convention.
+            Colors below match the annotation presets used on the scan photos.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}>
+            {APWA_LEGEND.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.text }}>
+                <span style={{
+                  width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                  background: item.color, border: '1px solid rgba(128,128,128,0.4)',
+                }} />
+                {item.label}
+              </div>
+            ))}
           </div>
         </Card>
       )}
