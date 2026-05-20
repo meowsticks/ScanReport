@@ -5294,9 +5294,13 @@ export default function GSSIReportApp() {
         display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
-        <Btn variant="primary" onClick={printPDF}>📄 PDF</Btn>
-        <Btn onClick={() => setEmailDialogOpen(true)}>📧 Email</Btn>
-        <Btn onClick={exportJSON}>💾 Save draft</Btn>
+        <Btn variant="primary" onClick={printPDF} title="Open the print window — choose “Save as PDF” to make the file you send">📄 PDF</Btn>
+        <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email (attach the saved PDF yourself before sending)">📧 Email</Btn>
+        <Btn onClick={exportJSON} title="Download a backup file (.json) of this report. It’s a snapshot — click again after changes to get an updated copy.">💾 Save draft</Btn>
+      </div>
+      <div className="no-print" style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', marginTop: 7, lineHeight: 1.5 }}>
+        Your work auto-saves in this browser. <strong>💾 Save draft</strong> downloads a backup
+        file snapshot — re-save after changes to update it. New here? Tap <strong>❓</strong> up top.
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
@@ -5576,10 +5580,11 @@ export default function GSSIReportApp() {
 
             {[
               {
-                icon: '✓', title: 'Your work saves itself',
-                body: 'Everything you type is saved automatically on this computer, in this web browser. ' +
-                      'You can close the tab and come back later — it will still be here. The green ' +
-                      '“✓ Saved” tag at the top shows the last time it saved.',
+                icon: '✓', title: 'Your work saves itself (inside the app)',
+                body: 'Everything you type is saved automatically on this computer, inside this web browser. ' +
+                      'You don’t have to do anything — close the tab and come back later and it will still be ' +
+                      'here. The green “✓ Saved” tag at the top shows the last time it saved. Note this is the ' +
+                      'browser’s own memory, not a file you can see in your folders — for that, see step 3.',
               },
               {
                 icon: '📚', title: 'Keep more than one report',
@@ -5588,9 +5593,12 @@ export default function GSSIReportApp() {
               },
               {
                 icon: '💾', title: 'Save a backup file to your computer',
-                body: 'Click “💾 Save draft” at the bottom. Your browser downloads a small backup file ' +
-                      '(its name ends in .json). Keep it in a project folder. To open it again later — ' +
-                      'on this computer or a different one — click “📂 Load” at the top and pick that file.',
+                body: 'Click “💾 Save draft” at the bottom to download a backup file (its name ends in .json) ' +
+                      'into your Downloads folder. Keep it somewhere safe, like a project folder. ' +
+                      'IMPORTANT: this file is a one-time snapshot — it does NOT keep updating on its own. ' +
+                      'If you change the report afterward, click “💾 Save draft” again to download a fresh copy. ' +
+                      'To re-open a saved file later (on this or another computer), click “📂 Load” at the top ' +
+                      'and pick it.',
               },
               {
                 icon: '📄', title: 'Make the PDF to send',
