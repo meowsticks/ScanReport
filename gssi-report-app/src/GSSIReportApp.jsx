@@ -1068,11 +1068,14 @@ const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = 
 // for every conduit they trace. Persisted in localStorage so each tech's
 // workflow defaults travel with them.
 const DEFAULT_PRESETS = [
-  { id: 'rebar',   label: 'Rebar',    tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
-  { id: 'conduit', label: 'Conduit',  tool: 'freehand', color: '#e84a4a', strokeScale: 5 },
-  { id: 'pt',      label: 'PT Cable', tool: 'freehand', color: '#e89c3a', strokeScale: 8 },
-  { id: 'core',    label: 'Core ⊙',   tool: 'circle',   color: '#e84a4a', strokeScale: 4 },
-  { id: 'anomaly', label: 'Anomaly',  tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+  { id: 'rebar',   label: 'Rebar',       tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
+  { id: 'conduit', label: 'Conduit',     tool: 'freehand', color: '#e84a4a', strokeScale: 5 },
+  { id: 'pt',      label: 'PT Cable',    tool: 'freehand', color: '#e89c3a', strokeScale: 8 },
+  { id: 'core',    label: 'Core ⊙',      tool: 'circle',   color: '#e84a4a', strokeScale: 4 },
+  { id: 'anomaly', label: 'Anomaly',     tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+  { id: 'depth',   label: 'Depth marker', tool: 'text',    color: '#3a8de8', strokeScale: 5 },
+  { id: 'nocore',  label: 'No-core zone', tool: 'rect',    color: '#e84a4a', strokeScale: 5 },
+  { id: 'grid',    label: 'Grid line',   tool: 'line',     color: '#3a8de8', strokeScale: 3 },
 ];
 const PRESETS_STORAGE_KEY = 'ak_annotation_presets';
 function loadAnnotationPresets() {
@@ -1267,6 +1270,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
   const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
+  const [redoStack, setRedoStack] = useState([]);        // undone annotations, for redo
   const [presets, setPresets] = useState(loadAnnotationPresets);
   const [showPresetEditor, setShowPresetEditor] = useState(false);
   useEffect(() => { saveAnnotationPresets(presets); }, [presets]);
@@ -1453,7 +1457,15 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     }
   };
 
-  const pushAnnotation = (a) => setAnnotations(prev => [...prev, a]);
+  // Tag each new annotation with the preset it was drawn under (if the current
+  // tool+color+thickness still matches one) so undo can name what it removes.
+  const pushAnnotation = (a) => {
+    const match = presets.find(p =>
+      p.tool === tool && p.color === color && p.strokeScale === strokeScale);
+    const tagged = match ? { ...a, presetLabel: match.label } : a;
+    setAnnotations(prev => [...prev, tagged]);
+    setRedoStack([]); // a fresh action invalidates the redo history
+  };
 
   const handleMove = (e) => {
     if (tool === 'freehand') {
@@ -1474,10 +1486,28 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     setHover(pt);
   };
 
-  const undo = () => setAnnotations(prev => prev.slice(0, -1));
-  const clearAll = () => {
-    if (confirm('Clear all annotations on this scan?')) setAnnotations([]);
+  const undo = () => {
+    if (annotations.length === 0) return;
+    setRedoStack(r => [...r, annotations[annotations.length - 1]]);
+    setAnnotations(prev => prev.slice(0, -1));
   };
+  const redo = () => {
+    if (redoStack.length === 0) return;
+    const last = redoStack[redoStack.length - 1];
+    setAnnotations(prev => [...prev, last]);
+    setRedoStack(prev => prev.slice(0, -1));
+  };
+  const clearAll = () => {
+    if (confirm('Clear all annotations on this scan?')) {
+      setAnnotations([]);
+      setRedoStack([]);
+    }
+  };
+
+  // Human-friendly name for what undo will remove next
+  const TYPE_NAMES = { freehand: 'draw', line: 'line', arrow: 'arrow', circle: 'circle', rect: 'box', text: 'label' };
+  const lastAnn = annotations[annotations.length - 1];
+  const undoLabel = lastAnn ? (lastAnn.presetLabel || TYPE_NAMES[lastAnn.type] || lastAnn.type) : '';
 
   const save = () => onSave(annotations);
 
@@ -1704,7 +1734,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="ghost" onClick={undo}
-              style={{ fontSize: 12 }} disabled={annotations.length === 0}>↶ Undo</Btn>
+              title={undoLabel ? `Undo ${undoLabel}` : 'Nothing to undo'}
+              style={{ fontSize: 12 }} disabled={annotations.length === 0}>
+              ↶ Undo{undoLabel ? ` ${undoLabel}` : ''}
+            </Btn>
+            <Btn variant="ghost" onClick={redo}
+              title="Redo last undone annotation"
+              style={{ fontSize: 12 }} disabled={redoStack.length === 0}>↷ Redo</Btn>
             <Btn variant="ghost" onClick={clearAll}
               style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
           </div>
