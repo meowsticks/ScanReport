@@ -108,6 +108,9 @@ const DEFAULT_REPORT = {
   enableStandardNotes: false, // numbered general-notes block alongside the diagram
   enableNamedZones: false,    // group scan locations under named zones (e.g. "Back of House")
   brandFlourishes: false,     // subtle company-personality ribbon + footer sig on the PDF
+  enableColorLegend: true,    // print the APWA-aligned markup color key
+  enableConfidenceBand: true, // roll per-core confidence into an overall band on the summary
+  coreStandoff: '25 mm',      // recommended standoff margin to keep off any marked target
 
   diagramZones: [],           // graphical hatched/filled polygons on the diagram
   diagramNotes: '',           // project-specific notes column on the CAD page
@@ -368,6 +371,20 @@ function ExecutiveSummary({ report }) {
     return { safe, caution, nogo, targets, total: report.cores.length };
   }, [report.cores, report.targets]);
 
+  // Overall confidence = the lowest per-core confidence (weakest link governs)
+  const confidence = useMemo(() => {
+    const cs = (report.cores || []).map(x => x.confidence || 'high');
+    if (cs.length === 0) return null;
+    if (cs.includes('low')) return 'low';
+    if (cs.includes('med')) return 'med';
+    return 'high';
+  }, [report.cores]);
+  const confMeta = {
+    high: { label: 'HIGH', color: c.green, bg: c.greenBg },
+    med:  { label: 'MEDIUM', color: c.amber, bg: c.amberBg },
+    low:  { label: 'LOW', color: c.red, bg: c.redBg },
+  }[confidence] || null;
+
   const overallVerdict =
     stats.nogo > 0 ? 'ATTENTION REQUIRED' :
     stats.caution > 0 ? 'PROCEED WITH CAUTION' :
@@ -426,6 +443,28 @@ function ExecutiveSummary({ report }) {
           Cores assessed:
         </strong>{' '}
         {stats.total}
+        {report.enableConfidenceBand && confMeta && (
+          <>
+            <br/>
+            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Overall confidence:
+            </strong>{' '}
+            <span style={{
+              display: 'inline-block', padding: '1px 8px', borderRadius: 4,
+              background: confMeta.bg, color: confMeta.color,
+              fontWeight: 700, fontSize: 12, letterSpacing: 0.5,
+            }}>{confMeta.label}</span>
+          </>
+        )}
+        {report.coreStandoff && (
+          <>
+            <br/>
+            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Standoff margin:
+            </strong>{' '}
+            Keep all coring/cutting at least <strong>{report.coreStandoff}</strong> clear of any marked target. Daylight to verify before drilling.
+          </>
+        )}
       </div>
     </Card>
   );
@@ -1067,15 +1106,29 @@ const ANNOTATION_COLOR_HEX = ANNOTATION_COLORS.reduce((acc, c) => { acc[c.id] = 
 // One-click target presets — engineers don't want to dial color/thickness/tool
 // for every conduit they trace. Persisted in localStorage so each tech's
 // workflow defaults travel with them.
+// Defaults aligned to the APWA Uniform Color Code + concrete-scanning danger
+// convention: red = PT/tendon (the hard-stop hazard), orange = conduit/comms,
+// black = rebar, blue = water/reference. See APWA_LEGEND below.
 const DEFAULT_PRESETS = [
-  { id: 'rebar',   label: 'Rebar',       tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
-  { id: 'conduit', label: 'Conduit',     tool: 'freehand', color: '#e84a4a', strokeScale: 5 },
-  { id: 'pt',      label: 'PT Cable',    tool: 'freehand', color: '#e89c3a', strokeScale: 8 },
-  { id: 'core',    label: 'Core ⊙',      tool: 'circle',   color: '#e84a4a', strokeScale: 4 },
-  { id: 'anomaly', label: 'Anomaly',     tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
-  { id: 'depth',   label: 'Depth marker', tool: 'text',    color: '#3a8de8', strokeScale: 5 },
-  { id: 'nocore',  label: 'No-core zone', tool: 'rect',    color: '#e84a4a', strokeScale: 5 },
-  { id: 'grid',    label: 'Grid line',   tool: 'line',     color: '#3a8de8', strokeScale: 3 },
+  { id: 'rebar',   label: 'Rebar',        tool: 'freehand', color: '#1a1a1a', strokeScale: 6 },
+  { id: 'pt',      label: 'PT Cable',     tool: 'freehand', color: '#e84a4a', strokeScale: 8 },
+  { id: 'conduit', label: 'Conduit',      tool: 'freehand', color: '#e89c3a', strokeScale: 5 },
+  { id: 'water',   label: 'Water line',   tool: 'freehand', color: '#3a8de8', strokeScale: 5 },
+  { id: 'core',    label: 'Core ⊙',       tool: 'circle',   color: '#45c97a', strokeScale: 4 },
+  { id: 'anomaly', label: 'Anomaly',      tool: 'freehand', color: '#e89c3a', strokeScale: 6 },
+  { id: 'depth',   label: 'Depth marker', tool: 'text',     color: '#3a8de8', strokeScale: 5 },
+  { id: 'nocore',  label: 'No-core zone', tool: 'rect',     color: '#e84a4a', strokeScale: 5 },
+  { id: 'grid',    label: 'Grid line',    tool: 'line',     color: '#3a8de8', strokeScale: 3 },
+];
+
+// Printed markup key — blends the APWA Uniform Color Code (utility locating
+// standard across North America incl. BC) with concrete-scanning convention.
+const APWA_LEGEND = [
+  { color: '#1a1a1a', label: 'Reinforcing steel (rebar)' },
+  { color: '#e84a4a', label: 'Post-tension cable / power — DANGER' },
+  { color: '#e89c3a', label: 'Conduit / communication / anomaly' },
+  { color: '#3a8de8', label: 'Water line / depth / reference grid' },
+  { color: '#45c97a', label: 'Proposed core — cleared to drill' },
 ];
 const PRESETS_STORAGE_KEY = 'ak_annotation_presets';
 function loadAnnotationPresets() {
@@ -3918,6 +3971,8 @@ export default function GSSIReportApp() {
           { id: 'enableNamedZones',    label: 'Named zones',                hint: 'Group scan locations under zones like "Back of House".' },
           { id: 'enableZones',         label: 'Hatched zones on diagram',   hint: 'Red / yellow / amber fill areas marking unsuitable, caution, or boundary regions on the site diagram.' },
           { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
+          { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
+          { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
           { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
@@ -4109,6 +4164,9 @@ export default function GSSIReportApp() {
             </Select>
           </Field>
         </div>
+        <Field label="Recommended core standoff" hint="Min clearance to keep off any marked target. Prints on the summary. Clear to hide.">
+          <Input value={report.coreStandoff} onChange={e => update({ coreStandoff: e.target.value })} placeholder="25 mm" />
+        </Field>
       </Card>
 
       {/* === FINDINGS === */}
@@ -4378,6 +4436,27 @@ export default function GSSIReportApp() {
                 onChange={e => update({ drawingNo: e.target.value })}
                 placeholder={`${report.projectNo || 'PROJ'}-D01`} />
             </Field>
+          </div>
+        </Card>
+      )}
+
+      {/* === MARKUP COLOR KEY (APWA-aligned) === */}
+      {report.enableColorLegend && (
+        <Card title="Markup color key" dense>
+          <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+            Aligned to the APWA Uniform Color Code (utility-locating standard) plus concrete-scanning convention.
+            Colors below match the annotation presets used on the scan photos.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}>
+            {APWA_LEGEND.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.text }}>
+                <span style={{
+                  width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                  background: item.color, border: '1px solid rgba(128,128,128,0.4)',
+                }} />
+                {item.label}
+              </div>
+            ))}
           </div>
         </Card>
       )}
