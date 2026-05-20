@@ -11,6 +11,7 @@ const STORAGE_KEY = 'gssi_report_v2';
 const CONTACTS_KEY = 'ak_contacts';   // customer/contact directory (cross-report)
 const DRAFTS_KEY   = 'ak_drafts';     // named saved reports (cross-report)
 const AUTOFILL_KEY = 'ak_autofill';   // remembered sticky fields + recent client/site values
+const HELP_SEEN_KEY = 'ak_help_seen'; // first-run Getting Started guide dismissed
 
 // Fields that repeat job-to-job — carried forward into a new/blank report so the
 // technician doesn't re-key equipment, calibration, sign-off and legal text every time.
@@ -3513,6 +3514,15 @@ export default function GSSIReportApp() {
   const updateContact = (id, patch) => setContacts(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
   const removeContact = (id) => setContacts(cs => cs.filter(c => c.id !== id));
 
+  // ---------- Getting Started guide (opens automatically the first time) ----------
+  const [helpOpen, setHelpOpen] = useState(() => {
+    try { return !localStorage.getItem(HELP_SEEN_KEY); } catch { return false; }
+  });
+  const dismissHelp = () => {
+    try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch {}
+    setHelpOpen(false);
+  };
+
   // ---------- Reset/refresh form (with save-first guard) ----------
   const [confirmReset, setConfirmReset] = useState(false);
   const doReset = () => {
@@ -4110,6 +4120,17 @@ export default function GSSIReportApp() {
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             👥
+          </button>
+          <button onClick={() => setHelpOpen(true)}
+            title="Getting started — how to save and send"
+            aria-label="Getting started guide"
+            style={{
+              background: c.cardAlt, color: c.text,
+              border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            ❓
           </button>
           <button onClick={() => setConfirmReset(true)}
             title="Reset the form (with save-first prompt)"
@@ -5347,8 +5368,8 @@ export default function GSSIReportApp() {
             </div>
             {canShare && (
               <Btn onClick={shareReport} style={{ width: '100%', marginTop: 6 }}
-                title="Open your device's share sheet (Mail, Messages, etc.) with this draft and a backup file attached">
-                📤 Share (mobile) · attaches backup file
+                title="Open your device's share menu (Mail, Messages, etc.) with this draft and a backup file attached">
+                📤 Share · attaches backup file
               </Btn>
             )}
             {shareNote && (
@@ -5523,6 +5544,92 @@ export default function GSSIReportApp() {
             )}
             <Btn variant="ghost" onClick={() => setContactsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
               Close
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* === GETTING STARTED GUIDE === */}
+      {helpOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 250,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={dismissHelp}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 20,
+            width: 'min(560px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              👋 Getting started
+            </div>
+            <div style={{ fontSize: 12.5, color: c.textDim, marginBottom: 16, lineHeight: 1.5 }}>
+              A quick guide to saving your work and sending a report. You can reopen this
+              any time with the <strong>❓</strong> button at the top.
+            </div>
+
+            {[
+              {
+                icon: '✓', title: 'Your work saves itself',
+                body: 'Everything you type is saved automatically on this computer, in this web browser. ' +
+                      'You can close the tab and come back later — it will still be here. The green ' +
+                      '“✓ Saved” tag at the top shows the last time it saved.',
+              },
+              {
+                icon: '📚', title: 'Keep more than one report',
+                body: 'Click 📚 (top of the screen) to save a snapshot of the current report and start a ' +
+                      'fresh one. Open 📚 again any time to load an older report back up.',
+              },
+              {
+                icon: '💾', title: 'Save a backup file to your computer',
+                body: 'Click “💾 Save draft” at the bottom. Your browser downloads a small backup file ' +
+                      '(its name ends in .json). Keep it in a project folder. To open it again later — ' +
+                      'on this computer or a different one — click “📂 Load” at the top and pick that file.',
+              },
+              {
+                icon: '📄', title: 'Make the PDF to send',
+                body: 'Click “📄 PDF”. Your browser’s print window opens. In the “Destination” or ' +
+                      '“Printer” box, choose “Save as PDF”, then Save. Pick somewhere easy to find, ' +
+                      'like your Desktop. Tip: use “👁 Preview” first to choose which sections to include.',
+              },
+              {
+                icon: '📧', title: 'Email the report',
+                body: 'Click “📧 Email” for a ready-made message. Browsers can’t attach the PDF for you, ' +
+                      'so attach the PDF you just saved before you send. Save the people you email often ' +
+                      'under “👥 Contacts” so their address fills in with one click.',
+              },
+              {
+                icon: '⚠', title: 'Important — where things are stored',
+                body: 'Drafts and contacts live only in this browser, on this computer. If you clear your ' +
+                      'browser history/data or move to another computer, use the backup file (💾 to save, ' +
+                      '📂 to load) to carry your work across. The backup file is the safe copy.',
+              },
+            ].map((step, i) => (
+              <div key={i} style={{
+                display: 'flex', gap: 11, marginBottom: 13,
+                paddingBottom: 13,
+                borderBottom: i < 5 ? `1px solid ${c.border}` : 'none',
+              }}>
+                <div style={{
+                  flexShrink: 0, width: 30, height: 30, borderRadius: 8,
+                  background: c.accentDim, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 15, fontWeight: 800,
+                }}>{step.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: c.text, marginBottom: 3 }}>
+                    {i + 1}. {step.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: c.textDim, lineHeight: 1.55 }}>{step.body}</div>
+                </div>
+              </div>
+            ))}
+
+            <Btn variant="primary" onClick={dismissHelp} style={{ width: '100%', marginTop: 4, padding: '11px 12px', fontWeight: 700 }}>
+              Got it — let’s go
             </Btn>
           </div>
         </div>
