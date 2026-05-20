@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import QRGen from './qrcode.js';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -111,6 +112,8 @@ const DEFAULT_REPORT = {
   enableColorLegend: true,    // print the APWA-aligned markup color key
   enableConfidenceBand: true, // roll per-core confidence into an overall band on the summary
   coreStandoff: '25 mm',      // recommended standoff margin to keep off any marked target
+  enableQR: false,            // stamp a QR code on the report (off by default)
+  qrUrl: 'https://scan-report.vercel.app', // what the QR points to
 
   diagramZones: [],           // graphical hatched/filled polygons on the diagram
   diagramNotes: '',           // project-specific notes column on the CAD page
@@ -1256,6 +1259,42 @@ function drawAnnotation(ctx, a, W, H) {
     ctx.fillStyle = color;
     ctx.fillText(text, a.position.x * W, a.position.y * H);
   }
+}
+
+// ============================================================
+// QRCode — renders a QR matrix to a canvas (offline, no deps)
+// ============================================================
+
+function QRCode({ value, size = 110 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!value || !canvasRef.current) return;
+    try {
+      const matrix = QRGen.generate(value);
+      const n = matrix.length;
+      const quiet = 4;
+      const total = n + quiet * 2;
+      const cell = Math.max(1, Math.floor(size / total));
+      const dim = cell * total;
+      const canvas = canvasRef.current;
+      canvas.width = dim;
+      canvas.height = dim;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, dim, dim);
+      ctx.fillStyle = '#000000';
+      for (let r = 0; r < n; r++) {
+        for (let cc = 0; cc < n; cc++) {
+          if (matrix[r][cc] === 1) {
+            ctx.fillRect((cc + quiet) * cell, (r + quiet) * cell, cell, cell);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('QR generation failed:', e);
+    }
+  }, [value, size]);
+  return <canvas ref={canvasRef} style={{ width: size, height: size, display: 'block' }} />;
 }
 
 // ============================================================
@@ -3973,6 +4012,7 @@ export default function GSSIReportApp() {
           { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
           { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
           { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
+          { id: 'enableQR',            label: 'QR code on report',          hint: 'Stamps a scannable QR code on the report linking to the live report tool (or any URL you set below). Off by default.' },
           { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
@@ -3999,6 +4039,13 @@ export default function GSSIReportApp() {
             </div>
           </label>
         ))}
+        {report.enableQR && (
+          <div style={{ marginTop: 6 }}>
+            <Field label="QR code links to" hint="Pasted onto the report when QR code is on. Default points to the live report tool.">
+              <Input value={report.qrUrl} onChange={e => update({ qrUrl: e.target.value })} placeholder="https://scan-report.vercel.app" />
+            </Field>
+          </div>
+        )}
       </Card>
 
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
@@ -4128,6 +4175,20 @@ export default function GSSIReportApp() {
         <Field label="Scan area / description">
           <Input value={report.scanArea} onChange={e => update({ scanArea: e.target.value })} placeholder="P2 parkade slab, grid C4" />
         </Field>
+        {report.enableQR && report.qrUrl && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, marginTop: 10,
+            paddingTop: 10, borderTop: `1px solid ${c.border}`,
+          }}>
+            <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
+              <QRCode value={report.qrUrl} size={96} />
+            </div>
+            <div style={{ fontSize: 11.5, color: c.textDim, lineHeight: 1.5 }}>
+              <strong style={{ color: c.text }}>Scan to open the live report tool.</strong><br/>
+              Point any phone camera at the code.
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* === SLAB CONTEXT === */}
