@@ -8,6 +8,48 @@ import QRGen from './qrcode.js';
 // ============================================================
 
 const STORAGE_KEY = 'gssi_report_v2';
+const CONTACTS_KEY = 'ak_contacts';   // customer/contact directory (cross-report)
+const DRAFTS_KEY   = 'ak_drafts';     // named saved reports (cross-report)
+const AUTOFILL_KEY = 'ak_autofill';   // remembered sticky fields + recent client/site values
+const HELP_AUTOSHOW_KEY = 'ak_help_autoshow'; // whether the Getting Started guide opens on startup
+
+// Fields that repeat job-to-job — carried forward into a new/blank report so the
+// technician doesn't re-key equipment, calibration, sign-off and legal text every time.
+const STICKY_FIELDS = [
+  'scanner', 'antenna', 'serialNo', 'firmware',
+  'scanMode', 'dielectric', 'scanDensity', 'depthRange',
+  'preparedBy', 'preparedRole', 'preparedCert',
+  'reviewedBy', 'reviewedRole', 'egbcEnabled', 'permitNo',
+  'legalDisclaimer', 'limitations', 'standardNotes',
+  'coreStandoff', 'enableColorLegend', 'enableConfidenceBand',
+  'brandFlourishes', 'qrUrl', 'drawingScale',
+];
+
+// Safe JSON-backed localStorage helpers (no-op if storage is blocked).
+const lsGet = (key, fallback) => {
+  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; }
+  catch { return fallback; }
+};
+const lsSet = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+};
+
+// Push a value to the front of a recents list, de-duped and capped.
+const uniqTop = (arr, val, cap = 8) => {
+  const v = (val || '').trim();
+  const base = (arr || []).filter(Boolean);
+  if (!v) return base.slice(0, cap);
+  return [v, ...base.filter(x => x !== v)].slice(0, cap);
+};
+
+// Swap an array item with its neighbour in the given direction (-1 up, +1 down).
+const moveInArray = (arr, i, dir) => {
+  const j = i + dir;
+  if (j < 0 || j >= arr.length) return arr;
+  const next = [...arr];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+};
 
 // Subtle company tagline used by the optional Brand Flourishes flag.
 // Plays on the company name (cutting & coring) and what GPR actually does.
@@ -149,6 +191,10 @@ const DEFAULT_REPORT = {
   // Empty object means "all sections on" — only exclusions are stored.
   // Section ids match the SECTION_IDS list rendered in the Print setup card.
   sectionVisibility: {},
+
+  // Custom print order for sections (list of section ids). Empty = default
+  // SECTION_IDS order. Missing ids fall back to their default position.
+  sectionOrder: [],
 };
 
 // ============================================================
@@ -3395,8 +3441,21 @@ export default function GSSIReportApp() {
     catch { return 'dark'; }
   });
 
+  // ---------- Auto-save status indicator ----------
+  const [savedAt, setSavedAt] = useState(null);
+
+  // Persist the working report on every change, stamp the save time, and
+  // remember the sticky (repeat-every-job) fields for auto-fill on the next report.
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(report)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(report));
+      setSavedAt(Date.now());
+    } catch {}
+    const sticky = {};
+    STICKY_FIELDS.forEach(f => {
+      if (report[f] !== undefined && report[f] !== '' && report[f] !== null) sticky[f] = report[f];
+    });
+    lsSet(AUTOFILL_KEY, { ...lsGet(AUTOFILL_KEY, {}), ...sticky });
   }, [report]);
 
   useEffect(() => {
@@ -3406,10 +3465,71 @@ export default function GSSIReportApp() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
+  // ---------- Auto-fill: build a fresh report carrying sticky fields forward ----------
+  const freshReport = () => {
+    const mem = lsGet(AUTOFILL_KEY, {});
+    const carried = {};
+    STICKY_FIELDS.forEach(f => { if (mem[f] !== undefined) carried[f] = mem[f]; });
+    const today = new Date().toISOString().slice(0, 10);
+    return { ...DEFAULT_REPORT, ...carried, scanDate: today, signDate: today };
+  };
+
+  // Record client/site into the recents list (used for input suggestions).
+  // Called at meaningful moments (save/email/share) to avoid per-keystroke noise.
+  const [recents, setRecents] = useState(() => {
+    const m = lsGet(AUTOFILL_KEY, {});
+    return { recentClients: m.recentClients || [], recentSites: m.recentSites || [] };
+  });
+  const rememberRecents = () => {
+    const mem = lsGet(AUTOFILL_KEY, {});
+    const next = {
+      recentClients: uniqTop(mem.recentClients, report.client),
+      recentSites: uniqTop(mem.recentSites, report.siteAddress),
+    };
+    lsSet(AUTOFILL_KEY, { ...mem, ...next });
+    setRecents(next);
+  };
+
+  // ---------- Named drafts (cross-report saved copies) ----------
+  const [drafts, setDrafts] = useState(() => lsGet(DRAFTS_KEY, []));
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  useEffect(() => { lsSet(DRAFTS_KEY, drafts); }, [drafts]);
+  const saveNamedDraft = (name) => {
+    const label = (name || '').trim() || report.projectNo || `Draft · ${new Date().toLocaleString()}`;
+    const entry = { id: `d-${Date.now()}`, name: label, savedAt: Date.now(), report };
+    setDrafts(d => [entry, ...d]);
+    rememberRecents();
+  };
+  const loadDraft = (id) => {
+    const d = drafts.find(x => x.id === id);
+    if (d) { setReport({ ...DEFAULT_REPORT, ...d.report }); setDraftsOpen(false); }
+  };
+  const deleteDraft = (id) => setDrafts(d => d.filter(x => x.id !== id));
+
+  // ---------- Customer / contact directory ----------
+  const [contacts, setContacts] = useState(() => lsGet(CONTACTS_KEY, []));
+  const [contactsOpen, setContactsOpen] = useState(false);
+  useEffect(() => { lsSet(CONTACTS_KEY, contacts); }, [contacts]);
+  const addContact = (ct) => setContacts(cs => [...cs, { id: `c-${Date.now()}`, name: '', email: '', company: '', note: '', ...ct }]);
+  const updateContact = (id, patch) => setContacts(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
+  const removeContact = (id) => setContacts(cs => cs.filter(c => c.id !== id));
+
+  // ---------- Getting Started guide ----------
+  // Auto-opens on startup while the "show automatically" toggle is on. The toggle
+  // is persisted so anyone can turn it off, or back on if they need a refresher.
+  const [helpAutoShow, setHelpAutoShow] = useState(() => {
+    try { const v = localStorage.getItem(HELP_AUTOSHOW_KEY); return v === null ? true : v === '1'; }
+    catch { return true; }
+  });
+  const [helpOpen, setHelpOpen] = useState(helpAutoShow);
+  useEffect(() => {
+    try { localStorage.setItem(HELP_AUTOSHOW_KEY, helpAutoShow ? '1' : '0'); } catch {}
+  }, [helpAutoShow]);
+
   // ---------- Reset/refresh form (with save-first guard) ----------
   const [confirmReset, setConfirmReset] = useState(false);
   const doReset = () => {
-    setReport(DEFAULT_REPORT);
+    setReport(freshReport());
     setConfirmReset(false);
   };
 
@@ -3456,12 +3576,40 @@ export default function GSSIReportApp() {
     }
   }, [emailDialogOpen]); // eslint-disable-line
   const openMailto = () => {
+    rememberRecents();
     const url =
       `mailto:${encodeURIComponent(emailTo)}` +
       `?subject=${encodeURIComponent(emailSubject)}` +
       `&body=${encodeURIComponent(emailBody)}`;
     window.location.href = url;
     setEmailDialogOpen(false);
+  };
+
+  // Native share sheet (mobile): lets the user push the report into Mail, Messages,
+  // etc. Optionally attaches the JSON backup as a real file when the platform allows it.
+  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+  const [shareNote, setShareNote] = useState('');
+  const shareReport = async () => {
+    rememberRecents();
+    const payload = { title: emailSubject, text: emailBody };
+    try {
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const file = new File(
+        [blob],
+        `gssi-${report.projectNo || 'draft'}-${report.scanDate}.json`,
+        { type: 'application/json' },
+      );
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ ...payload, files: [file] });
+      } else {
+        await navigator.share(payload);
+      }
+      setEmailDialogOpen(false);
+    } catch (err) {
+      if (err && err.name !== 'AbortError') {
+        setShareNote('Sharing isn’t available here — use Open Email instead.');
+      }
+    }
   };
 
   // Reflect project number in the browser tab so multiple drafts stay sortable
@@ -3506,8 +3654,27 @@ export default function GSSIReportApp() {
   const setAllVis = (on) => update({
     sectionVisibility: on ? {} : SECTION_IDS.reduce((a, s) => { a[s.id] = false; return a; }, {}),
   });
-  // CSS class to drop a section from print/preview while keeping it visible on screen
-  const ph = (id) => vis(id) ? '' : 'print-hidden';
+
+  // ---------- Section print order ----------
+  // Effective order = saved custom order first (valid ids only), then any
+  // sections not yet in the custom list, in their default SECTION_IDS order.
+  const effectiveOrder = (() => {
+    const base = SECTION_IDS.map(s => s.id);
+    const saved = (report.sectionOrder || []).filter(id => base.includes(id));
+    return [...saved, ...base.filter(id => !saved.includes(id))];
+  })();
+  const moveSection = (id, dir) => {
+    const arr = [...effectiveOrder];
+    const i = arr.indexOf(id);
+    const j = i + dir;
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    update({ sectionOrder: arr });
+  };
+
+  // CSS class to drop a section from print/preview while keeping it visible on
+  // screen, plus a stable per-section hook used to drive the print order.
+  const ph = (id) => `ak-sec ak-sec-${id}${vis(id) ? '' : ' print-hidden'}`;
 
   useEffect(() => {
     if (previewMode) document.body.classList.add('preview-mode');
@@ -3531,6 +3698,7 @@ export default function GSSIReportApp() {
     update({ targets: next });
   };
   const removeTarget = (i) => update({ targets: report.targets.filter((_, j) => j !== i) });
+  const moveTarget = (i, dir) => update({ targets: moveInArray(report.targets, i, dir) });
 
   // ---------- Cores ----------
   const addCore = () => update({
@@ -3545,6 +3713,7 @@ export default function GSSIReportApp() {
     update({ cores: next });
   };
   const removeCore = (i) => update({ cores: report.cores.filter((_, j) => j !== i) });
+  const moveCore = (i, dir) => update({ cores: moveInArray(report.cores, i, dir) });
 
   // ---------- Export ----------
   const exportJSON = () => {
@@ -3568,7 +3737,7 @@ export default function GSSIReportApp() {
     r.readAsText(file);
   };
 
-  const printPDF = () => window.print();
+  const printPDF = () => { rememberRecents(); window.print(); };
 
   // Tier-based visibility
   const tier = report.tier;
@@ -3645,6 +3814,11 @@ export default function GSSIReportApp() {
           outline: 2px dashed #e02020;
           outline-offset: -2px;
         }
+        /* Report body is a flex column so section print order can be set via
+           CSS 'order'. Brand letterhead pins to the very top, footer to bottom. */
+        .report-body { display: flex; flex-direction: column; }
+        .report-body > .brand-ribbon  { order: -100; }
+        .report-body > .brand-signoff { order: 100000; }
         /* CAD-page on-screen container (matches the print landscape look loosely) */
         .cad-page {
           background: #fff; color: #000;
@@ -3891,8 +4065,20 @@ export default function GSSIReportApp() {
         textAlign: 'center',
         overflow: 'visible',
       }}>
-        {/* Action buttons sit in their own row, right-aligned */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
+        {/* Action buttons sit in their own row; save status pinned to the left */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span title="Your work auto-saves to this device" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4,
+            color: c.green, background: c.greenBg,
+            border: `1px solid ${c.green}`, borderRadius: 20,
+            padding: '4px 9px', whiteSpace: 'nowrap',
+          }}>
+            ✓ {savedAt
+              ? `Saved ${new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              : 'Auto-save on'}
+          </span>
+          <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <button onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
@@ -3916,6 +4102,39 @@ export default function GSSIReportApp() {
             }}>
             🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
+          <button onClick={() => setDraftsOpen(true)}
+            title="Saved drafts — keep multiple reports"
+            aria-label="Saved drafts"
+            style={{
+              background: c.cardAlt, color: c.text,
+              border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            📚 {drafts.length > 0 ? drafts.length : ''}
+          </button>
+          <button onClick={() => setContactsOpen(true)}
+            title="Customer contacts"
+            aria-label="Customer contacts"
+            style={{
+              background: c.cardAlt, color: c.text,
+              border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            👥
+          </button>
+          <button onClick={() => setHelpOpen(true)}
+            title="Getting started — how to save and send"
+            aria-label="Getting started guide"
+            style={{
+              background: c.cardAlt, color: c.text,
+              border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            ❓
+          </button>
           <button onClick={() => setConfirmReset(true)}
             title="Reset the form (with save-first prompt)"
             aria-label="Reset form"
@@ -3936,6 +4155,7 @@ export default function GSSIReportApp() {
             📂 Load
             <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
           </label>
+          </span>
         </div>
 
         {/* Logo centered as its own hero element (now carries the brand on its own) */}
@@ -4049,43 +4269,72 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
-      <Card title="Print setup · sections to include in the PDF" dense className="no-print">
+      <Card title="Print setup · sections, order & visibility" dense className="no-print">
         <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
-          Pick which sections appear when you export the PDF. The Preview button shows
-          exactly what will print before you save or send.
+          Tick which sections appear in the PDF, and use ▲▼ to set the order they print in.
+          The Preview button shows exactly what will print before you save or send.
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 9, flexWrap: 'wrap' }}>
           <Btn variant="ghost" onClick={() => setAllVis(true)}
             style={{ flex: 1, fontSize: 11 }}>✓ Select all</Btn>
           <Btn variant="ghost" onClick={() => setAllVis(false)}
             style={{ flex: 1, fontSize: 11 }}>✕ Clear all</Btn>
+          <Btn variant="ghost" onClick={() => update({ sectionOrder: [] })}
+            title="Restore the default section order"
+            style={{ flex: 1, fontSize: 11 }}>↕ Reset order</Btn>
           <Btn variant="primary" onClick={() => setPreviewMode(true)}
             style={{ flex: 1.4, fontSize: 11 }}>👁 Preview</Btn>
         </div>
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4,
-          maxHeight: 280, overflowY: 'auto',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          maxHeight: 320, overflowY: 'auto',
           border: `1px solid ${c.border}`, borderRadius: 6, padding: 6,
         }}>
-          {SECTION_IDS.map(s => {
-            const on = vis(s.id);
+          {effectiveOrder.map((id, idx) => {
+            const s = SECTION_IDS.find(x => x.id === id);
+            if (!s) return null;
+            const on = vis(id);
             return (
-              <label key={s.id} style={{
+              <div key={id} style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 6px', borderRadius: 4,
+                padding: '4px 6px', borderRadius: 4,
                 background: on ? c.cardAlt : 'transparent',
                 fontSize: 11, color: on ? c.text : c.textFaint,
-                cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
               }}>
-                <input type="checkbox" checked={on}
-                  onChange={e => setVis(s.id, e.target.checked)}
-                  style={{ accentColor: c.accent, flexShrink: 0 }} />
-                <span>{s.label}</span>
-              </label>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
+                  cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
+                }}>
+                  <input type="checkbox" checked={on}
+                    onChange={e => setVis(id, e.target.checked)}
+                    style={{ accentColor: c.accent, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                </label>
+                <button onClick={() => moveSection(id, -1)} disabled={idx === 0}
+                  title="Move up" aria-label="Move section up" style={{
+                    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    opacity: idx === 0 ? 0.3 : 1, flexShrink: 0,
+                  }}>▲</button>
+                <button onClick={() => moveSection(id, 1)} disabled={idx === effectiveOrder.length - 1}
+                  title="Move down" aria-label="Move section down" style={{
+                    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    opacity: idx === effectiveOrder.length - 1 ? 0.3 : 1, flexShrink: 0,
+                  }}>▼</button>
+              </div>
             );
           })}
         </div>
       </Card>
+
+      {/* Per-section print order, driven by report.sectionOrder */}
+      <style>{
+        effectiveOrder.map((id, i) => `.ak-sec-${id}{order:${i};}`).join('')
+      }</style>
+
+      {/* === REPORT BODY (flex column; section order set via CSS) === */}
+      <div className="report-body">
 
       {/* === SAME-DAY WORKFLOW STATUS === */}
       <Card title="Workflow status" dense className={ph('workflowStatus')}>
@@ -4167,10 +4416,22 @@ export default function GSSIReportApp() {
           </Field>
         </div>
         <Field label="Client">
-          <Input value={report.client} onChange={e => update({ client: e.target.value })} placeholder="Client name" />
+          <Input value={report.client} onChange={e => update({ client: e.target.value })}
+            list="ak-client-suggestions" placeholder="Client name" />
+          <datalist id="ak-client-suggestions">
+            {[...new Set([
+              ...contacts.map(ct => ct.company).filter(Boolean),
+              ...contacts.map(ct => ct.name).filter(Boolean),
+              ...(recents.recentClients || []),
+            ])].map((v, k) => <option key={k} value={v} />)}
+          </datalist>
         </Field>
         <Field label="Site address">
-          <Input value={report.siteAddress} onChange={e => update({ siteAddress: e.target.value })} placeholder="1055 W Georgia, Vancouver BC" />
+          <Input value={report.siteAddress} onChange={e => update({ siteAddress: e.target.value })}
+            list="ak-site-suggestions" placeholder="1055 W Georgia, Vancouver BC" />
+          <datalist id="ak-site-suggestions">
+            {(recents.recentSites || []).map((v, k) => <option key={k} value={v} />)}
+          </datalist>
         </Field>
         <Field label="Scan area / description">
           <Input value={report.scanArea} onChange={e => update({ scanArea: e.target.value })} placeholder="P2 parkade slab, grid C4" />
@@ -4281,6 +4542,10 @@ export default function GSSIReportApp() {
                       <option>Pan decking</option>
                       <option>Unknown anomaly</option>
                     </Select>
+                    <Btn variant="ghost" onClick={() => moveTarget(i, -1)} disabled={i === 0}
+                      title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
+                    <Btn variant="ghost" onClick={() => moveTarget(i, 1)} disabled={i === report.targets.length - 1}
+                      title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.targets.length - 1 ? 0.35 : 1 }}>▼</Btn>
                     <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
@@ -4670,7 +4935,13 @@ export default function GSSIReportApp() {
                   <Input value={co.size} onChange={e => updateCore(i, { size: e.target.value })}
                     placeholder='4"' style={{ width: 56, padding: '4px 6px', fontSize: 12 }} />
                 </div>
-                <Btn variant="ghost" onClick={() => removeCore(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <Btn variant="ghost" onClick={() => moveCore(i, -1)} disabled={i === 0}
+                    title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
+                  <Btn variant="ghost" onClick={() => moveCore(i, 1)} disabled={i === report.cores.length - 1}
+                    title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.cores.length - 1 ? 0.35 : 1 }}>▼</Btn>
+                  <Btn variant="ghost" onClick={() => removeCore(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                </div>
               </div>
               <Select value={co.verdict} onChange={e => updateCore(i, { verdict: e.target.value })}
                 style={{ marginBottom: 5, fontSize: 13, color: v.color, fontWeight: 600 }}>
@@ -5015,6 +5286,8 @@ export default function GSSIReportApp() {
         </div>
       )}
 
+      </div>{/* === END REPORT BODY === */}
+
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
@@ -5055,9 +5328,29 @@ export default function GSSIReportApp() {
               tap 📄 PDF first, save it, then attach the file after the email opens.
             </div>
 
-            <Field label="To (optional)">
+            {contacts.length > 0 && (
+              <Field label="Pick a saved contact">
+                <Select value=""
+                  onChange={e => { if (e.target.value) setEmailTo(e.target.value); }}>
+                  <option value="">— choose a contact —</option>
+                  {contacts.filter(ct => ct.email).map(ct => (
+                    <option key={ct.id} value={ct.email}>
+                      {[ct.name, ct.company].filter(Boolean).join(' · ') || ct.email} — {ct.email}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <Field label="To (optional)" hint={
+              <span>Manage saved customers from the <strong>👥</strong> button in the header.</span>
+            }>
               <Input value={emailTo} onChange={e => setEmailTo(e.target.value)}
-                placeholder="reviewer@example.com" />
+                list="ak-contact-emails" placeholder="reviewer@example.com" />
+              <datalist id="ak-contact-emails">
+                {contacts.filter(ct => ct.email).map(ct => (
+                  <option key={ct.id} value={ct.email}>{ct.name || ct.company}</option>
+                ))}
+              </datalist>
             </Field>
             <Field label="Subject">
               <Input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
@@ -5076,6 +5369,17 @@ export default function GSSIReportApp() {
                 ✉ Open Email
               </Btn>
             </div>
+            {canShare && (
+              <Btn onClick={shareReport} style={{ width: '100%', marginTop: 6 }}
+                title="Open your device's share menu (Mail, Messages, etc.) with this draft and a backup file attached">
+                📤 Share · attaches backup file
+              </Btn>
+            )}
+            {shareNote && (
+              <div style={{ fontSize: 11, color: c.amberStrong, marginTop: 6, textAlign: 'center' }}>
+                {shareNote}
+              </div>
+            )}
             <Btn variant="ghost" onClick={() => setEmailDialogOpen(false)}
               style={{ width: '100%', marginTop: 6 }}>
               Cancel
@@ -5116,6 +5420,233 @@ export default function GSSIReportApp() {
             <Btn variant="ghost" onClick={() => setConfirmReset(false)}
               style={{ width: '100%', marginTop: 6 }}>
               Cancel
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* === SAVED DRAFTS === */}
+      {draftsOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setDraftsOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 18,
+            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              📚 Saved drafts
+            </div>
+            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+              Keep multiple reports on this device. Saving snapshots the current report;
+              loading replaces what's on screen (the live report auto-saves separately).
+            </div>
+            <Btn variant="primary" onClick={() => saveNamedDraft()} style={{ width: '100%', marginBottom: 12 }}>
+              ＋ Save current report as a draft
+            </Btn>
+            {drafts.length === 0 ? (
+              <div style={{
+                padding: 14, textAlign: 'center', fontSize: 12, color: c.textFaint,
+                background: c.cardAlt, borderRadius: 6,
+              }}>No saved drafts yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {drafts.map(d => (
+                  <div key={d.id} style={{
+                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 9, background: c.cardAlt,
+                  }}>
+                    <Input value={d.name}
+                      onChange={e => setDrafts(list => list.map(x => x.id === d.id ? { ...x, name: e.target.value } : x))}
+                      style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
+                    <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 7 }}>
+                      Saved {new Date(d.savedAt).toLocaleString()}
+                      {(d.report?.targets?.length || 0) > 0 && ` · ${d.report.targets.length} target${d.report.targets.length === 1 ? '' : 's'}`}
+                      {(d.report?.cores?.length || 0) > 0 && ` · ${d.report.cores.length} core${d.report.cores.length === 1 ? '' : 's'}`}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6 }}>
+                      <Btn variant="primary" onClick={() => loadDraft(d.id)} style={{ fontSize: 12 }}>
+                        📂 Load
+                      </Btn>
+                      <Btn variant="ghost" onClick={() => deleteDraft(d.id)}
+                        style={{ fontSize: 12, borderColor: c.red, color: c.red }}>
+                        🗑 Delete
+                      </Btn>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Btn variant="ghost" onClick={() => setDraftsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+              Close
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* === CUSTOMER CONTACTS === */}
+      {contactsOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setContactsOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 18,
+            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              👥 Customer contacts
+            </div>
+            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+              Save the people you send reports to. They appear as quick-pick options in the
+              Email dialog and as suggestions on the Client field.
+            </div>
+            <Btn variant="primary" onClick={() => addContact({})} style={{ width: '100%', marginBottom: 12 }}>
+              ＋ Add contact
+            </Btn>
+            {contacts.length === 0 ? (
+              <div style={{
+                padding: 14, textAlign: 'center', fontSize: 12, color: c.textFaint,
+                background: c.cardAlt, borderRadius: 6,
+              }}>No contacts yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {contacts.map(ct => (
+                  <div key={ct.id} style={{
+                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 9, background: c.cardAlt,
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                      <Input value={ct.name} placeholder="Contact name"
+                        onChange={e => updateContact(ct.id, { name: e.target.value })}
+                        style={{ fontSize: 13 }} />
+                      <Input value={ct.company} placeholder="Company"
+                        onChange={e => updateContact(ct.id, { company: e.target.value })}
+                        style={{ fontSize: 13 }} />
+                    </div>
+                    <Input value={ct.email} type="email" placeholder="email@example.com"
+                      onChange={e => updateContact(ct.id, { email: e.target.value })}
+                      style={{ fontSize: 13, marginBottom: 6 }} />
+                    <Input value={ct.note} placeholder="Note (optional)"
+                      onChange={e => updateContact(ct.id, { note: e.target.value })}
+                      style={{ fontSize: 12, marginBottom: 6 }} />
+                    <Btn variant="ghost" onClick={() => removeContact(ct.id)}
+                      style={{ width: '100%', fontSize: 12, borderColor: c.red, color: c.red }}>
+                      🗑 Remove
+                    </Btn>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Btn variant="ghost" onClick={() => setContactsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+              Close
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* === GETTING STARTED GUIDE === */}
+      {helpOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 250,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setHelpOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 20,
+            width: 'min(560px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              👋 Getting started
+            </div>
+            <div style={{ fontSize: 12.5, color: c.textDim, marginBottom: 16, lineHeight: 1.5 }}>
+              A quick guide to saving your work and sending a report. You can reopen this
+              any time with the <strong>❓</strong> button at the top.
+            </div>
+
+            {[
+              {
+                icon: '✓', title: 'Your work saves itself',
+                body: 'Everything you type is saved automatically on this computer, in this web browser. ' +
+                      'You can close the tab and come back later — it will still be here. The green ' +
+                      '“✓ Saved” tag at the top shows the last time it saved.',
+              },
+              {
+                icon: '📚', title: 'Keep more than one report',
+                body: 'Click 📚 (top of the screen) to save a snapshot of the current report and start a ' +
+                      'fresh one. Open 📚 again any time to load an older report back up.',
+              },
+              {
+                icon: '💾', title: 'Save a backup file to your computer',
+                body: 'Click “💾 Save draft” at the bottom. Your browser downloads a small backup file ' +
+                      '(its name ends in .json). Keep it in a project folder. To open it again later — ' +
+                      'on this computer or a different one — click “📂 Load” at the top and pick that file.',
+              },
+              {
+                icon: '📄', title: 'Make the PDF to send',
+                body: 'Click “📄 PDF”. Your browser’s print window opens. In the “Destination” or ' +
+                      '“Printer” box, choose “Save as PDF”, then Save. Pick somewhere easy to find, ' +
+                      'like your Desktop. Tip: use “👁 Preview” first to choose which sections to include.',
+              },
+              {
+                icon: '📧', title: 'Email the report',
+                body: 'Click “📧 Email” for a ready-made message. Browsers can’t attach the PDF for you, ' +
+                      'so attach the PDF you just saved before you send. Save the people you email often ' +
+                      'under “👥 Contacts” so their address fills in with one click.',
+              },
+              {
+                icon: '⚠', title: 'Important — where things are stored',
+                body: 'Drafts and contacts live only in this browser, on this computer. If you clear your ' +
+                      'browser history/data or move to another computer, use the backup file (💾 to save, ' +
+                      '📂 to load) to carry your work across. The backup file is the safe copy.',
+              },
+            ].map((step, i) => (
+              <div key={i} style={{
+                display: 'flex', gap: 11, marginBottom: 13,
+                paddingBottom: 13,
+                borderBottom: i < 5 ? `1px solid ${c.border}` : 'none',
+              }}>
+                <div style={{
+                  flexShrink: 0, width: 30, height: 30, borderRadius: 8,
+                  background: c.accentDim, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 15, fontWeight: 800,
+                }}>{step.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: c.text, marginBottom: 3 }}>
+                    {i + 1}. {step.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: c.textDim, lineHeight: 1.55 }}>{step.body}</div>
+                </div>
+              </div>
+            ))}
+
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '10px 12px', marginBottom: 10, marginTop: 2,
+              background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 8,
+              cursor: 'pointer',
+            }}>
+              <input type="checkbox" checked={helpAutoShow}
+                onChange={e => setHelpAutoShow(e.target.checked)}
+                style={{ accentColor: c.accent, width: 17, height: 17, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: c.text, lineHeight: 1.4 }}>
+                Show this guide automatically when the app opens.
+                <span style={{ color: c.textFaint }}> You can turn it back on any time with the ❓ button.</span>
+              </span>
+            </label>
+            <Btn variant="primary" onClick={() => setHelpOpen(false)} style={{ width: '100%', padding: '11px 12px', fontWeight: 700 }}>
+              Got it — let’s go
             </Btn>
           </div>
         </div>
