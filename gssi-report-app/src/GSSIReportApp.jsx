@@ -11,7 +11,7 @@ const STORAGE_KEY = 'gssi_report_v2';
 const CONTACTS_KEY = 'ak_contacts';   // customer/contact directory (cross-report)
 const DRAFTS_KEY   = 'ak_drafts';     // named saved reports (cross-report)
 const AUTOFILL_KEY = 'ak_autofill';   // remembered sticky fields + recent client/site values
-const HELP_SEEN_KEY = 'ak_help_seen'; // first-run Getting Started guide dismissed
+const HELP_AUTOSHOW_KEY = 'ak_help_autoshow'; // whether the Getting Started guide opens on startup
 
 // Fields that repeat job-to-job — carried forward into a new/blank report so the
 // technician doesn't re-key equipment, calibration, sign-off and legal text every time.
@@ -3514,14 +3514,17 @@ export default function GSSIReportApp() {
   const updateContact = (id, patch) => setContacts(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
   const removeContact = (id) => setContacts(cs => cs.filter(c => c.id !== id));
 
-  // ---------- Getting Started guide (opens automatically the first time) ----------
-  const [helpOpen, setHelpOpen] = useState(() => {
-    try { return !localStorage.getItem(HELP_SEEN_KEY); } catch { return false; }
+  // ---------- Getting Started guide ----------
+  // Auto-opens on startup while the "show automatically" toggle is on. The toggle
+  // is persisted so anyone can turn it off, or back on if they need a refresher.
+  const [helpAutoShow, setHelpAutoShow] = useState(() => {
+    try { const v = localStorage.getItem(HELP_AUTOSHOW_KEY); return v === null ? true : v === '1'; }
+    catch { return true; }
   });
-  const dismissHelp = () => {
-    try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch {}
-    setHelpOpen(false);
-  };
+  const [helpOpen, setHelpOpen] = useState(helpAutoShow);
+  useEffect(() => {
+    try { localStorage.setItem(HELP_AUTOSHOW_KEY, helpAutoShow ? '1' : '0'); } catch {}
+  }, [helpAutoShow]);
 
   // ---------- Reset/refresh form (with save-first guard) ----------
   const [confirmReset, setConfirmReset] = useState(false);
@@ -5556,7 +5559,7 @@ export default function GSSIReportApp() {
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 16,
-        }} onClick={dismissHelp}>
+        }} onClick={() => setHelpOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
             borderRadius: 10, padding: 20,
@@ -5628,7 +5631,21 @@ export default function GSSIReportApp() {
               </div>
             ))}
 
-            <Btn variant="primary" onClick={dismissHelp} style={{ width: '100%', marginTop: 4, padding: '11px 12px', fontWeight: 700 }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '10px 12px', marginBottom: 10, marginTop: 2,
+              background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 8,
+              cursor: 'pointer',
+            }}>
+              <input type="checkbox" checked={helpAutoShow}
+                onChange={e => setHelpAutoShow(e.target.checked)}
+                style={{ accentColor: c.accent, width: 17, height: 17, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: c.text, lineHeight: 1.4 }}>
+                Show this guide automatically when the app opens.
+                <span style={{ color: c.textFaint }}> You can turn it back on any time with the ❓ button.</span>
+              </span>
+            </label>
+            <Btn variant="primary" onClick={() => setHelpOpen(false)} style={{ width: '100%', padding: '11px 12px', fontWeight: 700 }}>
               Got it — let’s go
             </Btn>
           </div>
