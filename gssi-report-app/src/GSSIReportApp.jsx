@@ -51,6 +51,13 @@ const moveInArray = (arr, i, dir) => {
   return next;
 };
 
+// Make a value safe and tidy for use inside a file name.
+const slugify = (s, cap = 40) => (s || '')
+  .trim().toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, cap);
+
 // Subtle company tagline used by the optional Brand Flourishes flag.
 // Plays on the company name (cutting & coring) and what GPR actually does.
 const BRAND_TAGLINE = 'Cutting through what others can’t see.';
@@ -65,6 +72,7 @@ const DEFAULT_REPORT = {
 
   // Cover
   projectNo: '',
+  jobNote: '',           // short description used to make saved file names recognizable
   scanDate: new Date().toISOString().slice(0, 10),
   client: '',
   siteAddress: '',
@@ -3502,7 +3510,7 @@ export default function GSSIReportApp() {
   };
   const loadDraft = (id) => {
     const d = drafts.find(x => x.id === id);
-    if (d) { setReport({ ...DEFAULT_REPORT, ...d.report }); setDraftsOpen(false); }
+    if (d) { setReport({ ...DEFAULT_REPORT, ...d.report }); forgetFile(); setDraftsOpen(false); }
   };
   const deleteDraft = (id) => setDrafts(d => d.filter(x => x.id !== id));
 
@@ -3530,6 +3538,7 @@ export default function GSSIReportApp() {
   const [confirmReset, setConfirmReset] = useState(false);
   const doReset = () => {
     setReport(freshReport());
+    forgetFile();
     setConfirmReset(false);
   };
 
@@ -3715,23 +3724,69 @@ export default function GSSIReportApp() {
   const removeCore = (i) => update({ cores: report.cores.filter((_, j) => j !== i) });
   const moveCore = (i, dir) => update({ cores: moveInArray(report.cores, i, dir) });
 
-  // ---------- Export ----------
+  // ---------- Save / export ----------
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveNote, setSaveNote] = useState('');           // status line shown in the Save dialog
+  const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window;
+  const fileHandleRef = useRef(null);                     // the file we keep updating (this session)
+  const [savedFileName, setSavedFileName] = useState(null);
+
+  const reportJSON = () => JSON.stringify(report, null, 2);
+
+  // A recognizable, collision-resistant file name: job number + description + date.
+  const baseFileName = () => {
+    const parts = ['gssi', report.projectNo, slugify(report.jobNote || report.client), report.scanDate];
+    const base = parts.map(p => slugify(String(p || ''))).filter(Boolean).join('-');
+    return base || 'gssi-scan-report';
+  };
+
+  // Download path: ALWAYS a unique file (adds a time stamp), so a download can
+  // never overwrite an earlier saved file.
   const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    rememberRecents();
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(/[-:]/g, '');
+    const blob = new Blob([reportJSON()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gssi-${report.projectNo || 'draft'}-${report.scanDate}.json`;
+    a.download = `${baseFileName()}-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    setSaveNote(`Downloaded ${a.download}`);
   };
+
+  // File System Access path: pick a file once, then keep updating that same file.
+  const writeToHandle = async (handle) => {
+    const writable = await handle.createWritable();
+    await writable.write(new Blob([reportJSON()], { type: 'application/json' }));
+    await writable.close();
+  };
+  const saveToFile = async (forceNew = false) => {
+    if (!supportsFS) { exportJSON(); return; }
+    try {
+      if (forceNew || !fileHandleRef.current) {
+        fileHandleRef.current = await window.showSaveFilePicker({
+          suggestedName: `${baseFileName()}.json`,
+          types: [{ description: 'Scan report backup', accept: { 'application/json': ['.json'] } }],
+        });
+      }
+      await writeToHandle(fileHandleRef.current);
+      rememberRecents();
+      setSavedFileName(fileHandleRef.current.name);
+      setSaveNote(`Saved to ${fileHandleRef.current.name}`);
+    } catch (err) {
+      if (err && err.name !== 'AbortError') setSaveNote('Could not save to that file — try Download backup instead.');
+    }
+  };
+  // Starting/loading a different job must not write into the previous job's file.
+  const forgetFile = () => { fileHandleRef.current = null; setSavedFileName(null); };
 
   const importJSON = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const r = new FileReader();
     r.onload = (ev) => {
-      try { setReport({ ...DEFAULT_REPORT, ...JSON.parse(ev.target.result) }); }
+      try { setReport({ ...DEFAULT_REPORT, ...JSON.parse(ev.target.result) }); forgetFile(); }
       catch { alert('Invalid JSON'); }
     };
     r.readAsText(file);
@@ -4406,6 +4461,11 @@ export default function GSSIReportApp() {
       <Card title="Project info" className={ph('cover')}>
         <Field label="Project number">
           <Input value={report.projectNo} onChange={e => update({ projectNo: e.target.value })} placeholder="VAN-2026-0341" />
+        </Field>
+        <Field label="Job description"
+          hint="A short note to recognize this job later — also used to name saved files.">
+          <Input value={report.jobNote} onChange={e => update({ jobNote: e.target.value })}
+            placeholder="P2 parkade north wall" />
         </Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Scan date">
@@ -5296,11 +5356,11 @@ export default function GSSIReportApp() {
       }}>
         <Btn variant="primary" onClick={printPDF} title="Open the print window — choose “Save as PDF” to make the file you send">📄 PDF</Btn>
         <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email (attach the saved PDF yourself before sending)">📧 Email</Btn>
-        <Btn onClick={exportJSON} title="Download a backup file (.json) of this report. It’s a snapshot — click again after changes to get an updated copy.">💾 Save draft</Btn>
+        <Btn onClick={() => { setSaveNote(''); setSaveOpen(true); }} title="Save a backup file you can re-open or update later">💾 Save</Btn>
       </div>
       <div className="no-print" style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', marginTop: 7, lineHeight: 1.5 }}>
-        Your work auto-saves in this browser. <strong>💾 Save draft</strong> downloads a backup
-        file snapshot — re-save after changes to update it. New here? Tap <strong>❓</strong> up top.
+        Your work auto-saves in this browser. <strong>💾 Save</strong> makes a backup file you can
+        update or keep — downloads never overwrite an earlier one. New here? Tap <strong>❓</strong> up top.
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
@@ -5556,6 +5616,105 @@ export default function GSSIReportApp() {
         </div>
       )}
 
+      {/* === SAVE DIALOG === */}
+      {saveOpen && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 220,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={() => setSaveOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 10, padding: 18,
+            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+              💾 Save this report
+            </div>
+            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+              Your work already auto-saves inside this browser. Saving here makes a backup
+              <strong> file</strong> you can keep, re-open, or move to another computer.
+            </div>
+
+            <Field label="Job description (used in the file name)"
+              hint="A short note so you can recognize this job's file later.">
+              <Input value={report.jobNote} onChange={e => update({ jobNote: e.target.value })}
+                placeholder="P2 parkade north wall" />
+            </Field>
+            <div style={{
+              fontSize: 11, color: c.textDim, background: c.cardAlt,
+              border: `1px solid ${c.border}`, borderRadius: 6, padding: '7px 9px',
+              marginBottom: 12, wordBreak: 'break-all',
+            }}>
+              File name: <strong style={{ color: c.text }}>{baseFileName()}.json</strong>
+            </div>
+
+            {supportsFS && (
+              <div style={{
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+              }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+                  Save to a file you can update
+                </div>
+                <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+                  Pick the file once. After that, one click updates that same file —
+                  no piling-up copies.
+                </div>
+                {savedFileName ? (
+                  <>
+                    <div style={{ fontSize: 11, color: c.green, marginBottom: 8 }}>
+                      ✓ Linked to <strong>{savedFileName}</strong>
+                    </div>
+                    <Btn variant="primary" onClick={() => saveToFile(false)} style={{ width: '100%', marginBottom: 6 }}>
+                      💾 Update “{savedFileName}”
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => saveToFile(true)} style={{ width: '100%', fontSize: 12 }}>
+                      Choose a different file…
+                    </Btn>
+                  </>
+                ) : (
+                  <Btn variant="primary" onClick={() => saveToFile(false)} style={{ width: '100%' }}>
+                    📌 Choose file &amp; save
+                  </Btn>
+                )}
+              </div>
+            )}
+
+            <div style={{
+              border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+            }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+                Download a backup copy
+              </div>
+              <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+                Saves to your Downloads folder. Each download includes the date &amp; time, so it
+                <strong> never overwrites</strong> an earlier file.
+              </div>
+              <Btn variant={supportsFS ? 'default' : 'primary'} onClick={exportJSON} style={{ width: '100%' }}>
+                ⬇ Download backup copy
+              </Btn>
+            </div>
+
+            {!supportsFS && (
+              <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+                Tip: the one-click “save &amp; update the same file” option works in Chrome or Edge
+                on a computer.
+              </div>
+            )}
+            {saveNote && (
+              <div style={{ fontSize: 11.5, color: c.green, textAlign: 'center', marginBottom: 8 }}>
+                {saveNote}
+              </div>
+            )}
+            <Btn variant="ghost" onClick={() => setSaveOpen(false)} style={{ width: '100%' }}>
+              Close
+            </Btn>
+          </div>
+        </div>
+      )}
+
       {/* === GETTING STARTED GUIDE === */}
       {helpOpen && (
         <div className="no-print" style={{
@@ -5593,12 +5752,12 @@ export default function GSSIReportApp() {
               },
               {
                 icon: '💾', title: 'Save a backup file to your computer',
-                body: 'Click “💾 Save draft” at the bottom to download a backup file (its name ends in .json) ' +
-                      'into your Downloads folder. Keep it somewhere safe, like a project folder. ' +
-                      'IMPORTANT: this file is a one-time snapshot — it does NOT keep updating on its own. ' +
-                      'If you change the report afterward, click “💾 Save draft” again to download a fresh copy. ' +
-                      'To re-open a saved file later (on this or another computer), click “📂 Load” at the top ' +
-                      'and pick it.',
+                body: 'Click “💾 Save” at the bottom. Give the job a short description (it becomes the file ' +
+                      'name, so files are easy to recognize). In Chrome or Edge you can “Choose file & save”, ' +
+                      'then later just click “Update” to save changes back into that same file. ' +
+                      'Or use “Download backup copy” — each download is stamped with the date & time, so it ' +
+                      'never overwrites an earlier file. To re-open a saved file later (on this or another ' +
+                      'computer), click “📂 Load” at the top and pick it.',
               },
               {
                 icon: '📄', title: 'Make the PDF to send',
