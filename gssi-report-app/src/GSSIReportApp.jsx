@@ -190,6 +190,10 @@ const DEFAULT_REPORT = {
   // Empty object means "all sections on" — only exclusions are stored.
   // Section ids match the SECTION_IDS list rendered in the Print setup card.
   sectionVisibility: {},
+
+  // Custom print order for sections (list of section ids). Empty = default
+  // SECTION_IDS order. Missing ids fall back to their default position.
+  sectionOrder: [],
 };
 
 // ============================================================
@@ -3637,8 +3641,27 @@ export default function GSSIReportApp() {
   const setAllVis = (on) => update({
     sectionVisibility: on ? {} : SECTION_IDS.reduce((a, s) => { a[s.id] = false; return a; }, {}),
   });
-  // CSS class to drop a section from print/preview while keeping it visible on screen
-  const ph = (id) => vis(id) ? '' : 'print-hidden';
+
+  // ---------- Section print order ----------
+  // Effective order = saved custom order first (valid ids only), then any
+  // sections not yet in the custom list, in their default SECTION_IDS order.
+  const effectiveOrder = (() => {
+    const base = SECTION_IDS.map(s => s.id);
+    const saved = (report.sectionOrder || []).filter(id => base.includes(id));
+    return [...saved, ...base.filter(id => !saved.includes(id))];
+  })();
+  const moveSection = (id, dir) => {
+    const arr = [...effectiveOrder];
+    const i = arr.indexOf(id);
+    const j = i + dir;
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    update({ sectionOrder: arr });
+  };
+
+  // CSS class to drop a section from print/preview while keeping it visible on
+  // screen, plus a stable per-section hook used to drive the print order.
+  const ph = (id) => `ak-sec ak-sec-${id}${vis(id) ? '' : ' print-hidden'}`;
 
   useEffect(() => {
     if (previewMode) document.body.classList.add('preview-mode');
@@ -3778,6 +3801,11 @@ export default function GSSIReportApp() {
           outline: 2px dashed #e02020;
           outline-offset: -2px;
         }
+        /* Report body is a flex column so section print order can be set via
+           CSS 'order'. Brand letterhead pins to the very top, footer to bottom. */
+        .report-body { display: flex; flex-direction: column; }
+        .report-body > .brand-ribbon  { order: -100; }
+        .report-body > .brand-signoff { order: 100000; }
         /* CAD-page on-screen container (matches the print landscape look loosely) */
         .cad-page {
           background: #fff; color: #000;
@@ -4217,43 +4245,72 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
-      <Card title="Print setup · sections to include in the PDF" dense className="no-print">
+      <Card title="Print setup · sections, order & visibility" dense className="no-print">
         <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
-          Pick which sections appear when you export the PDF. The Preview button shows
-          exactly what will print before you save or send.
+          Tick which sections appear in the PDF, and use ▲▼ to set the order they print in.
+          The Preview button shows exactly what will print before you save or send.
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 9, flexWrap: 'wrap' }}>
           <Btn variant="ghost" onClick={() => setAllVis(true)}
             style={{ flex: 1, fontSize: 11 }}>✓ Select all</Btn>
           <Btn variant="ghost" onClick={() => setAllVis(false)}
             style={{ flex: 1, fontSize: 11 }}>✕ Clear all</Btn>
+          <Btn variant="ghost" onClick={() => update({ sectionOrder: [] })}
+            title="Restore the default section order"
+            style={{ flex: 1, fontSize: 11 }}>↕ Reset order</Btn>
           <Btn variant="primary" onClick={() => setPreviewMode(true)}
             style={{ flex: 1.4, fontSize: 11 }}>👁 Preview</Btn>
         </div>
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4,
-          maxHeight: 280, overflowY: 'auto',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          maxHeight: 320, overflowY: 'auto',
           border: `1px solid ${c.border}`, borderRadius: 6, padding: 6,
         }}>
-          {SECTION_IDS.map(s => {
-            const on = vis(s.id);
+          {effectiveOrder.map((id, idx) => {
+            const s = SECTION_IDS.find(x => x.id === id);
+            if (!s) return null;
+            const on = vis(id);
             return (
-              <label key={s.id} style={{
+              <div key={id} style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 6px', borderRadius: 4,
+                padding: '4px 6px', borderRadius: 4,
                 background: on ? c.cardAlt : 'transparent',
                 fontSize: 11, color: on ? c.text : c.textFaint,
-                cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
               }}>
-                <input type="checkbox" checked={on}
-                  onChange={e => setVis(s.id, e.target.checked)}
-                  style={{ accentColor: c.accent, flexShrink: 0 }} />
-                <span>{s.label}</span>
-              </label>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
+                  cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
+                }}>
+                  <input type="checkbox" checked={on}
+                    onChange={e => setVis(id, e.target.checked)}
+                    style={{ accentColor: c.accent, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                </label>
+                <button onClick={() => moveSection(id, -1)} disabled={idx === 0}
+                  title="Move up" aria-label="Move section up" style={{
+                    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    opacity: idx === 0 ? 0.3 : 1, flexShrink: 0,
+                  }}>▲</button>
+                <button onClick={() => moveSection(id, 1)} disabled={idx === effectiveOrder.length - 1}
+                  title="Move down" aria-label="Move section down" style={{
+                    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
+                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    opacity: idx === effectiveOrder.length - 1 ? 0.3 : 1, flexShrink: 0,
+                  }}>▼</button>
+              </div>
             );
           })}
         </div>
       </Card>
+
+      {/* Per-section print order, driven by report.sectionOrder */}
+      <style>{
+        effectiveOrder.map((id, i) => `.ak-sec-${id}{order:${i};}`).join('')
+      }</style>
+
+      {/* === REPORT BODY (flex column; section order set via CSS) === */}
+      <div className="report-body">
 
       {/* === SAME-DAY WORKFLOW STATUS === */}
       <Card title="Workflow status" dense className={ph('workflowStatus')}>
@@ -5204,6 +5261,8 @@ export default function GSSIReportApp() {
           Prepared with care by the AKCC crew · {BRAND_TAGLINE}
         </div>
       )}
+
+      </div>{/* === END REPORT BODY === */}
 
       {/* === ACTIONS === */}
       <div className="no-print" style={{
