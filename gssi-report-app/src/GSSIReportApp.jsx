@@ -1057,6 +1057,25 @@ function SiteDiagram({ report, update }) {
           onMouseUp={handleEnd} onMouseLeave={handleEnd}
           onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
         />
+        {report.diagramImage && (
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Remove the site diagram photo? Your sketches and pins stay.')) {
+                update({ diagramImage: null });
+              }
+            }}
+            title="Remove site photo"
+            aria-label="Remove site photo"
+            style={{
+              position: 'absolute', top: 6, right: 6, zIndex: 3,
+              background: 'rgba(0,0,0,0.6)', color: '#fff',
+              border: '1px solid rgba(255,255,255,0.45)', borderRadius: 6,
+              padding: '5px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}>
+            ✕ Remove photo
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 6 }}>
@@ -1944,10 +1963,50 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   );
 }
 
+// Full-size photo viewer (lightbox). Tapping a thumbnail opens the photo large
+// with its markup, so uploaded photos can actually be looked at on a phone.
+function PhotoLightbox({ photo, onClose }) {
+  if (!photo) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1100,
+        background: 'rgba(0,0,0,0.88)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}>
+      <button
+        onClick={onClose} aria-label="Close photo"
+        style={{
+          position: 'absolute', top: 14, right: 16, zIndex: 2,
+          background: 'rgba(255,255,255,0.16)', color: '#fff',
+          border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8,
+          padding: '8px 13px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+        }}>
+        ✕ Close
+      </button>
+      <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
+        <AnnotatedImage
+          src={photo.dataUrl}
+          annotations={photo.annotations || []}
+          alt={photo.caption || 'Scan photo'}
+          style={{ width: 'min(94vw, 1100px)' }}
+        />
+        {photo.caption && (
+          <div style={{ color: '#fff', fontSize: 13, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+            {photo.caption}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ScanPhotos({ report, update }) {
   const fileInputRef = useRef(null);
   const cameraRef    = useRef(null);
   const [editingPhotoId, setEditingPhotoId] = useState(null);
+  const [viewingPhotoId, setViewingPhotoId] = useState(null);
   const [dragPhotoId, setDragPhotoId] = useState(null);
   const [overPhotoId, setOverPhotoId] = useState(null);
 
@@ -1988,6 +2047,7 @@ function ScanPhotos({ report, update }) {
   };
 
   const editingPhoto = report.scanPhotos.find(p => p.id === editingPhotoId);
+  const viewingPhoto = report.scanPhotos.find(p => p.id === viewingPhotoId);
 
   const updatePhoto = (id, patch) => {
     update({
@@ -2113,15 +2173,32 @@ function ScanPhotos({ report, update }) {
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
                     <div style={{ width: 84, flexShrink: 0 }}>
-                      <AnnotatedImage
-                        src={photo.dataUrl}
-                        annotations={photo.annotations || []}
-                        alt={photo.caption || 'Scan photo'}
+                      <button
+                        type="button"
+                        onClick={() => setViewingPhotoId(photo.id)}
+                        title="Open / view full size"
+                        aria-label="Open photo full size"
                         style={{
-                          width: 84, height: 84, overflow: 'hidden',
-                          borderRadius: 4, border: `1px solid ${c.border}`,
-                        }}
-                      />
+                          position: 'relative', display: 'block', padding: 0,
+                          border: 'none', background: 'none', cursor: 'zoom-in', width: 84,
+                        }}>
+                        <AnnotatedImage
+                          src={photo.dataUrl}
+                          annotations={photo.annotations || []}
+                          alt={photo.caption || 'Scan photo'}
+                          style={{
+                            width: 84, height: 84, overflow: 'hidden',
+                            borderRadius: 4, border: `1px solid ${c.border}`,
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <span style={{
+                          position: 'absolute', bottom: 3, right: 3,
+                          background: 'rgba(0,0,0,0.62)', color: '#fff',
+                          borderRadius: 4, fontSize: 11, lineHeight: 1,
+                          padding: '2px 4px', pointerEvents: 'none',
+                        }}>🔍</span>
+                      </button>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Textarea
@@ -2230,6 +2307,8 @@ function ScanPhotos({ report, update }) {
           onClose={() => setEditingPhotoId(null)}
         />
       )}
+
+      <PhotoLightbox photo={viewingPhoto} onClose={() => setViewingPhotoId(null)} />
     </Card>
   );
 }
