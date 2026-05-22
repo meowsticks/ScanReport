@@ -62,6 +62,10 @@ const slugify = (s, cap = 40) => (s || '')
 // Plays on the company name (cutting & coring) and what GPR actually does.
 const BRAND_TAGLINE = 'Know before you cut.';
 
+// Logo lives in public/. Routed through BASE_URL so it resolves both on the web
+// (served at "/") and in the desktop build (loaded from a file:// path).
+const LOGO_SRC = `${import.meta.env.BASE_URL}kamikaze-logo.png`;
+
 const DEFAULT_REPORT = {
   // Tier
   tier: 'standard',  // quick | standard | full
@@ -3728,7 +3732,11 @@ export default function GSSIReportApp() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveNote, setSaveNote] = useState('');           // status line shown in the Save dialog
   const supportsFS = typeof window !== 'undefined' && 'showSaveFilePicker' in window;
+  // Desktop build (Electron) exposes a native file API; when present we save/open
+  // real files through OS dialogs instead of the browser.
+  const desktop = typeof window !== 'undefined' && window.akDesktop && window.akDesktop.isDesktop;
   const fileHandleRef = useRef(null);                     // the file we keep updating (this session)
+  const desktopPathRef = useRef(null);                    // native file path (desktop build)
   const [savedFileName, setSavedFileName] = useState(null);
 
   const reportJSON = () => JSON.stringify(report, null, 2);
@@ -3762,6 +3770,28 @@ export default function GSSIReportApp() {
     await writable.close();
   };
   const saveToFile = async (forceNew = false) => {
+    // Desktop build: write a real file via native dialogs. The first save (or
+    // "Save As") picks a path; later saves overwrite that same file silently.
+    if (desktop) {
+      try {
+        let name;
+        if (forceNew || !desktopPathRef.current) {
+          const res = await window.akDesktop.saveFileAs(`${baseFileName()}.akscan`, reportJSON());
+          if (!res) return;                       // user cancelled the dialog
+          desktopPathRef.current = res.path;
+          name = res.name;
+        } else {
+          const res = await window.akDesktop.saveFile(desktopPathRef.current, reportJSON());
+          name = (res && res.name) ? res.name : (savedFileName || 'file');
+        }
+        setSavedFileName(name);
+        rememberRecents();
+        setSaveNote(`Saved to ${name}`);
+      } catch {
+        setSaveNote('Could not save that file.');
+      }
+      return;
+    }
     if (!supportsFS) { exportJSON(); return; }
     try {
       if (forceNew || !fileHandleRef.current) {
@@ -3779,7 +3809,7 @@ export default function GSSIReportApp() {
     }
   };
   // Starting/loading a different job must not write into the previous job's file.
-  const forgetFile = () => { fileHandleRef.current = null; setSavedFileName(null); };
+  const forgetFile = () => { fileHandleRef.current = null; desktopPathRef.current = null; setSavedFileName(null); };
 
   const importJSON = (e) => {
     const file = e.target.files?.[0];
@@ -3792,7 +3822,47 @@ export default function GSSIReportApp() {
     r.readAsText(file);
   };
 
+  // ---------- Desktop (Electron) file open ----------
+  // Load a report from a native file payload and remember its path so the next
+  // "Save" overwrites the same file.
+  const applyLoadedReport = (payload) => {
+    if (!payload || !payload.content) return;
+    try {
+      setReport({ ...DEFAULT_REPORT, ...JSON.parse(payload.content) });
+      desktopPathRef.current = payload.path || null;
+      setSavedFileName(payload.name || null);
+      setSaveNote(payload.name ? `Opened ${payload.name}` : '');
+    } catch {
+      setSaveNote('That file could not be read (not a valid report).');
+    }
+  };
+  const openFromDesktop = async () => {
+    const payload = await window.akDesktop.openFile();
+    if (payload) applyLoadedReport(payload);
+  };
+
   const printPDF = () => { rememberRecents(); window.print(); };
+
+  // Native menu actions are kept in a ref so the (mount-only) listener always
+  // calls the latest handlers without re-subscribing.
+  const desktopActionsRef = useRef({});
+  desktopActionsRef.current = {
+    'new': () => setConfirmReset(true),
+    'open': openFromDesktop,
+    'save': () => saveToFile(false),
+    'save-as': () => saveToFile(true),
+    'print': printPDF,
+  };
+  useEffect(() => {
+    if (!desktop) return;
+    const offMenu = window.akDesktop.onMenu((action) => {
+      const fn = desktopActionsRef.current[action];
+      if (fn) fn();
+    });
+    const offOpen = window.akDesktop.onOpenFile((payload) => applyLoadedReport(payload));
+    window.akDesktop.getLaunchFile().then((payload) => { if (payload) applyLoadedReport(payload); });
+    return () => { offMenu && offMenu(); offOpen && offOpen(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tier-based visibility
   const tier = report.tier;
@@ -4220,14 +4290,14 @@ export default function GSSIReportApp() {
             letterSpacing: 1, textTransform: 'uppercase',
           }}>
             📂 Load
-            <input type="file" accept=".json,application/json" onChange={importJSON} style={{ display: 'none' }} />
+            <input type="file" accept=".json,.akscan,application/json" onChange={importJSON} style={{ display: 'none' }} />
           </label>
           </span>
         </div>
 
         {/* Logo centered as its own hero element (now carries the brand on its own) */}
         <img
-          src="/kamikaze-logo.png"
+          src={LOGO_SRC}
           alt="Aggarwal Kamikazes Cutting & Coring Ltd"
           className="ak-logo"
           style={{
@@ -4456,7 +4526,7 @@ export default function GSSIReportApp() {
       {/* === BRAND FLOURISH RIBBON (print/preview only, opt-in) === */}
       {report.brandFlourishes && (
         <div className="print-only brand-ribbon">
-          <img src="/kamikaze-logo.png" alt="" className="brand-ribbon-mark" />
+          <img src={LOGO_SRC} alt="" className="brand-ribbon-mark" />
           <div className="brand-ribbon-text">
             <div className="brand-ribbon-title">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
             <div className="brand-ribbon-tagline">{BRAND_TAGLINE}</div>
@@ -5224,7 +5294,7 @@ export default function GSSIReportApp() {
       {report.enableCadPage && (
         <div className={`cad-page print-only ${ph('cadPage')}`}>
           <div className="cad-letterhead">
-            <img src="/kamikaze-logo.png" alt="" className="cad-logo" />
+            <img src={LOGO_SRC} alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
               <div className="cad-company">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
               <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>

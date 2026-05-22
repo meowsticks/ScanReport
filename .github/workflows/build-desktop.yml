@@ -1,0 +1,65 @@
+name: Build desktop app
+
+# Builds the installable AK ScanReport desktop apps (Windows .exe and macOS .dmg).
+#
+# How to use:
+#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow.
+#     The installers appear under the run's "Artifacts" to download.
+#   - On a version tag (e.g. `git tag v1.0.0 && git push --tags`): the installers
+#     are also attached to a GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+defaults:
+  run:
+    working-directory: gssi-report-app
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            build: npm run app:build:win
+            artifact: windows-installer
+          - os: macos-latest
+            build: npm run app:build:mac
+            artifact: macos-installer
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: gssi-report-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: ${{ matrix.build }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            gssi-report-app/release/*.exe
+            gssi-report-app/release/*.dmg
+            gssi-report-app/release/*.blockmap
+          if-no-files-found: warn
+
+      - name: Attach to release (tagged builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            gssi-report-app/release/*.exe
+            gssi-report-app/release/*.dmg
