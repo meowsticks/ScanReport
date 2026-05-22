@@ -143,6 +143,31 @@ ipcMain.handle('file:read', async (_e, filePath) => {
   return { path: filePath, name: path.basename(filePath), content };
 });
 
+ipcMain.handle('pdf:save', async (_e, { suggestedName, currentFilePath }) => {
+  // Render the current report to PDF using the print stylesheet, then save it
+  // next to the report file by default so PDFs land in a predictable place.
+  const data = await mainWindow.webContents.printToPDF({
+    printBackground: true,
+    preferCSSPageSize: true,
+    pageSize: 'Letter',
+  });
+  const defaultDir = currentFilePath ? path.dirname(currentFilePath) : app.getPath('documents');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save PDF',
+    defaultPath: path.join(defaultDir, suggestedName || 'scan-report.pdf'),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  await fs.writeFile(result.filePath, data);
+  shell.showItemInFolder(result.filePath); // reveal so the user sees where it went
+  return { path: result.filePath, name: path.basename(result.filePath) };
+});
+
+ipcMain.handle('shell:show', async (_e, filePath) => {
+  if (filePath) shell.showItemInFolder(filePath);
+  return true;
+});
+
 ipcMain.handle('app:get-launch-file', async () => {
   if (!pendingOpenPath) return null;
   const filePath = pendingOpenPath;

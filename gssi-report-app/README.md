@@ -35,6 +35,13 @@ the desktop, **File ▸ Save / Open** use real OS file dialogs and write `.aksca
 files (plain JSON) straight to disk, so nothing depends on browser storage.
 Double-clicking a saved `.akscan` file opens it in the app.
 
+Desktop extras (all in the 💾 Save and 📧 Email dialogs):
+- **Recent files** — re-open a recent report in one click.
+- **Auto-save** — re-save the linked file every 1–15 min (pick the interval).
+- **PDF** — saves a real PDF next to the report file and reveals it in its folder.
+- **Email** — pick a provider (Gmail, Outlook, Outlook.com, Yahoo, or the default
+  mail app); the choice is remembered.
+
 ```bash
 npm install
 npm run electron:dev        # run the desktop app against the live dev server

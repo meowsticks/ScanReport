@@ -12,6 +12,38 @@ const CONTACTS_KEY = 'ak_contacts';   // customer/contact directory (cross-repor
 const DRAFTS_KEY   = 'ak_drafts';     // named saved reports (cross-report)
 const AUTOFILL_KEY = 'ak_autofill';   // remembered sticky fields + recent client/site values
 const HELP_AUTOSHOW_KEY = 'ak_help_autoshow'; // whether the Getting Started guide opens on startup
+const RECENT_FILES_KEY = 'ak_recent_files';   // desktop: recently opened/saved file paths
+const AUTOSAVE_KEY = 'ak_autosave_min';        // desktop/FS: auto-save interval in minutes (0 = off)
+const EMAIL_PROVIDER_KEY = 'ak_email_provider'; // preferred webmail/compose target
+
+// Web-mail "compose" deep links that pre-fill To/Subject/Body. Sources:
+//   Gmail   - mail.google.com/mail/?view=cm
+//   Outlook - outlook.office.com / outlook.live.com .../deeplink/compose
+//   Yahoo   - compose.mail.yahoo.com
+const EMAIL_PROVIDERS = [
+  { id: 'mailto', label: 'Default mail app' },
+  { id: 'gmail', label: 'Gmail' },
+  { id: 'outlook', label: 'Outlook / Office 365' },
+  { id: 'outlook-personal', label: 'Outlook.com / Hotmail' },
+  { id: 'yahoo', label: 'Yahoo Mail' },
+];
+const composeUrl = (provider, to, subject, body) => {
+  const t = encodeURIComponent(to || '');
+  const s = encodeURIComponent(subject || '');
+  const b = encodeURIComponent(body || '');
+  switch (provider) {
+    case 'gmail':
+      return `https://mail.google.com/mail/?view=cm&fs=1&to=${t}&su=${s}&body=${b}`;
+    case 'outlook':
+      return `https://outlook.office.com/mail/deeplink/compose?to=${t}&subject=${s}&body=${b}`;
+    case 'outlook-personal':
+      return `https://outlook.live.com/mail/0/deeplink/compose?to=${t}&subject=${s}&body=${b}`;
+    case 'yahoo':
+      return `https://compose.mail.yahoo.com/?to=${t}&subject=${s}&body=${b}`;
+    default:
+      return `mailto:${t}?subject=${s}&body=${b}`;
+  }
+};
 
 // Fields that repeat job-to-job — carried forward into a new/blank report so the
 // technician doesn't re-key equipment, calibration, sign-off and legal text every time.
@@ -3588,15 +3620,6 @@ export default function GSSIReportApp() {
       setEmailBody(d.body);
     }
   }, [emailDialogOpen]); // eslint-disable-line
-  const openMailto = () => {
-    rememberRecents();
-    const url =
-      `mailto:${encodeURIComponent(emailTo)}` +
-      `?subject=${encodeURIComponent(emailSubject)}` +
-      `&body=${encodeURIComponent(emailBody)}`;
-    window.location.href = url;
-    setEmailDialogOpen(false);
-  };
 
   // Native share sheet (mobile): lets the user push the report into Mail, Messages,
   // etc. Optionally attaches the JSON backup as a real file when the platform allows it.
@@ -3738,8 +3761,35 @@ export default function GSSIReportApp() {
   const fileHandleRef = useRef(null);                     // the file we keep updating (this session)
   const desktopPathRef = useRef(null);                    // native file path (desktop build)
   const [savedFileName, setSavedFileName] = useState(null);
+  // Desktop: recently opened/saved files; auto-save cadence; last auto-save time.
+  const [recentFiles, setRecentFiles] = useState(() => lsGet(RECENT_FILES_KEY, []));
+  const [autoSaveMin, setAutoSaveMin] = useState(() => lsGet(AUTOSAVE_KEY, 0));
+  const [lastAutoSaveAt, setLastAutoSaveAt] = useState(null);
+  const lastAutoSaveRef = useRef(null);
+  // Preferred email/compose target, remembered between reports.
+  const [emailProvider, setEmailProvider] = useState(() => lsGet(EMAIL_PROVIDER_KEY, 'mailto'));
 
   const reportJSON = () => JSON.stringify(report, null, 2);
+
+  // Desktop recent-files list: most-recent first, de-duped by path, capped.
+  const pushRecentFile = (entry) => {
+    if (!entry || !entry.path) return;
+    setRecentFiles((prev) => {
+      const next = [
+        { path: entry.path, name: entry.name || entry.path, at: Date.now() },
+        ...prev.filter((f) => f.path !== entry.path),
+      ].slice(0, 8);
+      lsSet(RECENT_FILES_KEY, next);
+      return next;
+    });
+  };
+  const removeRecentFile = (filePath) => {
+    setRecentFiles((prev) => {
+      const next = prev.filter((f) => f.path !== filePath);
+      lsSet(RECENT_FILES_KEY, next);
+      return next;
+    });
+  };
 
   // A recognizable, collision-resistant file name: job number + description + date.
   const baseFileName = () => {
@@ -3785,6 +3835,8 @@ export default function GSSIReportApp() {
           name = (res && res.name) ? res.name : (savedFileName || 'file');
         }
         setSavedFileName(name);
+        pushRecentFile({ path: desktopPathRef.current, name });
+        lastAutoSaveRef.current = reportJSON();
         rememberRecents();
         setSaveNote(`Saved to ${name}`);
       } catch {
@@ -3831,6 +3883,8 @@ export default function GSSIReportApp() {
       setReport({ ...DEFAULT_REPORT, ...JSON.parse(payload.content) });
       desktopPathRef.current = payload.path || null;
       setSavedFileName(payload.name || null);
+      lastAutoSaveRef.current = payload.content;
+      if (payload.path) pushRecentFile({ path: payload.path, name: payload.name });
       setSaveNote(payload.name ? `Opened ${payload.name}` : '');
     } catch {
       setSaveNote('That file could not be read (not a valid report).');
@@ -3840,8 +3894,75 @@ export default function GSSIReportApp() {
     const payload = await window.akDesktop.openFile();
     if (payload) applyLoadedReport(payload);
   };
+  // Open a file straight from the recent-files list (desktop).
+  const openRecentFile = async (filePath) => {
+    try {
+      const payload = await window.akDesktop.readFile(filePath);
+      if (payload) { applyLoadedReport(payload); setSaveOpen(false); }
+    } catch {
+      setSaveNote('That file is no longer there — removing it from recents.');
+      removeRecentFile(filePath);
+    }
+  };
 
+  // ---------- Auto-save (desktop file or web File System handle) ----------
+  const hasLinkedFile = () => (desktop && !!desktopPathRef.current) || (supportsFS && !!fileHandleRef.current);
+  const autoSaveNow = async () => {
+    if (!hasLinkedFile()) return;
+    const json = reportJSON();
+    if (json === lastAutoSaveRef.current) return;     // nothing changed since last save
+    try {
+      if (desktop && desktopPathRef.current) {
+        await window.akDesktop.saveFile(desktopPathRef.current, json);
+      } else if (supportsFS && fileHandleRef.current) {
+        await writeToHandle(fileHandleRef.current);
+      } else return;
+      lastAutoSaveRef.current = json;
+      setLastAutoSaveAt(Date.now());
+    } catch { /* leave for the next tick or a manual save */ }
+  };
+  // Keep the interval calling the latest closure without re-subscribing.
+  const autoSaveNowRef = useRef(autoSaveNow);
+  autoSaveNowRef.current = autoSaveNow;
+  useEffect(() => { lsSet(AUTOSAVE_KEY, autoSaveMin); }, [autoSaveMin]);
+  useEffect(() => {
+    if (!autoSaveMin) return;
+    const id = setInterval(() => { autoSaveNowRef.current(); }, autoSaveMin * 60 * 1000);
+    return () => clearInterval(id);
+  }, [autoSaveMin]);
+
+  // ---------- PDF export ----------
+  // Desktop: render to a real PDF saved next to the report file (then revealed
+  // in its folder). Web: open the browser print dialog with "Save as PDF".
+  const savePdfDesktop = async () => {
+    rememberRecents();
+    try {
+      const res = await window.akDesktop.savePdf({
+        suggestedName: `${baseFileName()}.pdf`,
+        currentFilePath: desktopPathRef.current || null,
+      });
+      if (res) setSaveNote(`PDF saved to ${res.name} — opened its folder.`);
+    } catch {
+      setSaveNote('Could not create the PDF.');
+    }
+  };
   const printPDF = () => { rememberRecents(); window.print(); };
+  const exportPDF = () => { if (desktop) savePdfDesktop(); else printPDF(); };
+
+  // ---------- Email / compose ----------
+  useEffect(() => { lsSet(EMAIL_PROVIDER_KEY, emailProvider); }, [emailProvider]);
+  // mailto opens the OS mail client; webmail links open in the real browser.
+  // On desktop, window.open is routed to the system browser/mail app.
+  const openExternalUrl = (url) => {
+    if (desktop) { window.open(url, '_blank'); }
+    else if (url.startsWith('mailto:')) { window.location.href = url; }
+    else { window.open(url, '_blank', 'noopener'); }
+  };
+  const sendEmail = () => {
+    rememberRecents();
+    openExternalUrl(composeUrl(emailProvider, emailTo, emailSubject, emailBody));
+    setEmailDialogOpen(false);
+  };
 
   // Native menu actions are kept in a ref so the (mount-only) listener always
   // calls the latest handlers without re-subscribing.
@@ -3851,7 +3972,7 @@ export default function GSSIReportApp() {
     'open': openFromDesktop,
     'save': () => saveToFile(false),
     'save-as': () => saveToFile(true),
-    'print': printPDF,
+    'print': exportPDF,
   };
   useEffect(() => {
     if (!desktop) return;
@@ -3889,7 +4010,7 @@ export default function GSSIReportApp() {
               borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700,
               cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
             }}>✕ Exit preview</button>
-            <button onClick={() => window.print()} style={{
+            <button onClick={exportPDF} style={{
               background: '#e02020', color: '#fff', border: '1px solid #e02020',
               borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 800,
               cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
@@ -5436,7 +5557,7 @@ export default function GSSIReportApp() {
         display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
-        <Btn variant="primary" onClick={printPDF} title="Open the print window — choose “Save as PDF” to make the file you send">📄 PDF</Btn>
+        <Btn variant="primary" onClick={exportPDF} title={desktop ? 'Save a PDF next to your report file' : 'Open the print window — choose “Save as PDF” to make the file you send'}>📄 PDF</Btn>
         <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email (attach the saved PDF yourself before sending)">📧 Email</Btn>
         <Btn onClick={() => { setSaveNote(''); setSaveOpen(true); }} title="Save a backup file you can re-open or update later">💾 Save</Btn>
       </div>
@@ -5469,10 +5590,18 @@ export default function GSSIReportApp() {
               📧 Email this report
             </div>
             <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
-              Opens your default mail app with a draft pre-filled from the project info.
-              <strong style={{ color: c.amberStrong }}> Browsers can't auto-attach the PDF</strong> —
-              tap 📄 PDF first, save it, then attach the file after the email opens.
+              Opens a new email pre-filled from the project info.
+              <strong style={{ color: c.amberStrong }}> The PDF can't attach itself</strong> —
+              tap 📄 PDF first, save it, then attach that file after the email opens.
             </div>
+
+            <Field label="Send with" hint="Your choice is remembered for next time.">
+              <Select value={emailProvider} onChange={e => setEmailProvider(e.target.value)}>
+                {EMAIL_PROVIDERS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </Select>
+            </Field>
 
             {contacts.length > 0 && (
               <Field label="Pick a saved contact">
@@ -5507,12 +5636,12 @@ export default function GSSIReportApp() {
             </Field>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>
-              <Btn variant="ghost" onClick={() => { printPDF(); }}
-                title="Triggers Save as PDF — keep this dialog open while you save">
+              <Btn variant="ghost" onClick={exportPDF}
+                title={desktop ? 'Save the PDF first, then attach it' : 'Triggers Save as PDF — keep this dialog open while you save'}>
                 📄 Save PDF first
               </Btn>
-              <Btn variant="primary" onClick={openMailto}>
-                ✉ Open Email
+              <Btn variant="primary" onClick={sendEmail}>
+                ✉ Open {EMAIL_PROVIDERS.find(p => p.id === emailProvider)?.label || 'Email'}
               </Btn>
             </div>
             {canShare && (
@@ -5720,6 +5849,30 @@ export default function GSSIReportApp() {
               <strong> file</strong> you can keep, re-open, or move to another computer.
             </div>
 
+            {desktop && recentFiles.length > 0 && (
+              <div style={{
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+              }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 6 }}>
+                  Recent files
+                </div>
+                {recentFiles.map(f => (
+                  <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                    <button onClick={() => openRecentFile(f.path)} title={f.path} style={{
+                      flex: 1, textAlign: 'left', background: c.cardAlt, color: c.text,
+                      border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px',
+                      fontSize: 11.5, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>📂 {f.name}</button>
+                    <button onClick={() => removeRecentFile(f.path)} title="Remove from list" style={{
+                      background: 'transparent', color: c.textFaint, border: `1px solid ${c.border}`,
+                      borderRadius: 6, padding: '6px 8px', fontSize: 11, cursor: 'pointer',
+                    }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <Field label="Job description (used in the file name)"
               hint="A short note so you can recognize this job's file later.">
               <Input value={report.jobNote} onChange={e => update({ jobNote: e.target.value })}
@@ -5730,10 +5883,10 @@ export default function GSSIReportApp() {
               border: `1px solid ${c.border}`, borderRadius: 6, padding: '7px 9px',
               marginBottom: 12, wordBreak: 'break-all',
             }}>
-              File name: <strong style={{ color: c.text }}>{baseFileName()}.json</strong>
+              File name: <strong style={{ color: c.text }}>{baseFileName()}{desktop ? '.akscan' : '.json'}</strong>
             </div>
 
-            {supportsFS && (
+            {(desktop || supportsFS) && (
               <div style={{
                 border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
               }}>
@@ -5764,6 +5917,40 @@ export default function GSSIReportApp() {
               </div>
             )}
 
+            {(desktop || supportsFS) && (
+              <div style={{
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+              }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+                  Auto-save
+                </div>
+                <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+                  Once a file is linked above, save it again automatically on a timer — so a crash
+                  or closed window never costs you more than a few minutes.
+                </div>
+                <Field label="Save the linked file every">
+                  <Select value={String(autoSaveMin)} onChange={e => setAutoSaveMin(Number(e.target.value))}>
+                    <option value="0">Off</option>
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                  </Select>
+                </Field>
+                {autoSaveMin > 0 && !hasLinkedFile() && (
+                  <div style={{ fontSize: 10.5, color: c.amberStrong, marginTop: 4 }}>
+                    Link a file (above) to start auto-saving.
+                  </div>
+                )}
+                {lastAutoSaveAt && (
+                  <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 4 }}>
+                    Last auto-save: {new Date(lastAutoSaveAt).toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{
               border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
             }}>
@@ -5774,12 +5961,12 @@ export default function GSSIReportApp() {
                 Saves to your Downloads folder. Each download includes the date &amp; time, so it
                 <strong> never overwrites</strong> an earlier file.
               </div>
-              <Btn variant={supportsFS ? 'default' : 'primary'} onClick={exportJSON} style={{ width: '100%' }}>
+              <Btn variant={(supportsFS || desktop) ? 'default' : 'primary'} onClick={exportJSON} style={{ width: '100%' }}>
                 ⬇ Download backup copy
               </Btn>
             </div>
 
-            {!supportsFS && (
+            {!supportsFS && !desktop && (
               <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
                 Tip: the one-click “save &amp; update the same file” option works in Chrome or Edge
                 on a computer.

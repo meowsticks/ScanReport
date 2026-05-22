@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('akDesktop', {
   // Read a known path; returns { path, name, content }.
   readFile: (path) => ipcRenderer.invoke('file:read', path),
 
+  // Render the current report to a PDF and save it via a native dialog;
+  // returns { path, name } or null. Reveals the file in its folder.
+  savePdf: (opts) => ipcRenderer.invoke('pdf:save', opts),
+
+  // Reveal a file in the OS file manager.
+  showInFolder: (path) => ipcRenderer.invoke('shell:show', path),
+
   // A file passed at launch (double-click / Open With), or null.
   getLaunchFile: () => ipcRenderer.invoke('app:get-launch-file'),
 
