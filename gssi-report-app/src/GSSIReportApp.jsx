@@ -3,6 +3,7 @@ import QRGen from './qrcode.js';
 import { useAuth } from './lib/useAuth.js';
 import { useCloudSync } from './lib/useCloudSync.js';
 import { compressImage } from './lib/image.js';
+import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurrentId as persistCurrentId, newId } from './lib/reportsLibrary.js';
 import SyncControl from './SyncControl.jsx';
 
 // ============================================================
@@ -3595,13 +3596,17 @@ function Assistant({ report, update }) {
   );
 }
 
+function deriveReportName(r) {
+  if (!r) return 'Untitled report';
+  return (r.projectNo || r.jobNote || r.client || 'Untitled report').toString().slice(0, 60);
+}
+
 export default function GSSIReportApp() {
-  const [report, setReport] = useState(() => {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY);
-      return s ? { ...DEFAULT_REPORT, ...JSON.parse(s) } : DEFAULT_REPORT;
-    } catch { return DEFAULT_REPORT; }
-  });
+  // Multi-report library: the open report plus a lightweight index of all reports.
+  const [lib] = useState(() => ensureLibrary(DEFAULT_REPORT, deriveReportName));
+  const [currentId, setCurrentIdState] = useState(lib.currentId);
+  const [reportsIndex, setReportsIndex] = useState(lib.index);
+  const [report, setReport] = useState(lib.currentReport);
 
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('ak_theme') || 'dark'; }
@@ -3617,14 +3622,20 @@ export default function GSSIReportApp() {
   // hidden or closed so nothing is ever lost.
   const latestReportRef = useRef(report);
   useEffect(() => { latestReportRef.current = report; }, [report]);
+  const currentIdRef = useRef(currentId);
+  useEffect(() => { currentIdRef.current = currentId; }, [currentId]);
 
   const persistNow = useRef(() => {});
   persistNow.current = () => {
     const r = latestReportRef.current;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
-      setSavedAt(Date.now());
-    } catch {}
+    const id = currentIdRef.current;
+    saveReport(id, r);
+    setSavedAt(Date.now());
+    setReportsIndex((idx) => {
+      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now() } : e);
+      saveIndex(next);
+      return next;
+    });
     const sticky = {};
     STICKY_FIELDS.forEach(f => {
       if (r[f] !== undefined && r[f] !== '' && r[f] !== null) sticky[f] = r[f];
@@ -3703,21 +3714,73 @@ export default function GSSIReportApp() {
     setRecents(next);
   };
 
-  // ---------- Named drafts (cross-report saved copies) ----------
-  const [drafts, setDrafts] = useState(() => lsGet(DRAFTS_KEY, []));
-  const [draftsOpen, setDraftsOpen] = useState(false);
-  useEffect(() => { lsSet(DRAFTS_KEY, drafts); }, [drafts]);
-  const saveNamedDraft = (name) => {
-    const label = (name || '').trim() || report.projectNo || `Draft · ${new Date().toLocaleString()}`;
-    const entry = { id: `d-${Date.now()}`, name: label, savedAt: Date.now(), report };
-    setDrafts(d => [entry, ...d]);
-    rememberRecents();
+  // ---------- Reports library (work on multiple reports) ----------
+  const [reportsOpen, setReportsOpen] = useState(false);
+
+  const switchReport = (id) => {
+    if (id === currentIdRef.current) { setReportsOpen(false); return; }
+    persistNow.current();                         // save the report we're leaving
+    const data = loadReport(id);
+    setCurrentIdState(id); persistCurrentId(id);
+    setReport(data ? { ...DEFAULT_REPORT, ...data } : DEFAULT_REPORT);
+    forgetFile();
+    setReportsOpen(false);
   };
-  const loadDraft = (id) => {
-    const d = drafts.find(x => x.id === id);
-    if (d) { setReport({ ...DEFAULT_REPORT, ...d.report }); forgetFile(); setDraftsOpen(false); }
+
+  const createReport = () => {
+    persistNow.current();
+    const r = freshReport();
+    const id = newId();
+    saveReport(id, r);
+    setReportsIndex((idx) => {
+      const next = [{ id, name: deriveReportName(r), updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+    setCurrentIdState(id); persistCurrentId(id);
+    setReport(r);
+    forgetFile();
+    setReportsOpen(false);
   };
-  const deleteDraft = (id) => setDrafts(d => d.filter(x => x.id !== id));
+
+  const duplicateReport = (id) => {
+    const src = id === currentIdRef.current ? latestReportRef.current : loadReport(id);
+    if (!src) return;
+    const nid = newId();
+    saveReport(nid, { ...src });
+    setReportsIndex((idx) => {
+      const next = [{ id: nid, name: deriveReportName(src) + ' (copy)', updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+  };
+
+  const renameReport = (id, name) => {
+    const nm = (name || '').trim() || 'Untitled report';
+    setReportsIndex((idx) => {
+      const next = idx.map((e) => e.id === id ? { ...e, name: nm } : e);
+      saveIndex(next); return next;
+    });
+  };
+
+  const deleteReport = (id) => {
+    removeReport(id);
+    setReportsIndex((idx) => {
+      let next = idx.filter((e) => e.id !== id);
+      if (id === currentIdRef.current) {
+        if (next.length === 0) {
+          const r = freshReport(); const fid = newId();
+          saveReport(fid, r);
+          next = [{ id: fid, name: deriveReportName(r), updatedAt: Date.now() }];
+          setCurrentIdState(fid); persistCurrentId(fid); setReport(r); forgetFile();
+        } else {
+          const nid = next[0].id;
+          setCurrentIdState(nid); persistCurrentId(nid);
+          setReport({ ...DEFAULT_REPORT, ...(loadReport(nid) || {}) }); forgetFile();
+        }
+      }
+      saveIndex(next);
+      return next;
+    });
+  };
 
   // ---------- Customer / contact directory ----------
   const [contacts, setContacts] = useState(() => lsGet(CONTACTS_KEY, []));
@@ -4530,16 +4593,16 @@ export default function GSSIReportApp() {
             }}>
             🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
-          <button onClick={() => setDraftsOpen(true)}
-            title="Saved drafts — keep multiple reports"
-            aria-label="Saved drafts"
+          <button onClick={() => setReportsOpen(true)}
+            title="Reports — work on multiple reports"
+            aria-label="Reports library"
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
               borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
-            📚 {drafts.length > 0 ? drafts.length : ''}
+            🗂 {reportsIndex.length > 1 ? reportsIndex.length : ''}
           </button>
           <button onClick={() => setContactsOpen(true)}
             title="Customer contacts"
@@ -5871,62 +5934,62 @@ export default function GSSIReportApp() {
       )}
 
       {/* === SAVED DRAFTS === */}
-      {draftsOpen && (
+      {reportsOpen && (
         <div className="no-print" style={{
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 16,
-        }} onClick={() => setDraftsOpen(false)}>
+        }} onClick={() => setReportsOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
             borderRadius: 10, padding: 18,
-            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            width: 'min(540px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
-              📚 Saved drafts
+              🗂 My reports
             </div>
             <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
-              Keep multiple reports on this device. Saving snapshots the current report;
-              loading replaces what's on screen (the live report auto-saves separately).
+              Work on as many reports as you like — each one auto-saves on its own.
+              Tap a report to open it; the one you're in is marked <strong>Open</strong>.
             </div>
-            <Btn variant="primary" onClick={() => saveNamedDraft()} style={{ width: '100%', marginBottom: 12 }}>
-              ＋ Save current report as a draft
+            <Btn variant="primary" onClick={createReport} style={{ width: '100%', marginBottom: 12 }}>
+              ＋ New report
             </Btn>
-            {drafts.length === 0 ? (
-              <div style={{
-                padding: 14, textAlign: 'center', fontSize: 12, color: c.textFaint,
-                background: c.cardAlt, borderRadius: 6,
-              }}>No saved drafts yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {drafts.map(d => (
-                  <div key={d.id} style={{
-                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 9, background: c.cardAlt,
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {[...reportsIndex].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(e => {
+                const isOpen = e.id === currentId;
+                return (
+                  <div key={e.id} style={{
+                    border: `1px solid ${isOpen ? c.accent : c.border}`, borderRadius: 6, padding: 9,
+                    background: isOpen ? c.accentDim : c.cardAlt,
                   }}>
-                    <Input value={d.name}
-                      onChange={e => setDrafts(list => list.map(x => x.id === d.id ? { ...x, name: e.target.value } : x))}
+                    <Input value={e.name}
+                      onChange={ev => renameReport(e.id, ev.target.value)}
                       style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 7 }}>
-                      Saved {new Date(d.savedAt).toLocaleString()}
-                      {(d.report?.targets?.length || 0) > 0 && ` · ${d.report.targets.length} target${d.report.targets.length === 1 ? '' : 's'}`}
-                      {(d.report?.cores?.length || 0) > 0 && ` · ${d.report.cores.length} core${d.report.cores.length === 1 ? '' : 's'}`}
+                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7 }}>
+                      {isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6 }}>
-                      <Btn variant="primary" onClick={() => loadDraft(d.id)} style={{ fontSize: 12 }}>
-                        📂 Load
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
+                      <Btn variant="primary" onClick={() => switchReport(e.id)} disabled={isOpen}
+                        style={{ fontSize: 12, opacity: isOpen ? 0.6 : 1 }}>
+                        {isOpen ? '✓ Open' : '📂 Open'}
                       </Btn>
-                      <Btn variant="ghost" onClick={() => deleteDraft(d.id)}
+                      <Btn variant="ghost" onClick={() => duplicateReport(e.id)} style={{ fontSize: 12 }}>
+                        ⧉ Copy
+                      </Btn>
+                      <Btn variant="ghost"
+                        onClick={() => { if (confirm('Delete this report? This cannot be undone.')) deleteReport(e.id); }}
                         style={{ fontSize: 12, borderColor: c.red, color: c.red }}>
-                        🗑 Delete
+                        🗑
                       </Btn>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-            <Btn variant="ghost" onClick={() => setDraftsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+                );
+              })}
+            </div>
+            <Btn variant="ghost" onClick={() => setReportsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
               Close
             </Btn>
           </div>
