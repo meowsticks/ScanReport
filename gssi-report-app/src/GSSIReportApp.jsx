@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import QRGen from './qrcode.js';
 import { useAuth } from './lib/useAuth.js';
 import { useCloudSync } from './lib/useCloudSync.js';
+import { compressImage } from './lib/image.js';
 import SyncControl from './SyncControl.jsx';
 
 // ============================================================
@@ -984,12 +985,11 @@ function SiteDiagram({ report, update }) {
     setHoverPt(null);
   }, [tool]);
 
-  const handlePhoto = (e) => {
+  const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => update({ diagramImage: ev.target.result });
-    reader.readAsDataURL(file);
+    const dataUrl = await compressImage(file);
+    if (dataUrl) update({ diagramImage: dataUrl });
   };
 
   const undo = () => {
@@ -2051,12 +2051,13 @@ function ScanPhotos({ report, update }) {
   const addPhotos = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const loaded = await Promise.all(files.map(file => new Promise((resolve) => {
-      const reader = new FileReader();
+    const loaded = await Promise.all(files.map(async (file) => {
       const detected = parseScanFilename(file.name || '');
-      reader.onload = (ev) => resolve({
+      const dataUrl = await compressImage(file);
+      if (!dataUrl) return null;
+      return {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        dataUrl: ev.target.result,
+        dataUrl,
         caption: '',
         confidence: 'high',
         pinRef: '',
@@ -2066,10 +2067,9 @@ function ScanPhotos({ report, update }) {
         panelGroup: '',
         panelLabel: '',
         annotations: [],
-      });
-      reader.readAsDataURL(file);
-    })));
-    update({ scanPhotos: [...report.scanPhotos, ...loaded] });
+      };
+    }));
+    update({ scanPhotos: [...report.scanPhotos, ...loaded.filter(Boolean)] });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
