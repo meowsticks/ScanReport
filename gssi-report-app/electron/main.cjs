@@ -15,6 +15,11 @@ const fsSync = require('fs');
 const path = require('path');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
+
+// When set, builds from this branch boot straight into the Test build (the live
+// web preview) on first launch — so a reviewer sees the latest with zero setup.
+// Leave '' for normal production builds (they load the bundled Stable app).
+const DEFAULT_TEST_URL = '';
 const FILE_FILTERS = [
   { name: 'Scan report', extensions: ['akscan', 'json'] },
   { name: 'All files', extensions: ['*'] },
@@ -47,8 +52,14 @@ function versionPrefPath() {
   return path.join(app.getPath('userData'), 'version-mode.json');
 }
 function readVersionMode() {
-  try { return JSON.parse(fsSync.readFileSync(versionPrefPath(), 'utf8')); }
-  catch { return { testMode: false, testUrl: '' }; }
+  let pref = null;
+  try { pref = JSON.parse(fsSync.readFileSync(versionPrefPath(), 'utf8')); } catch {}
+  if (!pref) {
+    // First launch: default to Test if a URL is baked into this build, so a
+    // reviewer gets the latest with nothing to configure.
+    return { testMode: !!DEFAULT_TEST_URL, testUrl: DEFAULT_TEST_URL };
+  }
+  return { testMode: !!pref.testMode, testUrl: pref.testUrl || DEFAULT_TEST_URL };
 }
 function writeVersionMode(pref) {
   try { fsSync.writeFileSync(versionPrefPath(), JSON.stringify(pref)); } catch {}
