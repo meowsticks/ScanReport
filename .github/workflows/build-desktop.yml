@@ -3,21 +3,20 @@ name: Build desktop app
 # Builds the installable AK ScanReport Windows app (.exe).
 #
 # How to use:
-#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow.
-#     The installer appears under the run's "Artifacts" to download (no release).
-#   - On a version tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`): the
-#     installer is published to a GitHub Release named after the tag, together
-#     with the `latest.yml` metadata that powers the in-app auto-updater.
+#   - Push to `master`: builds the installer and uploads it under the run's
+#     "Artifacts" as a test build. It does NOT publish a release.
+#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow (artifact only).
+#   - On a version tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`): builds
+#     and publishes a versioned GitHub Release, including the `latest.yml`
+#     metadata that powers the in-app auto-updater.
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - master
     tags:
       - 'v*'
-
-# electron-builder needs write access to create/upload the GitHub Release.
-permissions:
-  contents: write
 
 defaults:
   run:
@@ -26,6 +25,8 @@ defaults:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows installer (manual run, no release)
+      - name: Build Windows installer (master / manual run, no release)
         if: github.ref_type != 'tag'
         run: npm run app:build:win
 
