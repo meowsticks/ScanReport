@@ -5,6 +5,7 @@ import { useCloudSync } from './lib/useCloudSync.js';
 import { compressImage } from './lib/image.js';
 import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurrentId as persistCurrentId, newId } from './lib/reportsLibrary.js';
 import SyncControl from './SyncControl.jsx';
+import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -4570,6 +4571,8 @@ export default function GSSIReportApp() {
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <SyncControl auth={auth} sync={sync} c={c} />
+          <FeedbackButton c={c} />
+          {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
           <button onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"

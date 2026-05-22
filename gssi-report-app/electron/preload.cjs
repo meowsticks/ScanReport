@@ -51,4 +51,16 @@ contextBridge.exposeInMainWorld('akDesktop', {
     return () => ipcRenderer.removeListener('flush-save', handler);
   },
   flushSaveDone: () => ipcRenderer.send('flush-save-done'),
+
+  // Open a URL (or mailto:) in the user's real browser / mail app.
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+
+  // App version string (e.g. "1.0.1").
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
+
+  // Stable vs Test version: read/set which build the shell loads.
+  // setVersionMode reloads the window into the chosen build.
+  getVersionMode: () => ipcRenderer.invoke('version:get'),
+  setVersionMode: (testMode, testUrl) =>
+    ipcRenderer.invoke('version:set', { testMode, testUrl }),
 });

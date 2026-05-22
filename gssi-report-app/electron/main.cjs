@@ -11,6 +11,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const path = require('path');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
@@ -35,6 +36,31 @@ function pickFileFromArgv(argv) {
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+}
+
+// ---------- Stable vs Test version ----------
+// The shell normally loads the bundled app. In "Test" mode it loads a remote
+// build (a Vercel preview of the in-progress branch) so a tester can review the
+// latest changes without re-installing. The choice is stored in userData.
+function versionPrefPath() {
+  return path.join(app.getPath('userData'), 'version-mode.json');
+}
+function readVersionMode() {
+  try { return JSON.parse(fsSync.readFileSync(versionPrefPath(), 'utf8')); }
+  catch { return { testMode: false, testUrl: '' }; }
+}
+function writeVersionMode(pref) {
+  try { fsSync.writeFileSync(versionPrefPath(), JSON.stringify(pref)); } catch {}
+}
+function loadContent(win) {
+  const distIndex = path.join(__dirname, '..', 'dist', 'index.html');
+  if (DEV_SERVER_URL) { win.loadURL(DEV_SERVER_URL); return; }
+  const pref = readVersionMode();
+  if (pref.testMode && pref.testUrl) {
+    win.loadURL(pref.testUrl).catch(() => win.loadFile(distIndex)); // fall back if offline/bad URL
+  } else {
+    win.loadFile(distIndex);
   }
 }
 
@@ -92,11 +118,7 @@ function createWindow() {
     },
   });
 
-  if (DEV_SERVER_URL) {
-    mainWindow.loadURL(DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
+  loadContent(mainWindow);
 
   // Open external links (e.g. mailto:, http) in the user's real apps/browser,
   // never inside the Electron window.
@@ -167,6 +189,25 @@ ipcMain.handle('pdf:save', async (_e, { suggestedName, currentFilePath }) => {
 ipcMain.handle('shell:show', async (_e, filePath) => {
   if (filePath) shell.showItemInFolder(filePath);
   return true;
+});
+
+ipcMain.handle('shell:open-external', async (_e, url) => {
+  if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url)) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('app:version', () => app.getVersion());
+
+ipcMain.handle('version:get', () => readVersionMode());
+
+ipcMain.handle('version:set', (_e, { testMode, testUrl } = {}) => {
+  const pref = { testMode: !!testMode, testUrl: (testUrl || '').trim() };
+  writeVersionMode(pref);
+  if (mainWindow && !mainWindow.isDestroyed()) loadContent(mainWindow);
+  return pref;
 });
 
 ipcMain.handle('app:get-launch-file', async () => {
