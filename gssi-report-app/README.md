@@ -28,9 +28,38 @@ npm run dev
 
 Then open http://localhost:5173
 
+## Desktop app (Windows / macOS)
+
+The same app can be packaged as an installable desktop program (Electron). On
+the desktop, **File ▸ Save / Open** use real OS file dialogs and write `.akscan`
+files (plain JSON) straight to disk, so nothing depends on browser storage.
+Double-clicking a saved `.akscan` file opens it in the app.
+
+Desktop extras (all in the 💾 Save and 📧 Email dialogs):
+- **Recent files** — re-open a recent report in one click.
+- **Auto-save** — re-save the linked file every 1–15 min (pick the interval).
+- **PDF** — saves a real PDF next to the report file and reveals it in its folder.
+- **Email** — pick a provider (Gmail, Outlook, Outlook.com, Yahoo, or the default
+  mail app); the choice is remembered.
+
+```bash
+npm install
+npm run electron:dev        # run the desktop app against the live dev server
+npm run app:build:win       # build a Windows installer (.exe) into release/
+npm run app:build:mac       # build a macOS installer (.dmg) into release/
+npm run app:build:linux     # build a Linux AppImage into release/
+```
+
+Each `app:build:*` must be run on (or for) its own OS. To build installers
+without any local toolchain, use the **Build desktop app** GitHub Action
+(`.github/workflows/build-desktop.yml`): run it from the Actions tab and
+download the installers from the run's Artifacts, or push a `vX.Y.Z` tag to
+also attach them to a GitHub Release.
+
 ## Tech
 
 - Vite + React 18
-- No backend, no database — uses browser localStorage
-- Print-to-PDF via browser print dialog
+- Web build: no backend, no database — uses browser localStorage
+- Desktop build: Electron with native file save/open (`.akscan` = JSON on disk)
+- Print-to-PDF via browser/OS print dialog
 - JSON save/load for portable drafts

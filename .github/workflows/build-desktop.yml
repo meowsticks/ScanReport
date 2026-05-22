@@ -1,0 +1,52 @@
+name: Build desktop app
+
+# Builds the installable AK ScanReport Windows app (.exe).
+#
+# How to use:
+#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow.
+#     The installer appears under the run's "Artifacts" to download.
+#   - On a version tag (e.g. `git tag v1.0.0 && git push --tags`): the installer
+#     is also attached to a GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+defaults:
+  run:
+    working-directory: gssi-report-app
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: gssi-report-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run app:build:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            gssi-report-app/release/*.exe
+            gssi-report-app/release/*.blockmap
+          if-no-files-found: warn
+
+      - name: Attach to release (tagged builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gssi-report-app/release/*.exe
