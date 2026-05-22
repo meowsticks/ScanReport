@@ -57,6 +57,8 @@ export default function SyncControl({ auth, sync, c }) {
     try { await auth.signOut(); } finally { setBusy(false); setOpen(false); }
   };
 
+  const inConflict = !!sync.conflict;
+
   const field = {
     width: '100%', boxSizing: 'border-box', marginTop: 6,
     background: c.bg || c.cardAlt, color: c.text,
@@ -74,6 +76,47 @@ export default function SyncControl({ auth, sync, c }) {
 
   return (
     <>
+      {inConflict && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1200,
+          background: 'rgba(0,0,0,0.6)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 380, background: c.bgRaised,
+            border: `1px solid ${c.borderStrong}`, borderRadius: 10,
+            padding: 18, textAlign: 'left', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 6 }}>
+              Two reports found
+            </div>
+            <div style={{ fontSize: 13, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+              This device has a report, and your account already has a different
+              saved report. Pick which one to keep — <strong style={{ color: c.text }}>the other
+              will be replaced</strong>. Nothing changes until you choose.
+            </div>
+            <button
+              onClick={() => sync.resolveConflict('local')}
+              style={{
+                width: '100%', padding: '11px 12px', borderRadius: 6, cursor: 'pointer',
+                fontWeight: 700, fontSize: 13, marginBottom: 8,
+                background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+              }}>
+              Keep this device’s report
+            </button>
+            <button
+              onClick={() => sync.resolveConflict('cloud')}
+              style={{
+                width: '100%', padding: '11px 12px', borderRadius: 6, cursor: 'pointer',
+                fontWeight: 700, fontSize: 13,
+                background: c.cardAlt, color: c.text, border: `1px solid ${c.borderStrong}`,
+              }}>
+              Load the saved (cloud) report
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => { setMsg(null); setOpen(true); }}
         title={signedIn ? `Signed in as ${auth.user?.email || ''} · ${STATUS_LABEL[status]}` : 'Sign in to sync across devices'}

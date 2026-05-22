@@ -43,4 +43,12 @@ contextBridge.exposeInMainWorld('akDesktop', {
     ipcRenderer.on('open-file', handler);
     return () => ipcRenderer.removeListener('open-file', handler);
   },
+
+  // Before an update installs, the main process asks the app to persist now.
+  onFlushSave: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('flush-save', handler);
+    return () => ipcRenderer.removeListener('flush-save', handler);
+  },
+  flushSaveDone: () => ipcRenderer.send('flush-save-done'),
 });

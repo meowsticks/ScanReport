@@ -3633,9 +3633,19 @@ export default function GSSIReportApp() {
     const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', onVis);
+
+    // Desktop: when an update is about to install, save first, then confirm.
+    let offFlush;
+    if (window.akDesktop?.onFlushSave) {
+      offFlush = window.akDesktop.onFlushSave(() => {
+        flush();
+        window.akDesktop.flushSaveDone?.();
+      });
+    }
     return () => {
       window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', onVis);
+      if (offFlush) offFlush();
     };
   }, []);
 

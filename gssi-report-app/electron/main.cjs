@@ -186,6 +186,16 @@ ipcMain.handle('app:get-launch-file', async () => {
 // Checks GitHub Releases for a newer version, downloads it in the background,
 // and offers to install on the next restart. No-ops in development and fails
 // silently if the network or GitHub is unavailable, so it never blocks use.
+// Persist the renderer's work first, then install. Falls back to installing
+// anyway if the renderer can't confirm, so an update is never stuck.
+function installUpdateAfterSave() {
+  let installed = false;
+  const finish = () => { if (!installed) { installed = true; autoUpdater.quitAndInstall(); } };
+  ipcMain.once('flush-save-done', finish);
+  sendToRenderer('flush-save');
+  setTimeout(finish, 1000);
+}
+
 function setupAutoUpdates() {
   if (DEV_SERVER_URL) return;
 
@@ -193,14 +203,14 @@ function setupAutoUpdates() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'info',
-      buttons: ['Restart now', 'Later'],
+      buttons: ['Save & restart', 'Later'],
       defaultId: 0,
       cancelId: 1,
       title: 'Update ready',
       message: `Version ${info.version} has been downloaded.`,
-      detail: 'Restart to finish updating. Your saved reports are not affected.',
+      detail: 'Your work is saved automatically and your saved reports carry over. Restart now to finish updating, or choose Later.',
     });
-    if (response === 0) autoUpdater.quitAndInstall();
+    if (response === 0) installUpdateAfterSave();
   });
 
   autoUpdater.on('error', (err) => {
