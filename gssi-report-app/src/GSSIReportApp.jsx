@@ -142,6 +142,8 @@ const DEFAULT_REPORT = {
 
   // Site diagram
   diagramImage: null,
+  diagramImageUrl: null,   // cloud copy: site image fetched from Storage
+  diagramImagePath: null,  // Storage path for the site image
   diagramStrokes: [],
   diagramPins: [],
 
@@ -714,11 +716,11 @@ function DiagramSnapshot({ report, width = 1100, height = 750 }) {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     drawSiteDiagramTo(ctx, width, height, report, { backgroundImage: imgRef.current });
-  }, [report.diagramImage, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
+  }, [report.diagramImage, report.diagramImageUrl, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
   return (
     <>
-      {report.diagramImage && (
-        <img ref={imgRef} src={report.diagramImage} alt=""
+      {diagramSrc(report) && (
+        <img ref={imgRef} src={diagramSrc(report)} alt="" crossOrigin="anonymous"
           style={{ display: 'none' }}
           onLoad={() => {
             const c = canvasRef.current;
@@ -898,7 +900,7 @@ function SiteDiagram({ report, update }) {
     canvas.width = rect.width;
     canvas.height = rect.height;
     redraw();
-  }, [report.diagramImage]);
+  }, [report.diagramImage, report.diagramImageUrl]);
 
   const getCoords = (e) => {
     const canvas = canvasRef.current;
@@ -1034,8 +1036,8 @@ function SiteDiagram({ report, update }) {
         overflow: 'hidden', marginBottom: 10,
         border: `1px solid ${c.border}`,
       }}>
-        {report.diagramImage ? (
-          <img src={report.diagramImage} alt="Site"
+        {diagramSrc(report) ? (
+          <img src={diagramSrc(report)} alt="Site"
             style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
         ) : (
           <div style={{
@@ -1057,12 +1059,12 @@ function SiteDiagram({ report, update }) {
           onMouseUp={handleEnd} onMouseLeave={handleEnd}
           onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
         />
-        {report.diagramImage && (
+        {diagramSrc(report) && (
           <button
             type="button"
             onClick={() => {
               if (confirm('Remove the site diagram photo? Your sketches and pins stay.')) {
-                update({ diagramImage: null });
+                update({ diagramImage: null, diagramImageUrl: null, diagramImagePath: null });
               }
             }}
             title="Remove site photo"
@@ -1413,6 +1415,19 @@ function QRCode({ value, size = 110 }) {
 // AnnotatedImage — img with overlay canvas of annotations
 // ============================================================
 
+// A photo's best display source: the local base64 (instant + offline) if we
+// have it, else the Storage URL (for photos received from another device).
+function photoSrc(p) {
+  return (p && (p.dataUrl || p.url)) || '';
+}
+function diagramSrc(report) {
+  return report.diagramImage || report.diagramImageUrl || null;
+}
+// Scan-location photos use their own field names (photo / photoUrl).
+function locPhotoSrc(loc) {
+  return (loc && (loc.photo || loc.photoUrl)) || '';
+}
+
 function AnnotatedImage({ src, annotations = [], style, alt }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -1747,7 +1762,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       }}>
         <img
           ref={imgRef}
-          src={photo.dataUrl}
+          src={photoSrc(photo)}
           alt="scan"
           onLoad={redraw}
           style={{
@@ -1987,7 +2002,7 @@ function PhotoLightbox({ photo, onClose }) {
       </button>
       <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
         <AnnotatedImage
-          src={photo.dataUrl}
+          src={photoSrc(photo)}
           annotations={photo.annotations || []}
           alt={photo.caption || 'Scan photo'}
           style={{ width: 'min(94vw, 1100px)' }}
@@ -2210,7 +2225,7 @@ function ScanPhotos({ report, update }) {
                           border: 'none', background: 'none', cursor: 'zoom-in', width: 84,
                         }}>
                         <AnnotatedImage
-                          src={photo.dataUrl}
+                          src={photoSrc(photo)}
                           annotations={photo.annotations || []}
                           alt={photo.caption || 'Scan photo'}
                           style={{
@@ -2404,7 +2419,7 @@ function GPRScans({ report }) {
                         {p.panelLabel ? `(${p.panelLabel}) ` : ''}{p.locationRef || ''}
                       </div>
                       <AnnotatedImage
-                        src={p.dataUrl}
+                        src={photoSrc(p)}
                         annotations={p.annotations || []}
                         style={{ background: '#000', borderRadius: 3 }}
                       />
@@ -2439,7 +2454,7 @@ function GPRScans({ report }) {
                   </span>
                 </div>
                 <AnnotatedImage
-                  src={p.dataUrl}
+                  src={photoSrc(p)}
                   annotations={p.annotations || []}
                   style={{ background: '#000', borderRadius: 4 }}
                 />
@@ -2667,12 +2682,11 @@ function ScanLocations({ report, update }) {
     update({ scanLocations: next });
   };
 
-  const handlePhoto = (id, e) => {
+  const handlePhoto = async (id, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => updateLoc(id, { photo: ev.target.result });
-    reader.readAsDataURL(file);
+    const dataUrl = await compressImage(file);
+    if (dataUrl) updateLoc(id, { photo: dataUrl, photoUrl: null, photoPath: null });
     if (fileInputRefs.current[id]) fileInputRefs.current[id].value = '';
   };
 
@@ -3052,21 +3066,21 @@ function ScanLocations({ report, update }) {
                     e.stopPropagation();
                     setMenuLocId(menuLocId === loc.id ? null : loc.id);
                   }}
-                  title={loc.photo ? 'Click to edit / replace / annotate' : 'Click to add a photo'}
+                  title={locPhotoSrc(loc) ? 'Click to edit / replace / annotate' : 'Click to add a photo'}
                 >
-                  {loc.photo ? (
+                  {locPhotoSrc(loc) ? (
                     <>
                       {(loc.photoAnnotations && loc.photoAnnotations.length > 0) ? (
                         <div style={{ position: 'absolute', inset: 0 }}>
                           <AnnotatedImage
-                            src={loc.photo}
+                            src={locPhotoSrc(loc)}
                             annotations={loc.photoAnnotations}
                             alt={loc.label}
                             style={{ width: '100%', height: '100%' }}
                           />
                         </div>
                       ) : (
-                        <img src={loc.photo} alt={loc.label}
+                        <img src={locPhotoSrc(loc)} alt={loc.label}
                           style={{
                             width: '100%', height: '100%', objectFit: 'cover',
                             position: 'absolute', inset: 0,
@@ -3126,7 +3140,7 @@ function ScanLocations({ report, update }) {
                         </button>
                         <button
                           onClick={() => {
-                            if (!loc.photo) { alert('Add a photo first, then annotate it.'); return; }
+                            if (!locPhotoSrc(loc)) { alert('Add a photo first, then annotate it.'); return; }
                             setAnnotLocId(loc.id);
                             setMenuLocId(null);
                           }}
@@ -3135,7 +3149,7 @@ function ScanLocations({ report, update }) {
                         </button>
                         <button
                           onClick={() => {
-                            if (!loc.photo) { setMenuLocId(null); return; }
+                            if (!locPhotoSrc(loc)) { setMenuLocId(null); return; }
                             if (!confirm('Remove this location\'s photo (and annotations)?')) return;
                             updateLoc(loc.id, { photo: null, photoAnnotations: [] });
                             setMenuLocId(null);
@@ -3190,7 +3204,7 @@ function ScanLocations({ report, update }) {
                             background: c.cardAlt, padding: 4,
                           }}>
                             <AnnotatedImage
-                              src={p.dataUrl}
+                              src={photoSrc(p)}
                               annotations={p.annotations || []}
                               style={{ background: '#000', borderRadius: 3 }}
                             />
@@ -3216,7 +3230,7 @@ function ScanLocations({ report, update }) {
                     borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 12,
                     color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 8,
                   }}>
-                    📷 {loc.photo ? 'Replace photo' : 'Add photo'}
+                    📷 {locPhotoSrc(loc) ? 'Replace photo' : 'Add photo'}
                     <input
                       ref={el => { if (el) fileInputRefs.current[loc.id] = el; }}
                       type="file" accept="image/*" capture="environment"
@@ -3314,10 +3328,10 @@ function ScanLocations({ report, update }) {
       {/* Annotation editor for the per-location photo */}
       {annotLocId && (() => {
         const loc = report.scanLocations.find(l => l.id === annotLocId);
-        if (!loc || !loc.photo) return null;
+        if (!loc || !locPhotoSrc(loc)) return null;
         return (
           <AnnotationEditor
-            photo={{ dataUrl: loc.photo, annotations: loc.photoAnnotations || [] }}
+            photo={{ dataUrl: locPhotoSrc(loc), annotations: loc.photoAnnotations || [] }}
             onSave={(annotations) => {
               updateLoc(loc.id, { photoAnnotations: annotations });
               setAnnotLocId(null);
