@@ -1,5 +1,8 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import QRGen from './qrcode.js';
+import { useAuth } from './lib/useAuth.js';
+import { useCloudSync } from './lib/useCloudSync.js';
+import SyncControl from './SyncControl.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -3509,6 +3512,14 @@ export default function GSSIReportApp() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
+  // ---------- Cloud sync (opt-in: only active once signed in) ----------
+  // The app stays fully local until a user signs in via the header ☁ button.
+  const auth = useAuth();
+  const applyRemote = useCallback((data) => {
+    setReport({ ...DEFAULT_REPORT, ...data });
+  }, []);
+  const sync = useCloudSync({ session: auth.session, report, applyRemote });
+
   // ---------- Auto-fill: build a fresh report carrying sticky fields forward ----------
   const freshReport = () => {
     const mem = lsGet(AUTOFILL_KEY, {});
@@ -4337,6 +4348,7 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <SyncControl auth={auth} sync={sync} c={c} />
           <button onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
