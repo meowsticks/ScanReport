@@ -2002,6 +2002,33 @@ function PhotoLightbox({ photo, onClose }) {
   );
 }
 
+// Buffered caption input: keystrokes stay in local state and are committed to
+// the (multi-MB) report only after a short pause or on blur, so typing stays
+// snappy no matter how many photos are embedded.
+function CaptionField({ value, onCommit, ...rest }) {
+  const [local, setLocal] = useState(value ?? '');
+  const editingRef = useRef(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => { if (!editingRef.current) setLocal(value ?? ''); }, [value]);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    editingRef.current = true;
+    setLocal(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { editingRef.current = false; onCommit(v); }, 400);
+  };
+  const handleBlur = () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    editingRef.current = false;
+    if ((value ?? '') !== local) onCommit(local);
+  };
+
+  return <Textarea value={local} onChange={handleChange} onBlur={handleBlur} {...rest} />;
+}
+
 function ScanPhotos({ report, update }) {
   const fileInputRef = useRef(null);
   const cameraRef    = useRef(null);
@@ -2201,9 +2228,9 @@ function ScanPhotos({ report, update }) {
                       </button>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <Textarea
+                      <CaptionField
                         value={photo.caption}
-                        onChange={e => updatePhoto(photo.id, { caption: e.target.value })}
+                        onCommit={v => updatePhoto(photo.id, { caption: v })}
                         placeholder="Caption: what does this photo show?"
                         style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
                       />
@@ -3570,19 +3597,47 @@ export default function GSSIReportApp() {
   // ---------- Auto-save status indicator ----------
   const [savedAt, setSavedAt] = useState(null);
 
-  // Persist the working report on every change, stamp the save time, and
-  // remember the sticky (repeat-every-job) fields for auto-fill on the next report.
-  useEffect(() => {
+  // Persist the working report. Photos are embedded as data URLs, so the report
+  // can be several MB; serializing it on every keystroke made typing (captions
+  // especially) lag badly. We debounce the write, and flush it when the page is
+  // hidden or closed so nothing is ever lost.
+  const latestReportRef = useRef(report);
+  useEffect(() => { latestReportRef.current = report; }, [report]);
+
+  const persistNow = useRef(() => {});
+  persistNow.current = () => {
+    const r = latestReportRef.current;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(report));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
       setSavedAt(Date.now());
     } catch {}
     const sticky = {};
     STICKY_FIELDS.forEach(f => {
-      if (report[f] !== undefined && report[f] !== '' && report[f] !== null) sticky[f] = report[f];
+      if (r[f] !== undefined && r[f] !== '' && r[f] !== null) sticky[f] = r[f];
     });
     lsSet(AUTOFILL_KEY, { ...lsGet(AUTOFILL_KEY, {}), ...sticky });
+  };
+
+  const saveTimerRef = useRef(null);
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => persistNow.current(), 500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [report]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+      persistNow.current();
+    };
+    const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem('ak_theme', theme); } catch {}

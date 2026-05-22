@@ -113,17 +113,18 @@ export function useCloudSync({ session, report, applyRemote }) {
   }, [userId]);
 
   // ---- Push local edits (debounced) ----
+  // The heavy serialize + compare happens inside the debounce window, not on
+  // every keystroke, so typing never pays the cost of stringifying a multi-MB
+  // report document.
   useEffect(() => {
     if (!userId || !reportIdRef.current) return;
-    const currentJson = JSON.stringify(report);
-    if (currentJson === lastSyncedJsonRef.current) return; // unchanged or a remote apply
-
-    setStatus('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       const snapshot = reportRef.current;
       const json = JSON.stringify(snapshot);
+      if (json === lastSyncedJsonRef.current) { setStatus('synced'); return; } // our echo / no change
       lastSyncedJsonRef.current = json; // claim it as ours before the write to suppress echo
+      setStatus('saving');
       const { error } = await supabase
         .from('reports')
         .update({ data: snapshot, name: snapshot?.projectNo || 'Scan report' })
