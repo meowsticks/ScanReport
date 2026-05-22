@@ -1,7 +1,7 @@
 {
   "name": "gssi-scan-report",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AK ScanReport — GSSI ground-penetrating radar scan report builder.",
   "author": "Aggarwal Kamikazes Cutting & Coring Ltd",
   "type": "module",
@@ -15,11 +15,20 @@
     "app:build": "vite build && electron-builder",
     "app:build:win": "vite build && electron-builder --win",
     "app:build:mac": "vite build && electron-builder --mac",
-    "app:build:linux": "vite build && electron-builder --linux"
+    "app:build:linux": "vite build && electron-builder --linux",
+    "app:publish:win": "vite build && electron-builder --win --publish always"
   },
   "build": {
     "appId": "ca.aggarwalkamikazes.scanreport",
     "productName": "AK ScanReport",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "meowsticks",
+        "repo": "ScanReport",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -38,7 +47,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "public/kamikaze-logo.png"
+      "icon": "public/kamikaze-logo.png",
+      "artifactName": "AK.ScanReport.Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -64,6 +74,7 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
+    "electron-updater": "^6.8.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -9,6 +9,7 @@
 //   - Support opening a report file by double-clicking it in the OS.
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -180,6 +181,35 @@ ipcMain.handle('app:get-launch-file', async () => {
   }
 });
 
+// ---------- Auto-update ----------
+
+// Checks GitHub Releases for a newer version, downloads it in the background,
+// and offers to install on the next restart. No-ops in development and fails
+// silently if the network or GitHub is unavailable, so it never blocks use.
+function setupAutoUpdates() {
+  if (DEV_SERVER_URL) return;
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Restart now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update ready',
+      message: `Version ${info.version} has been downloaded.`,
+      detail: 'Restart to finish updating. Your saved reports are not affected.',
+    });
+    if (response === 0) autoUpdater.quitAndInstall();
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-update check failed:', err == null ? 'unknown' : err);
+  });
+
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+
 // ---------- App lifecycle ----------
 
 // Single-instance: a second launch (e.g. double-clicking another file) routes
@@ -216,6 +246,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     buildMenu();
     createWindow();
+    setupAutoUpdates();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
