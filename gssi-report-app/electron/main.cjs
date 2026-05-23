@@ -19,7 +19,7 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
 // When set, builds from this branch boot straight into the Test build (the live
 // web preview) on first launch — so a reviewer sees the latest with zero setup.
 // Leave '' for normal production builds (they load the bundled Stable app).
-const DEFAULT_TEST_URL = '';
+const DEFAULT_TEST_URL = 'https://ak-scanreport-test.vercel.app/';
 const FILE_FILTERS = [
   { name: 'Scan report', extensions: ['akscan', 'json'] },
   { name: 'All files', extensions: ['*'] },
