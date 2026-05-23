@@ -744,6 +744,8 @@ function SiteDiagram({ report, update }) {
   const [anchor, setAnchor] = useState(null);
   const [hoverPt, setHoverPt] = useState(null);
   const [strokeWidth, setStrokeWidth] = useState(5);
+  const [selectedStrokeIdx, setSelectedStrokeIdx] = useState(null);
+  const dragRef = useRef(null);
   const [pinSize, setPinSize] = useState(18);
   const [zonePattern, setZonePattern] = useState('hatch-red');
   const [zoneDraft, setZoneDraft] = useState(null); // { points: [], pattern }
@@ -837,8 +839,22 @@ function SiteDiagram({ report, update }) {
       }
     }
 
-    report.diagramStrokes.forEach(s => {
+    report.diagramStrokes.forEach((s, i) => {
       if (s.points.length < 2) return;
+      if (i === selectedStrokeIdx) {
+        // Glow / halo behind the selected line so the user can see what they've grabbed.
+        ctx.save();
+        ctx.lineWidth = widthOf(s) + 10;
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = 0.55;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        s.points.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.strokeStyle = s.color;
       ctx.lineWidth = widthOf(s);
       ctx.lineCap = 'round';
@@ -892,7 +908,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft, selectedStrokeIdx]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -916,9 +932,47 @@ function SiteDiagram({ report, update }) {
     };
   };
 
+  // --- Select / move existing lines ---
+  const distToSegment = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a.x + t * dx, cy = a.y + t * dy;
+    return Math.hypot(p.x - cx, p.y - cy);
+  };
+  const hitTestStrokes = (pt) => {
+    let bestIdx = -1, bestDist = Infinity;
+    (report.diagramStrokes || []).forEach((s, i) => {
+      if (!s || !s.points || s.points.length < 2) return;
+      for (let j = 0; j < s.points.length - 1; j++) {
+        const d = distToSegment(pt, s.points[j], s.points[j + 1]);
+        const tol = Math.max(10, (s.width || 5) / 2 + 8);
+        if (d <= tol && d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+    });
+    return bestIdx;
+  };
+  const deleteSelected = () => {
+    if (selectedStrokeIdx == null) return;
+    update({ diagramStrokes: report.diagramStrokes.filter((_, i) => i !== selectedStrokeIdx) });
+    setSelectedStrokeIdx(null);
+  };
+
   const handleStart = (e) => {
     e.preventDefault();
     const pt = getCoords(e);
+    if (tool === 'select') {
+      const idx = hitTestStrokes(pt);
+      if (idx >= 0) {
+        setSelectedStrokeIdx(idx);
+        dragRef.current = { startPt: pt, original: report.diagramStrokes[idx].points.map(p => ({ ...p })) };
+      } else {
+        setSelectedStrokeIdx(null);
+        dragRef.current = null;
+      }
+      return;
+    }
     if (tool === 'pin') {
       const nextLabel = String.fromCharCode(65 + report.diagramPins.length);
       const v = prompt(`Pin ${nextLabel} verdict?\nType: safe / caution / nogo`, 'safe');
@@ -972,6 +1026,19 @@ function SiteDiagram({ report, update }) {
   const cancelZone = () => { setZoneDraft(null); setHoverPt(null); };
 
   const handleMove = (e) => {
+    if (tool === 'select' && dragRef.current && selectedStrokeIdx != null) {
+      e.preventDefault();
+      const pt = getCoords(e);
+      const dx = pt.x - dragRef.current.startPt.x;
+      const dy = pt.y - dragRef.current.startPt.y;
+      const moved = dragRef.current.original.map(p => ({ x: p.x + dx, y: p.y + dy }));
+      update({
+        diagramStrokes: report.diagramStrokes.map((s, i) =>
+          i === selectedStrokeIdx ? { ...s, points: moved } : s
+        ),
+      });
+      return;
+    }
     if (tool === 'draw-zone' && zoneDraft) {
       e.preventDefault();
       setHoverPt(getCoords(e));
@@ -982,11 +1049,12 @@ function SiteDiagram({ report, update }) {
     setHoverPt(getCoords(e));
   };
 
-  const handleEnd = () => {};
+  const handleEnd = () => { dragRef.current = null; };
 
   useEffect(() => {
     setAnchor(null);
     setHoverPt(null);
+    if (tool !== 'select') setSelectedStrokeIdx(null);
   }, [tool]);
 
   const handlePhoto = async (e) => {
@@ -1091,6 +1159,7 @@ function SiteDiagram({ report, update }) {
           📷 Photo
           <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} style={{ display: 'none' }} />
         </label>
+        {toolBtn('select', '✥ Pick / Move')}
         {toolBtn('pin', '📍 Pin core')}
         {toolBtn('draw-rebar', 'Rebar', '#FAC775')}
         {toolBtn('draw-pt', 'PT cable', '#F09595')}
@@ -1145,11 +1214,20 @@ function SiteDiagram({ report, update }) {
       }}>
         <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
           <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Line thickness: <span style={{ color: c.text }}>{strokeWidth}px</span>
+            Line thickness{selectedStrokeIdx != null ? ' (selected)' : ''}: <span style={{ color: c.text }}>
+              {(selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]?.width) || strokeWidth}px
+            </span>
           </div>
-          <input type="range" min="1" max="16" step="1"
-            value={strokeWidth}
-            onChange={e => setStrokeWidth(Number(e.target.value))}
+          <input type="range" min="1" max="48" step="1"
+            value={(selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]?.width) || strokeWidth}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]) {
+                update({ diagramStrokes: report.diagramStrokes.map((s, i) => i === selectedStrokeIdx ? { ...s, width: v } : s) });
+              } else {
+                setStrokeWidth(v);
+              }
+            }}
             style={{ width: '100%', accentColor: c.accent }} />
         </label>
         <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
@@ -1164,7 +1242,11 @@ function SiteDiagram({ report, update }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <Btn onClick={undo} style={{ fontSize: 12 }}>↶ Undo</Btn>
-        <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
+        {selectedStrokeIdx != null ? (
+          <Btn variant="danger" onClick={deleteSelected} style={{ fontSize: 12 }}>🗑 Delete selected line</Btn>
+        ) : (
+          <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
+        )}
       </div>
 
       <div style={{
