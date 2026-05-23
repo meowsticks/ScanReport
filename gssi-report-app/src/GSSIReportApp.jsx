@@ -7,6 +7,7 @@ import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurr
 import { loadTemplates, saveTemplates, newTemplateId, extractTemplateFields } from './lib/templates.js';
 import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
+import TemplateEditor from './TemplateEditor.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -3868,14 +3869,38 @@ export default function GSSIReportApp() {
 
   // ---------- Per-client templates ----------
   const [templates, setTemplates] = useState(() => loadTemplates());
+  const [templateEditor, setTemplateEditor] = useState(null);
   const persistTemplates = (next) => { setTemplates(next); saveTemplates(next); };
 
-  const saveCurrentAsTemplate = () => {
-    const label = (prompt('Template name (e.g. the client):', report.client || 'Template') || '').trim();
-    if (!label) return;
-    const t = { id: newTemplateId(), name: label, createdAt: Date.now(), fields: extractTemplateFields(report) };
-    persistTemplates([t, ...templates]);
+  // Opens the editor in "preview before saving" mode for a brand-new template.
+  const openCreateTemplate = () => {
+    setTemplateEditor({
+      mode: 'create',
+      initialName: report.client || 'Template',
+      initialFields: extractTemplateFields(report),
+      onSave: ({ name, fields }) => {
+        const t = { id: newTemplateId(), name, createdAt: Date.now(), fields };
+        persistTemplates([t, ...templates]);
+        setTemplateEditor(null);
+      },
+    });
   };
+
+  // Opens the editor in "customize" mode for an existing template.
+  const openEditTemplate = (id) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setTemplateEditor({
+      mode: 'edit',
+      initialName: t.name,
+      initialFields: t.fields || {},
+      onSave: ({ name, fields }) => {
+        persistTemplates(templates.map((x) => x.id === id ? { ...x, name, fields } : x));
+        setTemplateEditor(null);
+      },
+    });
+  };
+
   const renameTemplate = (id, name) => {
     const nm = (name || '').trim() || 'Template';
     persistTemplates(templates.map(t => t.id === id ? { ...t, name: nm } : t));
@@ -6111,8 +6136,8 @@ export default function GSSIReportApp() {
             <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 14, paddingTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>📋 Templates</div>
-                <Btn onClick={saveCurrentAsTemplate} style={{ fontSize: 11.5, padding: '6px 10px' }}>
-                  💾 Save current as template
+                <Btn onClick={openCreateTemplate} style={{ fontSize: 11.5, padding: '6px 10px' }}>
+                  💾 Save current as template…
                 </Btn>
               </div>
               {templates.length === 0 ? (
@@ -6124,13 +6149,17 @@ export default function GSSIReportApp() {
                   {templates.map(t => (
                     <div key={t.id} style={{
                       border: `1px solid ${c.border}`, borderRadius: 6, padding: 7, background: c.cardAlt,
-                      display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center',
+                      display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center',
                     }}>
                       <Input value={t.name}
                         onChange={(e) => renameTemplate(t.id, e.target.value)}
                         style={{ fontSize: 12, fontWeight: 600 }} />
                       <Btn variant="primary" onClick={() => createReportFromTemplate(t.id)} style={{ fontSize: 11, padding: '6px 10px' }}>
                         📂 Use
+                      </Btn>
+                      <Btn variant="ghost" onClick={() => openEditTemplate(t.id)}
+                        style={{ fontSize: 11, padding: '6px 10px' }}>
+                        ✏️ Edit
                       </Btn>
                       <Btn variant="ghost"
                         onClick={() => { if (confirm('Delete this template?')) deleteTemplate(t.id); }}
@@ -6147,6 +6176,18 @@ export default function GSSIReportApp() {
             </Btn>
           </div>
         </div>
+      )}
+
+      {templateEditor && (
+        <TemplateEditor
+          open
+          mode={templateEditor.mode}
+          initialName={templateEditor.initialName}
+          initialFields={templateEditor.initialFields}
+          onSave={templateEditor.onSave}
+          onClose={() => setTemplateEditor(null)}
+          c={c}
+        />
       )}
 
       {/* === CUSTOMER CONTACTS === */}
