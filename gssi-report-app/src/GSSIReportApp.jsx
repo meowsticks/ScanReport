@@ -2103,31 +2103,57 @@ function PhotoLightbox({ photo, onClose }) {
   );
 }
 
-// Buffered caption input: keystrokes stay in local state and are committed to
-// the (multi-MB) report only after a short pause or on blur, so typing stays
-// snappy no matter how many photos are embedded.
-function CaptionField({ value, onCommit, ...rest }) {
-  const [local, setLocal] = useState(value ?? '');
+// Uncontrolled caption input. We keep the textarea uncontrolled so React never
+// re-renders the DOM mid-keystroke — a controlled textarea was fighting the
+// Android keyboard, resetting the cursor and dropping selections (so long-press
+// copy/paste didn't work). External value changes (cloud sync, undo, switching
+// reports) are written to the DOM imperatively, but only when the user isn't
+// actively editing. Commits to the (multi-MB) report stay debounced to 400ms
+// idle / blur so typing is snappy regardless of report size.
+function CaptionField({ value, onCommit, style, ...rest }) {
+  const ref = useRef(null);
   const editingRef = useRef(false);
   const timerRef = useRef(null);
 
-  useEffect(() => { if (!editingRef.current) setLocal(value ?? ''); }, [value]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || editingRef.current) return;
+    const next = value ?? '';
+    if (el.value !== next) el.value = next;
+  }, [value]);
+
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const handleChange = (e) => {
     const v = e.target.value;
     editingRef.current = true;
-    setLocal(v);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => { editingRef.current = false; onCommit(v); }, 400);
   };
-  const handleBlur = () => {
+  const handleBlur = (e) => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     editingRef.current = false;
-    if ((value ?? '') !== local) onCommit(local);
+    const cur = e.target.value;
+    if ((value ?? '') !== cur) onCommit(cur);
   };
 
-  return <Textarea value={local} onChange={handleChange} onBlur={handleBlur} {...rest} />;
+  return (
+    <textarea
+      ref={ref}
+      defaultValue={value ?? ''}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      style={{
+        width: '100%', background: c.cardAlt,
+        border: `1px solid ${c.border}`, borderRadius: 6,
+        padding: '9px 11px', color: c.text, fontSize: 14,
+        fontFamily: 'inherit', boxSizing: 'border-box',
+        resize: 'vertical', minHeight: 64,
+        ...style,
+      }}
+      {...rest}
+    />
+  );
 }
 
 function ScanPhotos({ report, update }) {
