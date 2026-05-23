@@ -1,5 +1,13 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import QRGen from './qrcode.js';
+import { useAuth } from './lib/useAuth.js';
+import { useCloudSync } from './lib/useCloudSync.js';
+import { compressImage } from './lib/image.js';
+import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurrentId as persistCurrentId, newId } from './lib/reportsLibrary.js';
+import { loadTemplates, saveTemplates, newTemplateId, extractTemplateFields } from './lib/templates.js';
+import SyncControl from './SyncControl.jsx';
+import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
+import TemplateEditor from './TemplateEditor.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -138,6 +146,8 @@ const DEFAULT_REPORT = {
 
   // Site diagram
   diagramImage: null,
+  diagramImageUrl: null,   // cloud copy: site image fetched from Storage
+  diagramImagePath: null,  // Storage path for the site image
   diagramStrokes: [],
   diagramPins: [],
 
@@ -710,11 +720,11 @@ function DiagramSnapshot({ report, width = 1100, height = 750 }) {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     drawSiteDiagramTo(ctx, width, height, report, { backgroundImage: imgRef.current });
-  }, [report.diagramImage, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
+  }, [report.diagramImage, report.diagramImageUrl, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
   return (
     <>
-      {report.diagramImage && (
-        <img ref={imgRef} src={report.diagramImage} alt=""
+      {diagramSrc(report) && (
+        <img ref={imgRef} src={diagramSrc(report)} alt="" crossOrigin="anonymous"
           style={{ display: 'none' }}
           onLoad={() => {
             const c = canvasRef.current;
@@ -736,6 +746,8 @@ function SiteDiagram({ report, update }) {
   const [anchor, setAnchor] = useState(null);
   const [hoverPt, setHoverPt] = useState(null);
   const [strokeWidth, setStrokeWidth] = useState(5);
+  const [selectedStrokeIdx, setSelectedStrokeIdx] = useState(null);
+  const dragRef = useRef(null);
   const [pinSize, setPinSize] = useState(18);
   const [zonePattern, setZonePattern] = useState('hatch-red');
   const [zoneDraft, setZoneDraft] = useState(null); // { points: [], pattern }
@@ -829,8 +841,22 @@ function SiteDiagram({ report, update }) {
       }
     }
 
-    report.diagramStrokes.forEach(s => {
+    report.diagramStrokes.forEach((s, i) => {
       if (s.points.length < 2) return;
+      if (i === selectedStrokeIdx) {
+        // Glow / halo behind the selected line so the user can see what they've grabbed.
+        ctx.save();
+        ctx.lineWidth = widthOf(s) + 10;
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = 0.55;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        s.points.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.strokeStyle = s.color;
       ctx.lineWidth = widthOf(s);
       ctx.lineCap = 'round';
@@ -884,7 +910,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft, selectedStrokeIdx]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -894,7 +920,7 @@ function SiteDiagram({ report, update }) {
     canvas.width = rect.width;
     canvas.height = rect.height;
     redraw();
-  }, [report.diagramImage]);
+  }, [report.diagramImage, report.diagramImageUrl]);
 
   const getCoords = (e) => {
     const canvas = canvasRef.current;
@@ -908,9 +934,47 @@ function SiteDiagram({ report, update }) {
     };
   };
 
+  // --- Select / move existing lines ---
+  const distToSegment = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a.x + t * dx, cy = a.y + t * dy;
+    return Math.hypot(p.x - cx, p.y - cy);
+  };
+  const hitTestStrokes = (pt) => {
+    let bestIdx = -1, bestDist = Infinity;
+    (report.diagramStrokes || []).forEach((s, i) => {
+      if (!s || !s.points || s.points.length < 2) return;
+      for (let j = 0; j < s.points.length - 1; j++) {
+        const d = distToSegment(pt, s.points[j], s.points[j + 1]);
+        const tol = Math.max(10, (s.width || 5) / 2 + 8);
+        if (d <= tol && d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+    });
+    return bestIdx;
+  };
+  const deleteSelected = () => {
+    if (selectedStrokeIdx == null) return;
+    update({ diagramStrokes: report.diagramStrokes.filter((_, i) => i !== selectedStrokeIdx) });
+    setSelectedStrokeIdx(null);
+  };
+
   const handleStart = (e) => {
     e.preventDefault();
     const pt = getCoords(e);
+    if (tool === 'select') {
+      const idx = hitTestStrokes(pt);
+      if (idx >= 0) {
+        setSelectedStrokeIdx(idx);
+        dragRef.current = { startPt: pt, original: report.diagramStrokes[idx].points.map(p => ({ ...p })) };
+      } else {
+        setSelectedStrokeIdx(null);
+        dragRef.current = null;
+      }
+      return;
+    }
     if (tool === 'pin') {
       const nextLabel = String.fromCharCode(65 + report.diagramPins.length);
       const v = prompt(`Pin ${nextLabel} verdict?\nType: safe / caution / nogo`, 'safe');
@@ -964,6 +1028,19 @@ function SiteDiagram({ report, update }) {
   const cancelZone = () => { setZoneDraft(null); setHoverPt(null); };
 
   const handleMove = (e) => {
+    if (tool === 'select' && dragRef.current && selectedStrokeIdx != null) {
+      e.preventDefault();
+      const pt = getCoords(e);
+      const dx = pt.x - dragRef.current.startPt.x;
+      const dy = pt.y - dragRef.current.startPt.y;
+      const moved = dragRef.current.original.map(p => ({ x: p.x + dx, y: p.y + dy }));
+      update({
+        diagramStrokes: report.diagramStrokes.map((s, i) =>
+          i === selectedStrokeIdx ? { ...s, points: moved } : s
+        ),
+      });
+      return;
+    }
     if (tool === 'draw-zone' && zoneDraft) {
       e.preventDefault();
       setHoverPt(getCoords(e));
@@ -974,19 +1051,19 @@ function SiteDiagram({ report, update }) {
     setHoverPt(getCoords(e));
   };
 
-  const handleEnd = () => {};
+  const handleEnd = () => { dragRef.current = null; };
 
   useEffect(() => {
     setAnchor(null);
     setHoverPt(null);
+    if (tool !== 'select') setSelectedStrokeIdx(null);
   }, [tool]);
 
-  const handlePhoto = (e) => {
+  const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => update({ diagramImage: ev.target.result });
-    reader.readAsDataURL(file);
+    const dataUrl = await compressImage(file);
+    if (dataUrl) update({ diagramImage: dataUrl });
   };
 
   const undo = () => {
@@ -1031,8 +1108,8 @@ function SiteDiagram({ report, update }) {
         overflow: 'hidden', marginBottom: 10,
         border: `1px solid ${c.border}`,
       }}>
-        {report.diagramImage ? (
-          <img src={report.diagramImage} alt="Site"
+        {diagramSrc(report) ? (
+          <img src={diagramSrc(report)} alt="Site"
             style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
         ) : (
           <div style={{
@@ -1054,6 +1131,25 @@ function SiteDiagram({ report, update }) {
           onMouseUp={handleEnd} onMouseLeave={handleEnd}
           onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
         />
+        {diagramSrc(report) && (
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Remove the site diagram photo? Your sketches and pins stay.')) {
+                update({ diagramImage: null, diagramImageUrl: null, diagramImagePath: null });
+              }
+            }}
+            title="Remove site photo"
+            aria-label="Remove site photo"
+            style={{
+              position: 'absolute', top: 6, right: 6, zIndex: 3,
+              background: 'rgba(0,0,0,0.6)', color: '#fff',
+              border: '1px solid rgba(255,255,255,0.45)', borderRadius: 6,
+              padding: '5px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}>
+            ✕ Remove photo
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 6 }}>
@@ -1065,6 +1161,7 @@ function SiteDiagram({ report, update }) {
           📷 Photo
           <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} style={{ display: 'none' }} />
         </label>
+        {toolBtn('select', '✥ Pick / Move')}
         {toolBtn('pin', '📍 Pin core')}
         {toolBtn('draw-rebar', 'Rebar', '#FAC775')}
         {toolBtn('draw-pt', 'PT cable', '#F09595')}
@@ -1119,11 +1216,20 @@ function SiteDiagram({ report, update }) {
       }}>
         <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
           <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Line thickness: <span style={{ color: c.text }}>{strokeWidth}px</span>
+            Line thickness{selectedStrokeIdx != null ? ' (selected)' : ''}: <span style={{ color: c.text }}>
+              {(selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]?.width) || strokeWidth}px
+            </span>
           </div>
-          <input type="range" min="1" max="16" step="1"
-            value={strokeWidth}
-            onChange={e => setStrokeWidth(Number(e.target.value))}
+          <input type="range" min="1" max="48" step="1"
+            value={(selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]?.width) || strokeWidth}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]) {
+                update({ diagramStrokes: report.diagramStrokes.map((s, i) => i === selectedStrokeIdx ? { ...s, width: v } : s) });
+              } else {
+                setStrokeWidth(v);
+              }
+            }}
             style={{ width: '100%', accentColor: c.accent }} />
         </label>
         <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
@@ -1138,7 +1244,11 @@ function SiteDiagram({ report, update }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <Btn onClick={undo} style={{ fontSize: 12 }}>↶ Undo</Btn>
-        <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
+        {selectedStrokeIdx != null ? (
+          <Btn variant="danger" onClick={deleteSelected} style={{ fontSize: 12 }}>🗑 Delete selected line</Btn>
+        ) : (
+          <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
+        )}
       </div>
 
       <div style={{
@@ -1390,6 +1500,19 @@ function QRCode({ value, size = 110 }) {
 // ============================================================
 // AnnotatedImage — img with overlay canvas of annotations
 // ============================================================
+
+// A photo's best display source: the local base64 (instant + offline) if we
+// have it, else the Storage URL (for photos received from another device).
+function photoSrc(p) {
+  return (p && (p.dataUrl || p.url)) || '';
+}
+function diagramSrc(report) {
+  return report.diagramImage || report.diagramImageUrl || null;
+}
+// Scan-location photos use their own field names (photo / photoUrl).
+function locPhotoSrc(loc) {
+  return (loc && (loc.photo || loc.photoUrl)) || '';
+}
 
 function AnnotatedImage({ src, annotations = [], style, alt }) {
   const containerRef = useRef(null);
@@ -1725,7 +1848,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       }}>
         <img
           ref={imgRef}
-          src={photo.dataUrl}
+          src={photoSrc(photo)}
           alt="scan"
           onLoad={redraw}
           style={{
@@ -1941,10 +2064,77 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   );
 }
 
+// Full-size photo viewer (lightbox). Tapping a thumbnail opens the photo large
+// with its markup, so uploaded photos can actually be looked at on a phone.
+function PhotoLightbox({ photo, onClose }) {
+  if (!photo) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1100,
+        background: 'rgba(0,0,0,0.88)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}>
+      <button
+        onClick={onClose} aria-label="Close photo"
+        style={{
+          position: 'absolute', top: 14, right: 16, zIndex: 2,
+          background: 'rgba(255,255,255,0.16)', color: '#fff',
+          border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8,
+          padding: '8px 13px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+        }}>
+        ✕ Close
+      </button>
+      <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
+        <AnnotatedImage
+          src={photoSrc(photo)}
+          annotations={photo.annotations || []}
+          alt={photo.caption || 'Scan photo'}
+          style={{ width: 'min(94vw, 1100px)' }}
+        />
+        {photo.caption && (
+          <div style={{ color: '#fff', fontSize: 13, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+            {photo.caption}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Buffered caption input: keystrokes stay in local state and are committed to
+// the (multi-MB) report only after a short pause or on blur, so typing stays
+// snappy no matter how many photos are embedded.
+function CaptionField({ value, onCommit, ...rest }) {
+  const [local, setLocal] = useState(value ?? '');
+  const editingRef = useRef(false);
+  const timerRef = useRef(null);
+
+  useEffect(() => { if (!editingRef.current) setLocal(value ?? ''); }, [value]);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    editingRef.current = true;
+    setLocal(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { editingRef.current = false; onCommit(v); }, 400);
+  };
+  const handleBlur = () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    editingRef.current = false;
+    if ((value ?? '') !== local) onCommit(local);
+  };
+
+  return <Textarea value={local} onChange={handleChange} onBlur={handleBlur} {...rest} />;
+}
+
 function ScanPhotos({ report, update }) {
   const fileInputRef = useRef(null);
   const cameraRef    = useRef(null);
   const [editingPhotoId, setEditingPhotoId] = useState(null);
+  const [viewingPhotoId, setViewingPhotoId] = useState(null);
   const [dragPhotoId, setDragPhotoId] = useState(null);
   const [overPhotoId, setOverPhotoId] = useState(null);
 
@@ -1962,12 +2152,13 @@ function ScanPhotos({ report, update }) {
   const addPhotos = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const loaded = await Promise.all(files.map(file => new Promise((resolve) => {
-      const reader = new FileReader();
+    const loaded = await Promise.all(files.map(async (file) => {
       const detected = parseScanFilename(file.name || '');
-      reader.onload = (ev) => resolve({
+      const dataUrl = await compressImage(file);
+      if (!dataUrl) return null;
+      return {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        dataUrl: ev.target.result,
+        dataUrl,
         caption: '',
         confidence: 'high',
         pinRef: '',
@@ -1977,14 +2168,14 @@ function ScanPhotos({ report, update }) {
         panelGroup: '',
         panelLabel: '',
         annotations: [],
-      });
-      reader.readAsDataURL(file);
-    })));
-    update({ scanPhotos: [...report.scanPhotos, ...loaded] });
+      };
+    }));
+    update({ scanPhotos: [...report.scanPhotos, ...loaded.filter(Boolean)] });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const editingPhoto = report.scanPhotos.find(p => p.id === editingPhotoId);
+  const viewingPhoto = report.scanPhotos.find(p => p.id === viewingPhotoId);
 
   const updatePhoto = (id, patch) => {
     update({
@@ -2110,20 +2301,37 @@ function ScanPhotos({ report, update }) {
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
                     <div style={{ width: 84, flexShrink: 0 }}>
-                      <AnnotatedImage
-                        src={photo.dataUrl}
-                        annotations={photo.annotations || []}
-                        alt={photo.caption || 'Scan photo'}
+                      <button
+                        type="button"
+                        onClick={() => setViewingPhotoId(photo.id)}
+                        title="Open / view full size"
+                        aria-label="Open photo full size"
                         style={{
-                          width: 84, height: 84, overflow: 'hidden',
-                          borderRadius: 4, border: `1px solid ${c.border}`,
-                        }}
-                      />
+                          position: 'relative', display: 'block', padding: 0,
+                          border: 'none', background: 'none', cursor: 'zoom-in', width: 84,
+                        }}>
+                        <AnnotatedImage
+                          src={photoSrc(photo)}
+                          annotations={photo.annotations || []}
+                          alt={photo.caption || 'Scan photo'}
+                          style={{
+                            width: 84, height: 84, overflow: 'hidden',
+                            borderRadius: 4, border: `1px solid ${c.border}`,
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <span style={{
+                          position: 'absolute', bottom: 3, right: 3,
+                          background: 'rgba(0,0,0,0.62)', color: '#fff',
+                          borderRadius: 4, fontSize: 11, lineHeight: 1,
+                          padding: '2px 4px', pointerEvents: 'none',
+                        }}>🔍</span>
+                      </button>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <Textarea
+                      <CaptionField
                         value={photo.caption}
-                        onChange={e => updatePhoto(photo.id, { caption: e.target.value })}
+                        onCommit={v => updatePhoto(photo.id, { caption: v })}
                         placeholder="Caption: what does this photo show?"
                         style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
                       />
@@ -2227,6 +2435,8 @@ function ScanPhotos({ report, update }) {
           onClose={() => setEditingPhotoId(null)}
         />
       )}
+
+      <PhotoLightbox photo={viewingPhoto} onClose={() => setViewingPhotoId(null)} />
     </Card>
   );
 }
@@ -2295,7 +2505,7 @@ function GPRScans({ report }) {
                         {p.panelLabel ? `(${p.panelLabel}) ` : ''}{p.locationRef || ''}
                       </div>
                       <AnnotatedImage
-                        src={p.dataUrl}
+                        src={photoSrc(p)}
                         annotations={p.annotations || []}
                         style={{ background: '#000', borderRadius: 3 }}
                       />
@@ -2330,7 +2540,7 @@ function GPRScans({ report }) {
                   </span>
                 </div>
                 <AnnotatedImage
-                  src={p.dataUrl}
+                  src={photoSrc(p)}
                   annotations={p.annotations || []}
                   style={{ background: '#000', borderRadius: 4 }}
                 />
@@ -2558,12 +2768,11 @@ function ScanLocations({ report, update }) {
     update({ scanLocations: next });
   };
 
-  const handlePhoto = (id, e) => {
+  const handlePhoto = async (id, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => updateLoc(id, { photo: ev.target.result });
-    reader.readAsDataURL(file);
+    const dataUrl = await compressImage(file);
+    if (dataUrl) updateLoc(id, { photo: dataUrl, photoUrl: null, photoPath: null });
     if (fileInputRefs.current[id]) fileInputRefs.current[id].value = '';
   };
 
@@ -2943,21 +3152,21 @@ function ScanLocations({ report, update }) {
                     e.stopPropagation();
                     setMenuLocId(menuLocId === loc.id ? null : loc.id);
                   }}
-                  title={loc.photo ? 'Click to edit / replace / annotate' : 'Click to add a photo'}
+                  title={locPhotoSrc(loc) ? 'Click to edit / replace / annotate' : 'Click to add a photo'}
                 >
-                  {loc.photo ? (
+                  {locPhotoSrc(loc) ? (
                     <>
                       {(loc.photoAnnotations && loc.photoAnnotations.length > 0) ? (
                         <div style={{ position: 'absolute', inset: 0 }}>
                           <AnnotatedImage
-                            src={loc.photo}
+                            src={locPhotoSrc(loc)}
                             annotations={loc.photoAnnotations}
                             alt={loc.label}
                             style={{ width: '100%', height: '100%' }}
                           />
                         </div>
                       ) : (
-                        <img src={loc.photo} alt={loc.label}
+                        <img src={locPhotoSrc(loc)} alt={loc.label}
                           style={{
                             width: '100%', height: '100%', objectFit: 'cover',
                             position: 'absolute', inset: 0,
@@ -3017,7 +3226,7 @@ function ScanLocations({ report, update }) {
                         </button>
                         <button
                           onClick={() => {
-                            if (!loc.photo) { alert('Add a photo first, then annotate it.'); return; }
+                            if (!locPhotoSrc(loc)) { alert('Add a photo first, then annotate it.'); return; }
                             setAnnotLocId(loc.id);
                             setMenuLocId(null);
                           }}
@@ -3026,7 +3235,7 @@ function ScanLocations({ report, update }) {
                         </button>
                         <button
                           onClick={() => {
-                            if (!loc.photo) { setMenuLocId(null); return; }
+                            if (!locPhotoSrc(loc)) { setMenuLocId(null); return; }
                             if (!confirm('Remove this location\'s photo (and annotations)?')) return;
                             updateLoc(loc.id, { photo: null, photoAnnotations: [] });
                             setMenuLocId(null);
@@ -3081,7 +3290,7 @@ function ScanLocations({ report, update }) {
                             background: c.cardAlt, padding: 4,
                           }}>
                             <AnnotatedImage
-                              src={p.dataUrl}
+                              src={photoSrc(p)}
                               annotations={p.annotations || []}
                               style={{ background: '#000', borderRadius: 3 }}
                             />
@@ -3107,7 +3316,7 @@ function ScanLocations({ report, update }) {
                     borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 12,
                     color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 8,
                   }}>
-                    📷 {loc.photo ? 'Replace photo' : 'Add photo'}
+                    📷 {locPhotoSrc(loc) ? 'Replace photo' : 'Add photo'}
                     <input
                       ref={el => { if (el) fileInputRefs.current[loc.id] = el; }}
                       type="file" accept="image/*" capture="environment"
@@ -3205,10 +3414,10 @@ function ScanLocations({ report, update }) {
       {/* Annotation editor for the per-location photo */}
       {annotLocId && (() => {
         const loc = report.scanLocations.find(l => l.id === annotLocId);
-        if (!loc || !loc.photo) return null;
+        if (!loc || !locPhotoSrc(loc)) return null;
         return (
           <AnnotationEditor
-            photo={{ dataUrl: loc.photo, annotations: loc.photoAnnotations || [] }}
+            photo={{ dataUrl: locPhotoSrc(loc), annotations: loc.photoAnnotations || [] }}
             onSave={(annotations) => {
               updateLoc(loc.id, { photoAnnotations: annotations });
               setAnnotLocId(null);
@@ -3472,13 +3681,17 @@ function Assistant({ report, update }) {
   );
 }
 
+function deriveReportName(r) {
+  if (!r) return 'Untitled report';
+  return (r.projectNo || r.jobNote || r.client || 'Untitled report').toString().slice(0, 60);
+}
+
 export default function GSSIReportApp() {
-  const [report, setReport] = useState(() => {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY);
-      return s ? { ...DEFAULT_REPORT, ...JSON.parse(s) } : DEFAULT_REPORT;
-    } catch { return DEFAULT_REPORT; }
-  });
+  // Multi-report library: the open report plus a lightweight index of all reports.
+  const [lib] = useState(() => ensureLibrary(DEFAULT_REPORT, deriveReportName));
+  const [currentId, setCurrentIdState] = useState(lib.currentId);
+  const [reportsIndex, setReportsIndex] = useState(lib.index);
+  const [report, setReport] = useState(lib.currentReport);
 
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('ak_theme') || 'dark'; }
@@ -3488,19 +3701,63 @@ export default function GSSIReportApp() {
   // ---------- Auto-save status indicator ----------
   const [savedAt, setSavedAt] = useState(null);
 
-  // Persist the working report on every change, stamp the save time, and
-  // remember the sticky (repeat-every-job) fields for auto-fill on the next report.
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(report));
-      setSavedAt(Date.now());
-    } catch {}
+  // Persist the working report. Photos are embedded as data URLs, so the report
+  // can be several MB; serializing it on every keystroke made typing (captions
+  // especially) lag badly. We debounce the write, and flush it when the page is
+  // hidden or closed so nothing is ever lost.
+  const latestReportRef = useRef(report);
+  useEffect(() => { latestReportRef.current = report; }, [report]);
+  const currentIdRef = useRef(currentId);
+  useEffect(() => { currentIdRef.current = currentId; }, [currentId]);
+
+  const persistNow = useRef(() => {});
+  persistNow.current = () => {
+    const r = latestReportRef.current;
+    const id = currentIdRef.current;
+    saveReport(id, r);
+    setSavedAt(Date.now());
+    setReportsIndex((idx) => {
+      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now() } : e);
+      saveIndex(next);
+      return next;
+    });
     const sticky = {};
     STICKY_FIELDS.forEach(f => {
-      if (report[f] !== undefined && report[f] !== '' && report[f] !== null) sticky[f] = report[f];
+      if (r[f] !== undefined && r[f] !== '' && r[f] !== null) sticky[f] = r[f];
     });
     lsSet(AUTOFILL_KEY, { ...lsGet(AUTOFILL_KEY, {}), ...sticky });
+  };
+
+  const saveTimerRef = useRef(null);
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => persistNow.current(), 500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [report]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+      persistNow.current();
+    };
+    const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVis);
+
+    // Desktop: when an update is about to install, save first, then confirm.
+    let offFlush;
+    if (window.akDesktop?.onFlushSave) {
+      offFlush = window.akDesktop.onFlushSave(() => {
+        flush();
+        window.akDesktop.flushSaveDone?.();
+      });
+    }
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVis);
+      if (offFlush) offFlush();
+    };
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem('ak_theme', theme); } catch {}
@@ -3508,6 +3765,14 @@ export default function GSSIReportApp() {
   }, [theme]);
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+
+  // ---------- Cloud sync (opt-in: only active once signed in) ----------
+  // The app stays fully local until a user signs in via the header ☁ button.
+  const auth = useAuth();
+  const applyRemote = useCallback((data) => {
+    setReport({ ...DEFAULT_REPORT, ...data });
+  }, []);
+  const sync = useCloudSync({ session: auth.session, report, applyRemote });
 
   // ---------- Auto-fill: build a fresh report carrying sticky fields forward ----------
   const freshReport = () => {
@@ -3534,21 +3799,130 @@ export default function GSSIReportApp() {
     setRecents(next);
   };
 
-  // ---------- Named drafts (cross-report saved copies) ----------
-  const [drafts, setDrafts] = useState(() => lsGet(DRAFTS_KEY, []));
-  const [draftsOpen, setDraftsOpen] = useState(false);
-  useEffect(() => { lsSet(DRAFTS_KEY, drafts); }, [drafts]);
-  const saveNamedDraft = (name) => {
-    const label = (name || '').trim() || report.projectNo || `Draft · ${new Date().toLocaleString()}`;
-    const entry = { id: `d-${Date.now()}`, name: label, savedAt: Date.now(), report };
-    setDrafts(d => [entry, ...d]);
-    rememberRecents();
+  // ---------- Reports library (work on multiple reports) ----------
+  const [reportsOpen, setReportsOpen] = useState(false);
+
+  const switchReport = (id) => {
+    if (id === currentIdRef.current) { setReportsOpen(false); return; }
+    persistNow.current();                         // save the report we're leaving
+    const data = loadReport(id);
+    setCurrentIdState(id); persistCurrentId(id);
+    setReport(data ? { ...DEFAULT_REPORT, ...data } : DEFAULT_REPORT);
+    forgetFile();
+    setReportsOpen(false);
   };
-  const loadDraft = (id) => {
-    const d = drafts.find(x => x.id === id);
-    if (d) { setReport({ ...DEFAULT_REPORT, ...d.report }); forgetFile(); setDraftsOpen(false); }
+
+  const createReport = () => {
+    persistNow.current();
+    const r = freshReport();
+    const id = newId();
+    saveReport(id, r);
+    setReportsIndex((idx) => {
+      const next = [{ id, name: deriveReportName(r), updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+    setCurrentIdState(id); persistCurrentId(id);
+    setReport(r);
+    forgetFile();
+    setReportsOpen(false);
   };
-  const deleteDraft = (id) => setDrafts(d => d.filter(x => x.id !== id));
+
+  const duplicateReport = (id) => {
+    const src = id === currentIdRef.current ? latestReportRef.current : loadReport(id);
+    if (!src) return;
+    const nid = newId();
+    saveReport(nid, { ...src });
+    setReportsIndex((idx) => {
+      const next = [{ id: nid, name: deriveReportName(src) + ' (copy)', updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+  };
+
+  const renameReport = (id, name) => {
+    const nm = (name || '').trim() || 'Untitled report';
+    setReportsIndex((idx) => {
+      const next = idx.map((e) => e.id === id ? { ...e, name: nm } : e);
+      saveIndex(next); return next;
+    });
+  };
+
+  const deleteReport = (id) => {
+    removeReport(id);
+    setReportsIndex((idx) => {
+      let next = idx.filter((e) => e.id !== id);
+      if (id === currentIdRef.current) {
+        if (next.length === 0) {
+          const r = freshReport(); const fid = newId();
+          saveReport(fid, r);
+          next = [{ id: fid, name: deriveReportName(r), updatedAt: Date.now() }];
+          setCurrentIdState(fid); persistCurrentId(fid); setReport(r); forgetFile();
+        } else {
+          const nid = next[0].id;
+          setCurrentIdState(nid); persistCurrentId(nid);
+          setReport({ ...DEFAULT_REPORT, ...(loadReport(nid) || {}) }); forgetFile();
+        }
+      }
+      saveIndex(next);
+      return next;
+    });
+  };
+
+  // ---------- Per-client templates ----------
+  const [templates, setTemplates] = useState(() => loadTemplates());
+  const [templateEditor, setTemplateEditor] = useState(null);
+  const persistTemplates = (next) => { setTemplates(next); saveTemplates(next); };
+
+  // Opens the editor in "preview before saving" mode for a brand-new template.
+  const openCreateTemplate = () => {
+    setTemplateEditor({
+      mode: 'create',
+      initialName: report.client || 'Template',
+      initialFields: extractTemplateFields(report),
+      onSave: ({ name, fields }) => {
+        const t = { id: newTemplateId(), name, createdAt: Date.now(), fields };
+        persistTemplates([t, ...templates]);
+        setTemplateEditor(null);
+      },
+    });
+  };
+
+  // Opens the editor in "customize" mode for an existing template.
+  const openEditTemplate = (id) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setTemplateEditor({
+      mode: 'edit',
+      initialName: t.name,
+      initialFields: t.fields || {},
+      onSave: ({ name, fields }) => {
+        persistTemplates(templates.map((x) => x.id === id ? { ...x, name, fields } : x));
+        setTemplateEditor(null);
+      },
+    });
+  };
+
+  const renameTemplate = (id, name) => {
+    const nm = (name || '').trim() || 'Template';
+    persistTemplates(templates.map(t => t.id === id ? { ...t, name: nm } : t));
+  };
+  const deleteTemplate = (id) => {
+    persistTemplates(templates.filter(t => t.id !== id));
+  };
+  const createReportFromTemplate = (id) => {
+    const t = templates.find(x => x.id === id);
+    if (!t) return;
+    persistNow.current();
+    const r = { ...freshReport(), ...t.fields };
+    const rid = newId();
+    saveReport(rid, r);
+    setReportsIndex((idx) => {
+      const next = [{ id: rid, name: deriveReportName(r), updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+    setCurrentIdState(rid); persistCurrentId(rid);
+    setReport(r); forgetFile();
+    setReportsOpen(false);
+  };
 
   // ---------- Customer / contact directory ----------
   const [contacts, setContacts] = useState(() => lsGet(CONTACTS_KEY, []));
@@ -4337,6 +4711,9 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <SyncControl auth={auth} sync={sync} c={c} />
+          <FeedbackButton c={c} />
+          {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
           <button onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
@@ -4360,16 +4737,16 @@ export default function GSSIReportApp() {
             }}>
             🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
-          <button onClick={() => setDraftsOpen(true)}
-            title="Saved drafts — keep multiple reports"
-            aria-label="Saved drafts"
+          <button onClick={() => setReportsOpen(true)}
+            title="Reports — work on multiple reports"
+            aria-label="Reports library"
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
               borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
-            📚 {drafts.length > 0 ? drafts.length : ''}
+            🗂 {reportsIndex.length > 1 ? reportsIndex.length : ''}
           </button>
           <button onClick={() => setContactsOpen(true)}
             title="Customer contacts"
@@ -5701,66 +6078,116 @@ export default function GSSIReportApp() {
       )}
 
       {/* === SAVED DRAFTS === */}
-      {draftsOpen && (
+      {reportsOpen && (
         <div className="no-print" style={{
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 16,
-        }} onClick={() => setDraftsOpen(false)}>
+        }} onClick={() => setReportsOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
             borderRadius: 10, padding: 18,
-            width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
+            width: 'min(540px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
-              📚 Saved drafts
+              🗂 My reports
             </div>
             <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
-              Keep multiple reports on this device. Saving snapshots the current report;
-              loading replaces what's on screen (the live report auto-saves separately).
+              Work on as many reports as you like — each one auto-saves on its own.
+              Tap a report to open it; the one you're in is marked <strong>Open</strong>.
             </div>
-            <Btn variant="primary" onClick={() => saveNamedDraft()} style={{ width: '100%', marginBottom: 12 }}>
-              ＋ Save current report as a draft
+            <Btn variant="primary" onClick={createReport} style={{ width: '100%', marginBottom: 12 }}>
+              ＋ New report
             </Btn>
-            {drafts.length === 0 ? (
-              <div style={{
-                padding: 14, textAlign: 'center', fontSize: 12, color: c.textFaint,
-                background: c.cardAlt, borderRadius: 6,
-              }}>No saved drafts yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {drafts.map(d => (
-                  <div key={d.id} style={{
-                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 9, background: c.cardAlt,
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {[...reportsIndex].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(e => {
+                const isOpen = e.id === currentId;
+                return (
+                  <div key={e.id} style={{
+                    border: `1px solid ${isOpen ? c.accent : c.border}`, borderRadius: 6, padding: 9,
+                    background: isOpen ? c.accentDim : c.cardAlt,
                   }}>
-                    <Input value={d.name}
-                      onChange={e => setDrafts(list => list.map(x => x.id === d.id ? { ...x, name: e.target.value } : x))}
+                    <Input value={e.name}
+                      onChange={ev => renameReport(e.id, ev.target.value)}
                       style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 7 }}>
-                      Saved {new Date(d.savedAt).toLocaleString()}
-                      {(d.report?.targets?.length || 0) > 0 && ` · ${d.report.targets.length} target${d.report.targets.length === 1 ? '' : 's'}`}
-                      {(d.report?.cores?.length || 0) > 0 && ` · ${d.report.cores.length} core${d.report.cores.length === 1 ? '' : 's'}`}
+                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7 }}>
+                      {isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6 }}>
-                      <Btn variant="primary" onClick={() => loadDraft(d.id)} style={{ fontSize: 12 }}>
-                        📂 Load
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
+                      <Btn variant="primary" onClick={() => switchReport(e.id)} disabled={isOpen}
+                        style={{ fontSize: 12, opacity: isOpen ? 0.6 : 1 }}>
+                        {isOpen ? '✓ Open' : '📂 Open'}
                       </Btn>
-                      <Btn variant="ghost" onClick={() => deleteDraft(d.id)}
+                      <Btn variant="ghost" onClick={() => duplicateReport(e.id)} style={{ fontSize: 12 }}>
+                        ⧉ Copy
+                      </Btn>
+                      <Btn variant="ghost"
+                        onClick={() => { if (confirm('Delete this report? This cannot be undone.')) deleteReport(e.id); }}
                         style={{ fontSize: 12, borderColor: c.red, color: c.red }}>
-                        🗑 Delete
+                        🗑
                       </Btn>
                     </div>
                   </div>
-                ))}
+                );
+              })}
+            </div>
+            <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 14, paddingTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>📋 Templates</div>
+                <Btn onClick={openCreateTemplate} style={{ fontSize: 11.5, padding: '6px 10px' }}>
+                  💾 Save current as template…
+                </Btn>
               </div>
-            )}
-            <Btn variant="ghost" onClick={() => setDraftsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+              {templates.length === 0 ? (
+                <div style={{ padding: 10, fontSize: 11.5, color: c.textFaint, background: c.cardAlt, borderRadius: 6, lineHeight: 1.5 }}>
+                  No templates yet. Save the current report as a template to reuse its client info, equipment defaults, sign-off, and section toggles on every new job for that client.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {templates.map(t => (
+                    <div key={t.id} style={{
+                      border: `1px solid ${c.border}`, borderRadius: 6, padding: 7, background: c.cardAlt,
+                      display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center',
+                    }}>
+                      <Input value={t.name}
+                        onChange={(e) => renameTemplate(t.id, e.target.value)}
+                        style={{ fontSize: 12, fontWeight: 600 }} />
+                      <Btn variant="primary" onClick={() => createReportFromTemplate(t.id)} style={{ fontSize: 11, padding: '6px 10px' }}>
+                        📂 Use
+                      </Btn>
+                      <Btn variant="ghost" onClick={() => openEditTemplate(t.id)}
+                        style={{ fontSize: 11, padding: '6px 10px' }}>
+                        ✏️ Edit
+                      </Btn>
+                      <Btn variant="ghost"
+                        onClick={() => { if (confirm('Delete this template?')) deleteTemplate(t.id); }}
+                        style={{ fontSize: 11, borderColor: c.red, color: c.red, padding: '5px 8px' }}>
+                        🗑
+                      </Btn>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Btn variant="ghost" onClick={() => setReportsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
               Close
             </Btn>
           </div>
         </div>
+      )}
+
+      {templateEditor && (
+        <TemplateEditor
+          open
+          mode={templateEditor.mode}
+          initialName={templateEditor.initialName}
+          initialFields={templateEditor.initialFields}
+          onSave={templateEditor.onSave}
+          onClose={() => setTemplateEditor(null)}
+          c={c}
+        />
       )}
 
       {/* === CUSTOMER CONTACTS === */}

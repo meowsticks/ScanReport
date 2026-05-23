@@ -9,10 +9,17 @@
 //   - Support opening a report file by double-clicking it in the OS.
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const path = require('path');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
+
+// When set, builds from this branch boot straight into the Test build (the live
+// web preview) on first launch — so a reviewer sees the latest with zero setup.
+// Leave '' for normal production builds (they load the bundled Stable app).
+const DEFAULT_TEST_URL = 'https://ak-scanreport-test.vercel.app/';
 const FILE_FILTERS = [
   { name: 'Scan report', extensions: ['akscan', 'json'] },
   { name: 'All files', extensions: ['*'] },
@@ -34,6 +41,37 @@ function pickFileFromArgv(argv) {
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+}
+
+// ---------- Stable vs Test version ----------
+// The shell normally loads the bundled app. In "Test" mode it loads a remote
+// build (a Vercel preview of the in-progress branch) so a tester can review the
+// latest changes without re-installing. The choice is stored in userData.
+function versionPrefPath() {
+  return path.join(app.getPath('userData'), 'version-mode.json');
+}
+function readVersionMode() {
+  let pref = null;
+  try { pref = JSON.parse(fsSync.readFileSync(versionPrefPath(), 'utf8')); } catch {}
+  if (!pref) {
+    // First launch: default to Test if a URL is baked into this build, so a
+    // reviewer gets the latest with nothing to configure.
+    return { testMode: !!DEFAULT_TEST_URL, testUrl: DEFAULT_TEST_URL };
+  }
+  return { testMode: !!pref.testMode, testUrl: pref.testUrl || DEFAULT_TEST_URL };
+}
+function writeVersionMode(pref) {
+  try { fsSync.writeFileSync(versionPrefPath(), JSON.stringify(pref)); } catch {}
+}
+function loadContent(win) {
+  const distIndex = path.join(__dirname, '..', 'dist', 'index.html');
+  if (DEV_SERVER_URL) { win.loadURL(DEV_SERVER_URL); return; }
+  const pref = readVersionMode();
+  if (pref.testMode && pref.testUrl) {
+    win.loadURL(pref.testUrl).catch(() => win.loadFile(distIndex)); // fall back if offline/bad URL
+  } else {
+    win.loadFile(distIndex);
   }
 }
 
@@ -91,11 +129,7 @@ function createWindow() {
     },
   });
 
-  if (DEV_SERVER_URL) {
-    mainWindow.loadURL(DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
+  loadContent(mainWindow);
 
   // Open external links (e.g. mailto:, http) in the user's real apps/browser,
   // never inside the Electron window.
@@ -168,6 +202,25 @@ ipcMain.handle('shell:show', async (_e, filePath) => {
   return true;
 });
 
+ipcMain.handle('shell:open-external', async (_e, url) => {
+  if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url)) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('app:version', () => app.getVersion());
+
+ipcMain.handle('version:get', () => readVersionMode());
+
+ipcMain.handle('version:set', (_e, { testMode, testUrl } = {}) => {
+  const pref = { testMode: !!testMode, testUrl: (testUrl || '').trim() };
+  writeVersionMode(pref);
+  if (mainWindow && !mainWindow.isDestroyed()) loadContent(mainWindow);
+  return pref;
+});
+
 ipcMain.handle('app:get-launch-file', async () => {
   if (!pendingOpenPath) return null;
   const filePath = pendingOpenPath;
@@ -179,6 +232,45 @@ ipcMain.handle('app:get-launch-file', async () => {
     return null;
   }
 });
+
+// ---------- Auto-update ----------
+
+// Checks GitHub Releases for a newer version, downloads it in the background,
+// and offers to install on the next restart. No-ops in development and fails
+// silently if the network or GitHub is unavailable, so it never blocks use.
+// Persist the renderer's work first, then install. Falls back to installing
+// anyway if the renderer can't confirm, so an update is never stuck.
+function installUpdateAfterSave() {
+  let installed = false;
+  const finish = () => { if (!installed) { installed = true; autoUpdater.quitAndInstall(); } };
+  ipcMain.once('flush-save-done', finish);
+  sendToRenderer('flush-save');
+  setTimeout(finish, 1000);
+}
+
+function setupAutoUpdates() {
+  if (DEV_SERVER_URL) return;
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Save & restart', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update ready',
+      message: `Version ${info.version} has been downloaded.`,
+      detail: 'Your work is saved automatically and your saved reports carry over. Restart now to finish updating, or choose Later.',
+    });
+    if (response === 0) installUpdateAfterSave();
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-update check failed:', err == null ? 'unknown' : err);
+  });
+
+  autoUpdater.checkForUpdates().catch(() => {});
+}
 
 // ---------- App lifecycle ----------
 
@@ -216,6 +308,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     buildMenu();
     createWindow();
+    setupAutoUpdates();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

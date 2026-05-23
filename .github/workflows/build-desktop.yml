@@ -3,11 +3,12 @@ name: Build desktop app
 # Builds the installable AK ScanReport Windows app (.exe).
 #
 # How to use:
-#   - Automatic: every push to `master` builds the installer and publishes it to
-#     the rolling "latest" prerelease (stable download link in Releases).
-#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow.
-#   - On a version tag (e.g. `git tag v1.0.0 && git push --tags`): the installer
-#     is attached to a versioned GitHub Release.
+#   - Push to `master`: builds the installer and uploads it under the run's
+#     "Artifacts" as a test build. It does NOT publish a release.
+#   - Manual: GitHub > Actions > "Build desktop app" > Run workflow (artifact only).
+#   - On a version tag (e.g. `git tag v1.0.1 && git push origin v1.0.1`): builds
+#     and publishes a versioned GitHub Release, including the `latest.yml`
+#     metadata that powers the in-app auto-updater.
 
 on:
   workflow_dispatch:
@@ -38,8 +39,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows installer
+      - name: Build Windows installer (master / manual run, no release)
+        if: github.ref_type != 'tag'
         run: npm run app:build:win
+
+      - name: Build & publish release (tagged builds)
+        if: github.ref_type == 'tag'
+        run: npm run app:publish:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -48,13 +56,5 @@ jobs:
           path: |
             gssi-report-app/release/*.exe
             gssi-report-app/release/*.blockmap
+            gssi-report-app/release/latest.yml
           if-no-files-found: warn
-
-      - name: Publish installer to Release
-        if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest build' }}
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          files: gssi-report-app/release/*.exe
