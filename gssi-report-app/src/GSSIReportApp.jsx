@@ -4,6 +4,7 @@ import { useAuth } from './lib/useAuth.js';
 import { useCloudSync } from './lib/useCloudSync.js';
 import { compressImage } from './lib/image.js';
 import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurrentId as persistCurrentId, newId } from './lib/reportsLibrary.js';
+import { loadTemplates, saveTemplates, newTemplateId, extractTemplateFields } from './lib/templates.js';
 import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 
@@ -3865,6 +3866,39 @@ export default function GSSIReportApp() {
     });
   };
 
+  // ---------- Per-client templates ----------
+  const [templates, setTemplates] = useState(() => loadTemplates());
+  const persistTemplates = (next) => { setTemplates(next); saveTemplates(next); };
+
+  const saveCurrentAsTemplate = () => {
+    const label = (prompt('Template name (e.g. the client):', report.client || 'Template') || '').trim();
+    if (!label) return;
+    const t = { id: newTemplateId(), name: label, createdAt: Date.now(), fields: extractTemplateFields(report) };
+    persistTemplates([t, ...templates]);
+  };
+  const renameTemplate = (id, name) => {
+    const nm = (name || '').trim() || 'Template';
+    persistTemplates(templates.map(t => t.id === id ? { ...t, name: nm } : t));
+  };
+  const deleteTemplate = (id) => {
+    persistTemplates(templates.filter(t => t.id !== id));
+  };
+  const createReportFromTemplate = (id) => {
+    const t = templates.find(x => x.id === id);
+    if (!t) return;
+    persistNow.current();
+    const r = { ...freshReport(), ...t.fields };
+    const rid = newId();
+    saveReport(rid, r);
+    setReportsIndex((idx) => {
+      const next = [{ id: rid, name: deriveReportName(r), updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+    setCurrentIdState(rid); persistCurrentId(rid);
+    setReport(r); forgetFile();
+    setReportsOpen(false);
+  };
+
   // ---------- Customer / contact directory ----------
   const [contacts, setContacts] = useState(() => lsGet(CONTACTS_KEY, []));
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -6073,6 +6107,40 @@ export default function GSSIReportApp() {
                   </div>
                 );
               })}
+            </div>
+            <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 14, paddingTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>📋 Templates</div>
+                <Btn onClick={saveCurrentAsTemplate} style={{ fontSize: 11.5, padding: '6px 10px' }}>
+                  💾 Save current as template
+                </Btn>
+              </div>
+              {templates.length === 0 ? (
+                <div style={{ padding: 10, fontSize: 11.5, color: c.textFaint, background: c.cardAlt, borderRadius: 6, lineHeight: 1.5 }}>
+                  No templates yet. Save the current report as a template to reuse its client info, equipment defaults, sign-off, and section toggles on every new job for that client.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {templates.map(t => (
+                    <div key={t.id} style={{
+                      border: `1px solid ${c.border}`, borderRadius: 6, padding: 7, background: c.cardAlt,
+                      display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center',
+                    }}>
+                      <Input value={t.name}
+                        onChange={(e) => renameTemplate(t.id, e.target.value)}
+                        style={{ fontSize: 12, fontWeight: 600 }} />
+                      <Btn variant="primary" onClick={() => createReportFromTemplate(t.id)} style={{ fontSize: 11, padding: '6px 10px' }}>
+                        📂 Use
+                      </Btn>
+                      <Btn variant="ghost"
+                        onClick={() => { if (confirm('Delete this template?')) deleteTemplate(t.id); }}
+                        style={{ fontSize: 11, borderColor: c.red, color: c.red, padding: '5px 8px' }}>
+                        🗑
+                      </Btn>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <Btn variant="ghost" onClick={() => setReportsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
               Close
