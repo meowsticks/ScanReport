@@ -8,6 +8,7 @@ import { loadTemplates, saveTemplates, newTemplateId, extractTemplateFields } fr
 import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 import TemplateEditor from './TemplateEditor.jsx';
+import StartReportModal from './StartReportModal.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -23,6 +24,51 @@ const HELP_AUTOSHOW_KEY = 'ak_help_autoshow'; // whether the Getting Started gui
 const RECENT_FILES_KEY = 'ak_recent_files';   // desktop: recently opened/saved file paths
 const AUTOSAVE_KEY = 'ak_autosave_min';        // desktop/FS: auto-save interval in minutes (0 = off)
 const EMAIL_PROVIDER_KEY = 'ak_email_provider'; // preferred webmail/compose target
+const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new popup
+
+// Bumped on every release. Each entry is shown by the What's-new modal the
+// first time the user opens that version. anchorId points to a DOM id on the
+// page so the "Take me there" button can scroll the user to the section.
+const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
+const CHANGELOG = [
+  {
+    version: '1.0.3',
+    headline: 'Diagram polish + auto-template + What\'s new popup',
+    items: [
+      { title: 'Caption typing & copy/paste fixed', anchorClass: 'ak-sec-scanPhotos',
+        body: 'On scan photos the caption field was eating keystrokes and losing the selection on long-press. Now types like a normal field — try copy/paste on any caption.' },
+      { title: 'Remove-photo moved off the diagram', anchorClass: 'ak-sec-diagram',
+        body: 'The ✕ Remove photo button no longer sits on top of your sketch. It\'s in the toolbar under the canvas now.' },
+      { title: 'Right-click / Esc cancels mid-task', anchorClass: 'ak-sec-diagram',
+        body: 'Right-click the diagram (or hit Esc) to cancel an in-progress line, zone draft, or selection. One press = one undo step.' },
+      { title: 'Auto-template at report start', anchorId: 'btn-new-report',
+        body: 'When you tap + New report, pick a saved client/template and see a preview of what gets filled in before you commit.' },
+      { title: 'Drawable zones — box + curves', anchorClass: 'ak-sec-diagram',
+        body: 'In Zone mode you can drag a box, then bend each edge into a curve or pull corners around for irregular slabs.' },
+      { title: 'What\'s new popup (this dialog)',
+        body: 'Auto-opens on launch when there\'s a new version, so you always know what changed. Tap Take me there to jump straight to a section.' },
+    ],
+  },
+  {
+    version: '1.0.2',
+    headline: 'Scan-photo caption fix',
+    items: [
+      { title: 'Caption typing + copy/paste on mobile', anchorClass: 'ak-sec-scanPhotos',
+        body: 'Controlled-textarea was fighting the Android keyboard. Made it uncontrolled so typing/select/copy/paste behave natively.' },
+    ],
+  },
+];
+
+// Semver compare a.b.c → -1/0/1. Treats malformed strings as 0.
+function compareVersions(a, b) {
+  const pa = String(a || '0.0.0').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0.0.0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
 
 // Web-mail "compose" deep links that pre-fill To/Subject/Body. Sources:
 //   Gmail   - mail.google.com/mail/?view=cm
@@ -647,7 +693,13 @@ function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(z.points[0].x, z.points[0].y);
-      z.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+      const n = z.points.length;
+      for (let i = 0; i < n; i++) {
+        const next = z.points[(i + 1) % n];
+        const cp = z.controlPoints && z.controlPoints[i];
+        if (cp) ctx.quadraticCurveTo(cp.x, cp.y, next.x, next.y);
+        else ctx.lineTo(next.x, next.y);
+      }
       ctx.closePath();
       if (z.pattern !== 'dashed-boundary') {
         const pat = buildZonePattern(ctx, z.pattern);
@@ -750,7 +802,19 @@ function SiteDiagram({ report, update }) {
   const dragRef = useRef(null);
   const [pinSize, setPinSize] = useState(18);
   const [zonePattern, setZonePattern] = useState('hatch-red');
-  const [zoneDraft, setZoneDraft] = useState(null); // { points: [], pattern }
+  // zoneDraft = { points: [...], controlPoints: [null|{x,y}, ...], pattern }
+  //   controlPoints[i] = bezier control point for the curve from points[i] to
+  //   points[(i+1) % length]. null/missing = straight segment.
+  const [zoneDraft, setZoneDraft] = useState(null);
+  // 'box'   — click-drag draws a 4-corner rectangle as the draft
+  // 'points'— each click adds a polygon vertex (legacy behaviour)
+  const [zoneDrawMode, setZoneDrawMode] = useState('box');
+  // In-progress click-drag rectangle (during box draw): { start: {x,y} }
+  const boxDragRef = useRef(null);
+  // In-progress vertex/midpoint drag on the active zone draft.
+  //   { type: 'vertex'|'midpoint', index: i }
+  const handleDragRef = useRef(null);
+  const HANDLE_HIT_RADIUS = 12;
 
   const toolColors = {
     'draw-rebar': '#FAC775',
@@ -770,6 +834,42 @@ function SiteDiagram({ report, update }) {
   const widthOf = (s) => s.width ?? lineWidthFor(s.color);
   const pinRadius = (pin) => pin.size ?? 18;
 
+  // Trace a closed zone polygon on the current 2D context, using quadratic
+  // bezier curves wherever a control point is set, straight segments
+  // otherwise. Caller is expected to do beginPath / fill / stroke around it.
+  const traceZonePath = (ctx, points, controlPoints) => {
+    if (!points || points.length < 2) return;
+    ctx.moveTo(points[0].x, points[0].y);
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+      const next = points[(i + 1) % n];
+      const cp = controlPoints && controlPoints[i];
+      if (cp) ctx.quadraticCurveTo(cp.x, cp.y, next.x, next.y);
+      else ctx.lineTo(next.x, next.y);
+    }
+    ctx.closePath();
+  };
+
+  // Midpoint handle position for edge i. If a control point exists, the
+  // visual handle sits at the curve's t=0.5 point (so dragging it feels like
+  // grabbing the actual curve); otherwise it's the geometric midpoint of the
+  // straight edge.
+  const edgeHandlePos = (points, controlPoints, i) => {
+    const p0 = points[i];
+    const p1 = points[(i + 1) % points.length];
+    const cp = controlPoints && controlPoints[i];
+    if (cp) return { x: 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x,
+                     y: 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y };
+    return { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+  };
+
+  // Invert edgeHandlePos: given a handle position, compute the control point
+  // that places the curve through that point at t=0.5.
+  const controlPointForHandle = (p0, p1, handlePos) => ({
+    x: 2 * handlePos.x - 0.5 * p0.x - 0.5 * p1.x,
+    y: 2 * handlePos.y - 0.5 * p0.y - 0.5 * p1.y,
+  });
+
   const redraw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -783,9 +883,7 @@ function SiteDiagram({ report, update }) {
         const meta = ZONE_PATTERNS[z.pattern] || ZONE_PATTERNS['hatch-red'];
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(z.points[0].x, z.points[0].y);
-        z.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.closePath();
+        traceZonePath(ctx, z.points, z.controlPoints);
         if (z.pattern !== 'dashed-boundary') {
           const pat = getZonePattern(ctx, z.pattern);
           if (pat) {
@@ -816,7 +914,23 @@ function SiteDiagram({ report, update }) {
         }
       });
 
-      // In-progress zone draft preview
+      // In-progress click-drag rectangle (box draw mode)
+      if (boxDragRef.current && hoverPt) {
+        const s = boxDragRef.current.start;
+        const meta = ZONE_PATTERNS[zonePattern] || ZONE_PATTERNS['hatch-red'];
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = meta.color;
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          Math.min(s.x, hoverPt.x), Math.min(s.y, hoverPt.y),
+          Math.abs(hoverPt.x - s.x), Math.abs(hoverPt.y - s.y),
+        );
+        ctx.restore();
+      }
+
+      // In-progress zone draft preview (with editable handles)
       if (zoneDraft && zoneDraft.points.length > 0) {
         const meta = ZONE_PATTERNS[zoneDraft.pattern] || ZONE_PATTERNS['hatch-red'];
         ctx.save();
@@ -826,17 +940,44 @@ function SiteDiagram({ report, update }) {
         ctx.setLineDash([6, 4]);
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(zoneDraft.points[0].x, zoneDraft.points[0].y);
-        zoneDraft.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-        if (hoverPt) ctx.lineTo(hoverPt.x, hoverPt.y);
+        if (zoneDraft.points.length >= 3) {
+          // Closed preview with bezier curves where control points exist.
+          traceZonePath(ctx, zoneDraft.points, zoneDraft.controlPoints);
+        } else {
+          // Open polyline + rubber band to cursor for the point-by-point flow.
+          ctx.moveTo(zoneDraft.points[0].x, zoneDraft.points[0].y);
+          zoneDraft.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+          if (hoverPt && zoneDrawMode === 'points') ctx.lineTo(hoverPt.x, hoverPt.y);
+        }
         ctx.stroke();
-        // Vertex markers
         ctx.setLineDash([]);
-        zoneDraft.points.forEach(p => {
+
+        // Vertex handles (square markers)
+        zoneDraft.points.forEach((p) => {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff';
+          ctx.strokeStyle = meta.color;
+          ctx.lineWidth = 2;
+          ctx.rect(p.x - 5, p.y - 5, 10, 10);
           ctx.fill();
+          ctx.stroke();
         });
+
+        // Edge midpoint handles (circles) — only when the polygon is closed
+        // (3+ points), so users can pull a side into a curve.
+        if (zoneDraft.points.length >= 3) {
+          zoneDraft.points.forEach((_, i) => {
+            const m = edgeHandlePos(zoneDraft.points, zoneDraft.controlPoints, i);
+            const hasCurve = !!(zoneDraft.controlPoints && zoneDraft.controlPoints[i]);
+            ctx.beginPath();
+            ctx.fillStyle = hasCurve ? meta.color : '#fff';
+            ctx.strokeStyle = meta.color;
+            ctx.lineWidth = 2;
+            ctx.arc(m.x, m.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
         ctx.restore();
       }
     }
@@ -910,7 +1051,7 @@ function SiteDiagram({ report, update }) {
     });
   };
 
-  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft, selectedStrokeIdx]);
+  useEffect(redraw, [report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, anchor, hoverPt, tool, strokeWidth, pinSize, zoneDraft, selectedStrokeIdx, zoneDrawMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -985,10 +1126,39 @@ function SiteDiagram({ report, update }) {
         diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n, size: pinSize }],
       });
     } else if (tool === 'draw-zone') {
-      // Each click appends a vertex to the working zone draft
+      // If an editable draft exists, check first whether the user grabbed a
+      // vertex or edge midpoint handle — that takes priority over adding more
+      // points / starting a new box.
+      if (zoneDraft && zoneDraft.points.length >= 3) {
+        const hr = HANDLE_HIT_RADIUS;
+        // Vertex hit
+        for (let i = 0; i < zoneDraft.points.length; i++) {
+          const v = zoneDraft.points[i];
+          if (Math.hypot(pt.x - v.x, pt.y - v.y) <= hr) {
+            handleDragRef.current = { type: 'vertex', index: i };
+            return;
+          }
+        }
+        // Edge midpoint hit
+        for (let i = 0; i < zoneDraft.points.length; i++) {
+          const m = edgeHandlePos(zoneDraft.points, zoneDraft.controlPoints, i);
+          if (Math.hypot(pt.x - m.x, pt.y - m.y) <= hr) {
+            handleDragRef.current = { type: 'midpoint', index: i };
+            return;
+          }
+        }
+      }
+      if (zoneDrawMode === 'box' && !zoneDraft) {
+        // Start dragging out a rectangle.
+        boxDragRef.current = { start: pt };
+        setHoverPt(pt);
+        return;
+      }
+      // Legacy point-by-point: each click appends a vertex to the draft.
       setZoneDraft(prev => ({
         pattern: prev?.pattern || zonePattern,
-        points:  [...(prev?.points || []), pt],
+        points: [...(prev?.points || []), pt],
+        controlPoints: prev?.controlPoints || [],
       }));
     } else if (tool.startsWith('draw-')) {
       if (!anchor) {
@@ -1010,22 +1180,43 @@ function SiteDiagram({ report, update }) {
 
   const finishZone = () => {
     if (!zoneDraft || zoneDraft.points.length < 3) {
-      alert('A zone needs at least 3 points. Tap the diagram to add points first.');
+      alert('A zone needs at least 3 points. Drag a box on the diagram (or switch to Points mode and tap to add vertices).');
       return;
     }
     const labelDefault = `Z${(report.diagramZones || []).length + 1}`;
     const label = prompt('Zone label (e.g. "Z1", "Slab band", "BoH"):', labelDefault) || labelDefault;
     const id = `dz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // Only persist controlPoints if any are actually set, to keep the saved
+    // zone tidy in JSON exports.
+    const cps = zoneDraft.controlPoints || [];
+    const anyCurve = cps.some(cp => cp);
     update({
       diagramZones: [...(report.diagramZones || []), {
-        id, label, points: zoneDraft.points, pattern: zoneDraft.pattern,
+        id, label,
+        points: zoneDraft.points,
+        controlPoints: anyCurve ? cps : undefined,
+        pattern: zoneDraft.pattern,
       }],
     });
     setZoneDraft(null);
     setHoverPt(null);
   };
 
-  const cancelZone = () => { setZoneDraft(null); setHoverPt(null); };
+  const cancelZone = () => { setZoneDraft(null); setHoverPt(null); boxDragRef.current = null; };
+
+  // Right-click / Esc cancels whatever the user has in progress. We pick the
+  // most-recent thing they were doing so a single cancel undoes one step.
+  const cancelCurrentTask = () => {
+    if (zoneDraft) { setZoneDraft(null); setHoverPt(null); return; }
+    if (anchor) { setAnchor(null); setHoverPt(null); return; }
+    if (selectedStrokeIdx != null) { setSelectedStrokeIdx(null); dragRef.current = null; return; }
+  };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') cancelCurrentTask(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const handleMove = (e) => {
     if (tool === 'select' && dragRef.current && selectedStrokeIdx != null) {
@@ -1041,17 +1232,68 @@ function SiteDiagram({ report, update }) {
       });
       return;
     }
-    if (tool === 'draw-zone' && zoneDraft) {
-      e.preventDefault();
-      setHoverPt(getCoords(e));
-      return;
+    if (tool === 'draw-zone') {
+      // Rectangle drag preview
+      if (boxDragRef.current) {
+        e.preventDefault();
+        setHoverPt(getCoords(e));
+        return;
+      }
+      // Vertex / midpoint drag on the active draft
+      if (handleDragRef.current && zoneDraft) {
+        e.preventDefault();
+        const pt = getCoords(e);
+        const drag = handleDragRef.current;
+        if (drag.type === 'vertex') {
+          const next = zoneDraft.points.map((p, i) => i === drag.index ? pt : p);
+          setZoneDraft({ ...zoneDraft, points: next });
+        } else if (drag.type === 'midpoint') {
+          const p0 = zoneDraft.points[drag.index];
+          const p1 = zoneDraft.points[(drag.index + 1) % zoneDraft.points.length];
+          const cp = controlPointForHandle(p0, p1, pt);
+          const cps = (zoneDraft.controlPoints || []).slice();
+          while (cps.length < zoneDraft.points.length) cps.push(null);
+          cps[drag.index] = cp;
+          setZoneDraft({ ...zoneDraft, controlPoints: cps });
+        }
+        return;
+      }
+      if (zoneDraft) {
+        e.preventDefault();
+        setHoverPt(getCoords(e));
+        return;
+      }
     }
     if (!anchor || !tool.startsWith('draw-')) return;
     e.preventDefault();
     setHoverPt(getCoords(e));
   };
 
-  const handleEnd = () => { dragRef.current = null; };
+  const handleEnd = (e) => {
+    dragRef.current = null;
+    // Finish a click-drag rectangle: only commit if it has real area.
+    if (boxDragRef.current) {
+      const s = boxDragRef.current.start;
+      // Use the LAST hoverPt rather than the touchend coords (which on touch
+      // are sometimes the same as start) so a real drag commits.
+      const end = (e && (e.changedTouches?.[0] || e.clientX != null)) ? getCoords(e) : hoverPt;
+      boxDragRef.current = null;
+      if (end && Math.abs(end.x - s.x) > 6 && Math.abs(end.y - s.y) > 6) {
+        const x0 = Math.min(s.x, end.x), x1 = Math.max(s.x, end.x);
+        const y0 = Math.min(s.y, end.y), y1 = Math.max(s.y, end.y);
+        setZoneDraft({
+          pattern: zoneDraft?.pattern || zonePattern,
+          points: [
+            { x: x0, y: y0 }, { x: x1, y: y0 },
+            { x: x1, y: y1 }, { x: x0, y: y1 },
+          ],
+          controlPoints: [null, null, null, null],
+        });
+      }
+      setHoverPt(null);
+    }
+    handleDragRef.current = null;
+  };
 
   useEffect(() => {
     setAnchor(null);
@@ -1130,27 +1372,48 @@ function SiteDiagram({ report, update }) {
           onMouseDown={handleStart} onMouseMove={handleMove}
           onMouseUp={handleEnd} onMouseLeave={handleEnd}
           onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            // Right-click on an edge midpoint = straighten that edge again.
+            if (tool === 'draw-zone' && zoneDraft && zoneDraft.points.length >= 3) {
+              const pt = getCoords(e);
+              for (let i = 0; i < zoneDraft.points.length; i++) {
+                const m = edgeHandlePos(zoneDraft.points, zoneDraft.controlPoints, i);
+                if (Math.hypot(pt.x - m.x, pt.y - m.y) <= HANDLE_HIT_RADIUS &&
+                    zoneDraft.controlPoints && zoneDraft.controlPoints[i]) {
+                  const cps = zoneDraft.controlPoints.slice();
+                  cps[i] = null;
+                  setZoneDraft({ ...zoneDraft, controlPoints: cps });
+                  return;
+                }
+              }
+            }
+            cancelCurrentTask();
+          }}
         />
-        {diagramSrc(report) && (
-          <button
-            type="button"
+      </div>
+      {/* Photo toolbar — sits OUTSIDE the canvas so the Remove button can't
+          land on the sketch the user is working on. */}
+      {diagramSrc(report) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 8, marginBottom: 6, padding: '6px 10px',
+          background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
+          fontSize: 11, color: c.textDim,
+        }}>
+          <span>📷 Site photo loaded</span>
+          <Btn variant="ghost"
             onClick={() => {
               if (confirm('Remove the site diagram photo? Your sketches and pins stay.')) {
                 update({ diagramImage: null, diagramImageUrl: null, diagramImagePath: null });
               }
             }}
             title="Remove site photo"
-            aria-label="Remove site photo"
-            style={{
-              position: 'absolute', top: 6, right: 6, zIndex: 3,
-              background: 'rgba(0,0,0,0.6)', color: '#fff',
-              border: '1px solid rgba(255,255,255,0.45)', borderRadius: 6,
-              padding: '5px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}>
+            style={{ fontSize: 11, padding: '4px 9px' }}>
             ✕ Remove photo
-          </button>
-        )}
-      </div>
+          </Btn>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 6 }}>
         <label style={{
@@ -1193,19 +1456,32 @@ function SiteDiagram({ report, update }) {
                 }}>{meta.label}</button>
             ))}
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 6 }}>
+            <Btn
+              variant={zoneDrawMode === 'box' ? 'primary' : 'default'}
+              onClick={() => setZoneDrawMode('box')}
+              disabled={!!zoneDraft}
+              style={{ fontSize: 11 }}>▭ Drag a box</Btn>
+            <Btn
+              variant={zoneDrawMode === 'points' ? 'primary' : 'default'}
+              onClick={() => setZoneDrawMode('points')}
+              disabled={!!zoneDraft}
+              style={{ fontSize: 11 }}>✥ Tap points</Btn>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Btn variant="primary" onClick={finishZone}
               disabled={!zoneDraft || zoneDraft.points.length < 3}
               style={{ fontSize: 12 }}>
-              ✓ Finish zone {zoneDraft ? `(${zoneDraft.points.length} pts)` : ''}
+              ✓ Save zone {zoneDraft ? `(${zoneDraft.points.length} pts)` : ''}
             </Btn>
             <Btn variant="ghost" onClick={cancelZone}
-              disabled={!zoneDraft}
+              disabled={!zoneDraft && !boxDragRef.current}
               style={{ fontSize: 12 }}>Cancel zone</Btn>
           </div>
           <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5, lineHeight: 1.4 }}>
-            Tap the diagram to drop polygon vertices; tap Finish when the outline is closed
-            (need 3+ points). Undo pops the last vertex.
+            {zoneDrawMode === 'box'
+              ? 'Click-drag a box on the diagram to start. Then drag the corner squares to reshape, or drag any edge\'s circle outward to bend that side into a curve. Right-click an edge\'s circle to straighten it again. Esc or right-click on empty area cancels the draft.'
+              : 'Tap the diagram to drop polygon vertices (3+). When the outline is closed, drag corners to reshape or edge midpoints to bend into curves. Esc cancels.'}
           </div>
         </div>
       )}
@@ -2058,6 +2334,116 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               : anchor
                 ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
                 : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// What's-new dialog. Pops up the first time the user opens a new version so
+// they immediately see what changed. Each item can scroll the user to the
+// section it touches via "Take me there".
+function WhatsNewModal({ entries, onClose }) {
+  if (!entries || entries.length === 0) return null;
+  const jumpTo = (item) => {
+    let el = null;
+    if (item.anchorId) el = document.getElementById(item.anchorId);
+    if (!el && item.anchorClass) el = document.querySelector('.' + item.anchorClass);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Flash a brief outline so the user can see what landed.
+      el.style.transition = 'box-shadow 0.4s';
+      el.style.boxShadow = `0 0 0 3px ${c.accent}`;
+      setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+    }
+    onClose();
+  };
+  return (
+    <div onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1200,
+        background: 'rgba(0,0,0,0.7)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: 14,
+      }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{
+          background: c.card, border: `1px solid ${c.borderStrong}`,
+          borderRadius: 10, maxWidth: 540, width: '100%',
+          maxHeight: '88vh', overflowY: 'auto',
+          color: c.text, boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+        }}>
+        <div style={{
+          padding: '16px 18px', borderBottom: `1px solid ${c.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: c.textFaint, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 700 }}>
+              What's new
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>
+              AK ScanReport · v{entries[0].version}
+            </div>
+            {entries[0].headline && (
+              <div style={{ fontSize: 12, color: c.textDim, marginTop: 3 }}>
+                {entries[0].headline}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            style={{
+              background: 'transparent', border: 'none', color: c.text,
+              fontSize: 22, cursor: 'pointer', padding: 4, lineHeight: 1,
+            }}>×</button>
+        </div>
+        <div style={{ padding: '12px 18px 18px' }}>
+          {entries.map((entry, ei) => (
+            <div key={entry.version} style={{
+              borderTop: ei === 0 ? 'none' : `1px solid ${c.border}`,
+              marginTop: ei === 0 ? 0 : 14, paddingTop: ei === 0 ? 0 : 14,
+            }}>
+              {ei > 0 && (
+                <div style={{ fontSize: 12, color: c.textFaint, marginBottom: 6, fontWeight: 700 }}>
+                  v{entry.version} · {entry.headline}
+                </div>
+              )}
+              {entry.items.map((item, i) => (
+                <div key={i} style={{
+                  padding: '10px 11px', marginBottom: 7,
+                  background: c.cardAlt, borderRadius: 7,
+                  border: `1px solid ${c.border}`,
+                }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                    justifyContent: 'space-between',
+                  }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{item.title}</div>
+                    {(item.anchorId || item.anchorClass) && (
+                      <button
+                        onClick={() => jumpTo(item)}
+                        style={{
+                          background: c.accent, color: c.onAccent || '#fff',
+                          border: 'none', borderRadius: 5,
+                          padding: '5px 9px', fontSize: 11, fontWeight: 700,
+                          cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                        }}>Take me there →</button>
+                    )}
+                  </div>
+                  {item.body && (
+                    <div style={{ fontSize: 12, color: c.textDim, marginTop: 5, lineHeight: 1.45 }}>
+                      {item.body}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{
+            display: 'flex', justifyContent: 'flex-end', marginTop: 8,
+          }}>
+            <Btn variant="primary" onClick={onClose} style={{ fontSize: 12 }}>
+              Got it
+            </Btn>
+          </div>
         </div>
       </div>
     </div>
@@ -3896,6 +4282,7 @@ export default function GSSIReportApp() {
   // ---------- Per-client templates ----------
   const [templates, setTemplates] = useState(() => loadTemplates());
   const [templateEditor, setTemplateEditor] = useState(null);
+  const [startReportOpen, setStartReportOpen] = useState(false);
   const persistTemplates = (next) => { setTemplates(next); saveTemplates(next); };
 
   // Opens the editor in "preview before saving" mode for a brand-new template.
@@ -3969,6 +4356,23 @@ export default function GSSIReportApp() {
   useEffect(() => {
     try { localStorage.setItem(HELP_AUTOSHOW_KEY, helpAutoShow ? '1' : '0'); } catch {}
   }, [helpAutoShow]);
+
+  // ---------- What's-new dialog ----------
+  // Opens once per version bump. Tracks the last version the user saw so the
+  // changelog only pops the first time they open a new build (web or .exe).
+  const [whatsNewEntries, setWhatsNewEntries] = useState(null);
+  useEffect(() => {
+    let lastSeen;
+    try { lastSeen = localStorage.getItem(LAST_SEEN_VERSION_KEY) || ''; } catch { lastSeen = ''; }
+    if (compareVersions(APP_VERSION, lastSeen) > 0) {
+      const fresh = CHANGELOG.filter(e => compareVersions(e.version, lastSeen) > 0);
+      if (fresh.length) setWhatsNewEntries(fresh);
+    }
+  }, []);
+  const dismissWhatsNew = () => {
+    setWhatsNewEntries(null);
+    try { localStorage.setItem(LAST_SEEN_VERSION_KEY, APP_VERSION); } catch {}
+  };
 
   // ---------- Reset/refresh form (with save-first guard) ----------
   const [confirmReset, setConfirmReset] = useState(false);
@@ -6124,8 +6528,17 @@ export default function GSSIReportApp() {
               Work on as many reports as you like — each one auto-saves on its own.
               Tap a report to open it; the one you're in is marked <strong>Open</strong>.
             </div>
-            <Btn variant="primary" onClick={createReport} style={{ width: '100%', marginBottom: 12 }}>
-              ＋ New report
+            <Btn id="btn-new-report" variant="primary"
+              onClick={() => {
+                if (templates.length > 0) {
+                  setStartReportOpen(true);
+                  setReportsOpen(false);
+                } else {
+                  createReport();
+                }
+              }}
+              style={{ width: '100%', marginBottom: 12 }}>
+              ＋ New report{templates.length > 0 ? ' (pick template)' : ''}
             </Btn>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {[...reportsIndex].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(e => {
@@ -6215,6 +6628,17 @@ export default function GSSIReportApp() {
           c={c}
         />
       )}
+
+      <StartReportModal
+        open={startReportOpen}
+        templates={templates}
+        c={c}
+        onUseTemplate={(id) => { setStartReportOpen(false); createReportFromTemplate(id); }}
+        onUseBlank={() => { setStartReportOpen(false); createReport(); }}
+        onEditTemplate={(id) => { setStartReportOpen(false); openEditTemplate(id); }}
+        onClose={() => setStartReportOpen(false)}
+      />
+
 
       {/* === CUSTOMER CONTACTS === */}
       {contactsOpen && (
@@ -6435,6 +6859,11 @@ export default function GSSIReportApp() {
             </Btn>
           </div>
         </div>
+      )}
+
+      {/* === WHAT'S-NEW DIALOG (auto-opens once per version bump) === */}
+      {whatsNewEntries && (
+        <WhatsNewModal entries={whatsNewEntries} onClose={dismissWhatsNew} />
       )}
 
       {/* === GETTING STARTED GUIDE === */}
