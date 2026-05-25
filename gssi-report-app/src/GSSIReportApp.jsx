@@ -32,6 +32,16 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.5',
+    headline: 'Photo annotations: text comments work on .exe',
+    items: [
+      { title: 'T Text tool now opens an inline comment box', anchorClass: 'ak-sec-scanPhotos',
+        body: 'On a scan photo, hit 🖊 Annotate → pick T Text → tap the photo where you want a comment. A small input pops up at the tap point — type the comment and hit Enter. Tap somewhere else to commit and add another. Works on both the web build and the installed .exe.' },
+      { title: 'Arrow + comment workflow (already there)', anchorClass: 'ak-sec-scanPhotos',
+        body: 'Use the → Arrow tool to point at the spot, then T Text to attach a comment nearby. Both share colors and presets. The PDF embeds both.' },
+    ],
+  },
+  {
     version: '1.0.4',
     headline: 'Pin tool fix — works in the installed app',
     items: [
@@ -1934,6 +1944,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
   const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
+  // In-progress text annotation. After the user taps the canvas in text mode,
+  // a small input field floats over the tap location so they can type the
+  // comment inline. Replaces window.prompt() which Electron disables on
+  // the .exe build (silently returns null → click dropped on the floor).
+  //   { pt: { x, y } fractional 0..1, content: '' }
+  const [pendingText, setPendingText] = useState(null);
+  const pendingTextInputRef = useRef(null);
   const [redoStack, setRedoStack] = useState([]);        // undone annotations, for redo
   const [presets, setPresets] = useState(loadAnnotationPresets);
   const [showPresetEditor, setShowPresetEditor] = useState(false);
@@ -2083,12 +2100,18 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       pt = snapToAngle(anchor, pt, 15);
     }
     if (tool === 'text') {
-      const content = prompt('Label text:', '');
-      if (!content) return;
-      pushAnnotation({
-        id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: 'text', color, position: pt, content, fontSize: 14, strokeScale,
-      });
+      // If there's an in-progress comment, commit whatever's typed before
+      // opening a new one at the new spot — so the user doesn't lose work
+      // by accidentally tapping elsewhere on the canvas.
+      if (pendingText && pendingText.content && pendingText.content.trim()) {
+        pushAnnotation({
+          id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'text', color, position: pendingText.pt,
+          content: pendingText.content.trim(), fontSize: 14, strokeScale,
+        });
+      }
+      setPendingText({ pt, content: '' });
+      setTimeout(() => pendingTextInputRef.current?.focus(), 30);
       return;
     }
     if (!anchor) {
@@ -2231,6 +2254,78 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           onTouchMove={handleMove}
           onTouchEnd={handleEnd}
         />
+        {/* Inline text-annotation input — opens at the tap point in text mode.
+            Replaces window.prompt(), which Electron disables. */}
+        {pendingText && (() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return null;
+          const cr = canvas.getBoundingClientRect();
+          const co = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+          // Convert fractional pt → CSS pixels relative to the container.
+          const W = cr.width, H = cr.height;
+          const px = (cr.left - co.left) + pendingText.pt.x * W;
+          const py = (cr.top  - co.top)  + pendingText.pt.y * H;
+          const commit = () => {
+            const text = (pendingText.content || '').trim();
+            if (text) {
+              pushAnnotation({
+                id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: 'text', color, position: pendingText.pt,
+                content: text, fontSize: 14, strokeScale,
+              });
+            }
+            setPendingText(null);
+          };
+          const cancel = () => setPendingText(null);
+          // Position the input so it stays inside the canvas regardless of where
+          // the tap landed — clamp to the right/bottom edges.
+          const inputW = 220;
+          const left = Math.max(8, Math.min(px + 8, (cr.left - co.left) + W - inputW - 8));
+          const top  = Math.max(8, Math.min(py + 8, (cr.top  - co.top)  + H - 80));
+          return (
+            <div style={{
+              position: 'absolute', left, top, zIndex: 5,
+              background: c.bgRaised, border: `1px solid ${c.accent}`,
+              borderRadius: 6, padding: 6, width: inputW,
+              boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
+              display: 'flex', flexDirection: 'column', gap: 5,
+            }}>
+              <div style={{ fontSize: 10, color: c.textFaint, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                Comment for this spot
+              </div>
+              <input
+                ref={pendingTextInputRef}
+                value={pendingText.content}
+                onChange={(e) => setPendingText(p => p ? { ...p, content: e.target.value } : p)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+                  if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+                }}
+                placeholder="Type a comment, then Enter…"
+                autoFocus
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: c.bg, color: c.text,
+                  border: `1px solid ${c.borderStrong}`, borderRadius: 4,
+                  padding: '6px 8px', fontSize: 13, fontFamily: 'inherit',
+                }} />
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button onClick={commit}
+                  style={{
+                    flex: 1, background: c.accent, color: '#fff', border: 'none',
+                    borderRadius: 4, padding: '5px 8px',
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  }}>✓ Add</button>
+                <button onClick={cancel}
+                  style={{
+                    background: 'transparent', color: c.textDim,
+                    border: `1px solid ${c.border}`, borderRadius: 4,
+                    padding: '5px 8px', fontSize: 11, cursor: 'pointer',
+                  }}>Cancel</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div style={{
