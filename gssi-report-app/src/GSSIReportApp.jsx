@@ -32,6 +32,20 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.6',
+    headline: 'Workflow polish — collapse setup, drag-reorder sections, jump nav, photo prompt',
+    items: [
+      { title: 'Setup cards collapse at top', anchorId: null,
+        body: 'Report tier / Sections / Print setup are now hidden behind a single ⚙ Setup toggle by default, so Project info is right at the top of the page. Tap ⚙ Setup to expand when you need to change tier or reorder sections. Your choice is remembered.' },
+      { title: 'Drag-and-drop section reorder', anchorClass: null,
+        body: 'Expand ⚙ Setup → Print setup. Grab any section row (cursor turns into a grab handle, drag icon ⋮⋮ on the left) and drop it anywhere — the print order updates instantly. ▲▼ buttons still work for fine-tuning.' },
+      { title: 'Floating 📑 Sections jump-menu', anchorClass: null,
+        body: 'Bottom-right corner has a 📑 Sections button. Tap it for a list of every visible section. Tap a name → smooth-scroll right to it. Stops the scroll-hunt on long reports.' },
+      { title: 'Photo upload asks before opening editor', anchorClass: 'ak-sec-scanPhotos',
+        body: 'After uploading a scan photo, a small "Open annotation editor for this photo? [Annotate now] [Not now]" banner appears next to it. Tap Annotate now to jump straight into markup; tap Not now to keep working on something else.' },
+    ],
+  },
+  {
     version: '1.0.5',
     headline: 'Photo annotations: text comments work on .exe',
     items: [
@@ -2519,6 +2533,75 @@ function AnnotationEditor({ photo, onSave, onClose }) {
 }
 
 // What's-new dialog. Pops up the first time the user opens a new version so
+// Floating button bottom-right that opens a menu of visible sections. Tap
+// a section name to smooth-scroll to it. Replaces hunting through a long
+// vertical report.
+function SectionsQuickNav({ sections }) {
+  const [open, setOpen] = useState(false);
+  if (!sections || sections.length === 0) return null;
+  const jump = (id) => {
+    const el = document.querySelector('.ak-sec-' + id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.style.transition = 'box-shadow 0.4s';
+      el.style.boxShadow = `0 0 0 3px ${c.accent}`;
+      setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+    }
+    setOpen(false);
+  };
+  return (
+    <div className="no-print" style={{
+      position: 'fixed', right: 14, bottom: 70, zIndex: 90,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
+    }}>
+      {open && (
+        <div style={{
+          background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+          borderRadius: 8, padding: 6,
+          maxHeight: '60vh', overflowY: 'auto',
+          minWidth: 200, maxWidth: 260,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+        }}>
+          <div style={{
+            fontSize: 10, color: c.textFaint, fontWeight: 700,
+            letterSpacing: 1, textTransform: 'uppercase',
+            padding: '4px 8px 6px',
+          }}>Jump to section</div>
+          {sections.map(s => (
+            <button key={s.id}
+              onClick={() => jump(s.id)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                background: 'transparent', color: c.text,
+                border: 'none', borderRadius: 4,
+                padding: '7px 8px', fontSize: 12, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = c.cardAlt}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Jump to a section"
+        aria-label="Jump to a section"
+        style={{
+          background: c.accent, color: '#fff',
+          border: `1px solid ${c.accent}`, borderRadius: 22,
+          padding: '9px 12px', fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', fontFamily: 'inherit',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+        {open ? '✕' : '📑'} Sections
+      </button>
+    </div>
+  );
+}
+
 // they immediately see what changed. Each item can scroll the user to the
 // section it touches via "Take me there".
 function WhatsNewModal({ entries, onClose }) {
@@ -2727,6 +2810,16 @@ function ScanPhotos({ report, update }) {
   const [viewingPhotoId, setViewingPhotoId] = useState(null);
   const [dragPhotoId, setDragPhotoId] = useState(null);
   const [overPhotoId, setOverPhotoId] = useState(null);
+  // IDs of photos that were just uploaded and haven't been annotated or
+  // dismissed yet. Each row shows an "Annotate now? / Not now" prompt next
+  // to the photo so the engineer can either open the editor or keep working
+  // on whatever they're focused on.
+  const [pendingAnnotateIds, setPendingAnnotateIds] = useState(() => new Set());
+  const dismissAnnotatePrompt = (id) => {
+    setPendingAnnotateIds(prev => {
+      const next = new Set(prev); next.delete(id); return next;
+    });
+  };
 
   const reorderPhotos = (fromId, toId) => {
     if (!fromId || !toId || fromId === toId) return;
@@ -2761,6 +2854,13 @@ function ScanPhotos({ report, update }) {
       };
     }));
     update({ scanPhotos: [...report.scanPhotos, ...loaded.filter(Boolean)] });
+    // Queue an annotate prompt for each new photo so the engineer can decide
+    // whether to mark it up now or defer.
+    setPendingAnnotateIds(prev => {
+      const next = new Set(prev);
+      loaded.filter(Boolean).forEach(p => next.add(p.id));
+      return next;
+    });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -2994,8 +3094,35 @@ function ScanPhotos({ report, update }) {
                         }}>{opt.label} conf.</button>
                     ))}
                   </div>
+                  {pendingAnnotateIds.has(photo.id) && (
+                    <div style={{
+                      marginTop: 5, padding: '7px 8px',
+                      background: c.accentDim, color: c.onAccentDim,
+                      border: `1px solid ${c.accent}`, borderRadius: 5,
+                      fontSize: 11, display: 'flex', alignItems: 'center',
+                      gap: 6, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ flex: 1, minWidth: 100 }}>Open annotation editor for this photo?</span>
+                      <button
+                        onClick={() => { dismissAnnotatePrompt(photo.id); setEditingPhotoId(photo.id); }}
+                        style={{
+                          background: '#fff', color: '#000', border: 'none',
+                          borderRadius: 4, padding: '4px 8px',
+                          fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        }}>Annotate now</button>
+                      <button
+                        onClick={() => dismissAnnotatePrompt(photo.id)}
+                        style={{
+                          background: 'transparent', color: c.onAccentDim,
+                          border: '1px solid rgba(255,255,255,0.4)',
+                          borderRadius: 4, padding: '4px 8px',
+                          fontSize: 11, cursor: 'pointer',
+                        }}>Not now</button>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
-                    <Btn variant="primary" onClick={() => setEditingPhotoId(photo.id)}
+                    <Btn variant="primary"
+                      onClick={() => { dismissAnnotatePrompt(photo.id); setEditingPhotoId(photo.id); }}
                       style={{ flex: 1.4, fontSize: 11, padding: '5px 6px' }}>
                       🖊 Annotate{annotationCount > 0 ? ` (${annotationCount})` : ''}
                     </Btn>
@@ -4639,6 +4766,17 @@ export default function GSSIReportApp() {
 
   // ---------- Print preview + per-section include/exclude ----------
   const [previewMode, setPreviewMode] = useState(false);
+  // Setup cards (Tier / Sections / Print setup) collapse to a single toggle
+  // by default so the report body starts near the top of the screen.
+  // Persisted so it stays the way the engineer left it last session.
+  const [setupCollapsed, setSetupCollapsedState] = useState(() => {
+    try { return localStorage.getItem('ak_setup_collapsed') !== '0'; } catch { return true; }
+  });
+  const setSetupCollapsed = (v) => {
+    const next = typeof v === 'function' ? v(setupCollapsed) : v;
+    setSetupCollapsedState(next);
+    try { localStorage.setItem('ak_setup_collapsed', next ? '1' : '0'); } catch {}
+  };
   // Each section id used by the Print setup card. Order = order on print.
   const SECTION_IDS = [
     { id: 'workflowStatus', label: 'Workflow status (timestamps)' },
@@ -4687,6 +4825,20 @@ export default function GSSIReportApp() {
     const j = i + dir;
     if (j < 0 || j >= arr.length) return;
     [arr[i], arr[j]] = [arr[j], arr[i]];
+    update({ sectionOrder: arr });
+  };
+  // Drag-and-drop reorder for the Print setup rows. Drops the dragged id
+  // into the position of the target id (before or after based on cursor
+  // half-height), and persists via update({sectionOrder}).
+  const [dragSectionId, setDragSectionId] = useState(null);
+  const [dropTargetId, setDropTargetId] = useState(null); // {id, side: 'above'|'below'}
+  const reorderTo = (sourceId, targetId, side) => {
+    if (!sourceId || sourceId === targetId) return;
+    const arr = effectiveOrder.filter(id => id !== sourceId);
+    let idx = arr.indexOf(targetId);
+    if (idx < 0) idx = arr.length;
+    if (side === 'below') idx += 1;
+    arr.splice(idx, 0, sourceId);
     update({ sectionOrder: arr });
   };
 
@@ -5430,6 +5582,37 @@ export default function GSSIReportApp() {
         }
       `}</style>
 
+      {/* === SETUP CARDS COLLAPSIBLE ===
+          Tier / Sections / Print setup are setup, not data. Collapsing them
+          by default puts Project info closer to the top so the engineer can
+          start typing without scrolling past five config cards every report. */}
+      <div className="no-print" style={{ marginBottom: 12 }}>
+        <button
+          onClick={() => setSetupCollapsed(s => !s)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
+            borderRadius: 8, padding: '10px 14px', cursor: 'pointer',
+            color: c.text, fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+          }}>
+          <span>⚙ Setup — tier · sections · print order</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textFaint, fontWeight: 500 }}>
+            {!setupCollapsed && <span>tap to hide</span>}
+            <span style={{ fontSize: 14 }}>{setupCollapsed ? '▾' : '▴'}</span>
+          </span>
+        </button>
+        {setupCollapsed && (
+          <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 5, padding: '0 4px', lineHeight: 1.4 }}>
+            Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong>
+            {' · '}
+            Sections: <strong style={{ color: c.textDim }}>
+              {effectiveOrder.filter(id => vis(id)).length}/{SECTION_IDS.length}
+            </strong> on
+          </div>
+        )}
+      </div>
+      {!setupCollapsed && (<>
+
       {/* === TIER PICKER === */}
       <Card title="Report tier" dense className="no-print">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
@@ -5514,8 +5697,8 @@ export default function GSSIReportApp() {
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
       <Card title="Print setup · sections, order & visibility" dense className="no-print">
         <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
-          Tick which sections appear in the PDF, and use ▲▼ to set the order they print in.
-          The Preview button shows exactly what will print before you save or send.
+          Tick which sections appear in the PDF, and drag any row (or use ▲▼) to set
+          print order. Preview shows exactly what will print before you save.
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 9, flexWrap: 'wrap' }}>
           <Btn variant="ghost" onClick={() => setAllVis(true)}
@@ -5537,13 +5720,58 @@ export default function GSSIReportApp() {
             const s = SECTION_IDS.find(x => x.id === id);
             if (!s) return null;
             const on = vis(id);
+            const isBeingDragged = dragSectionId === id;
+            const isDropTarget   = dropTargetId?.id === id;
             return (
-              <div key={id} style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '4px 6px', borderRadius: 4,
-                background: on ? c.cardAlt : 'transparent',
-                fontSize: 11, color: on ? c.text : c.textFaint,
-              }}>
+              <div key={id}
+                draggable
+                onDragStart={(e) => {
+                  setDragSectionId(id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  // Setting data is required for Firefox to enable dragging.
+                  e.dataTransfer.setData('text/plain', id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!dragSectionId || dragSectionId === id) return;
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const side = (e.clientY - r.top) < r.height / 2 ? 'above' : 'below';
+                  setDropTargetId({ id, side });
+                }}
+                onDragLeave={(e) => {
+                  // Only clear if we're really leaving (not into a child)
+                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                    setDropTargetId(prev => prev?.id === id ? null : prev);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragSectionId && dropTargetId) {
+                    reorderTo(dragSectionId, dropTargetId.id, dropTargetId.side);
+                  }
+                  setDragSectionId(null);
+                  setDropTargetId(null);
+                }}
+                onDragEnd={() => { setDragSectionId(null); setDropTargetId(null); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 6px', borderRadius: 4,
+                  background: on ? c.cardAlt : 'transparent',
+                  fontSize: 11, color: on ? c.text : c.textFaint,
+                  opacity: isBeingDragged ? 0.4 : 1,
+                  boxShadow: isDropTarget
+                    ? (dropTargetId.side === 'above'
+                        ? `inset 0 2px 0 0 ${c.accent}`
+                        : `inset 0 -2px 0 0 ${c.accent}`)
+                    : 'none',
+                  cursor: 'grab',
+                  transition: 'opacity 0.12s',
+                }}>
+                <span style={{
+                  color: c.textFaint, fontSize: 13, lineHeight: 1, userSelect: 'none',
+                  cursor: 'grab', flexShrink: 0, padding: '0 2px',
+                }}
+                  title="Drag to reorder">⋮⋮</span>
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
                   cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
@@ -5570,6 +5798,8 @@ export default function GSSIReportApp() {
           })}
         </div>
       </Card>
+
+      </>)}{/* === END SETUP COLLAPSIBLE === */}
 
       {/* Per-section print order, driven by report.sectionOrder */}
       <style>{
@@ -6557,6 +6787,14 @@ export default function GSSIReportApp() {
       </div>
 
       <Assistant report={report} update={update} />
+
+      {/* Floating Sections quick-nav — opens a small menu of visible sections.
+          Tap a name to smooth-scroll to that section. */}
+      <SectionsQuickNav
+        sections={effectiveOrder
+          .map(id => SECTION_IDS.find(s => s.id === id))
+          .filter(s => s && vis(s.id))}
+      />
 
       {emailDialogOpen && (
         <div className="no-print" style={{
