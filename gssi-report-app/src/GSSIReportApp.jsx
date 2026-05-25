@@ -32,6 +32,18 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.4',
+    headline: 'Pin tool fix — works in the installed app',
+    items: [
+      { title: 'Pin core now drops on tap (desktop fix)', anchorClass: 'ak-sec-diagram',
+        body: 'The old verdict prompt used window.prompt() which Electron disables — so on the installed .exe taps did nothing. Replaced with a verdict picker (Safe / Caution / No-go) in the toolbar. Pick one, tap the diagram, pin drops with that verdict. Switch verdicts between drops for mixed sets.' },
+      { title: 'Zone label is now an inline field', anchorClass: 'ak-sec-diagram',
+        body: 'Same prompt() issue — zone labels were defaulting to Z1/Z2 with no way to rename on the .exe. Now there\'s a label input in the zone toolbar after you drag a box. Edit before tapping Save, or leave it as the default.' },
+      { title: 'Regression test covers every diagram tool', anchorClass: null,
+        body: 'gssi-report-app/tests/diagram-tools.test.mjs exercises Pin/Rebar/PT/Conduit/Note/Crack/Zone/Pick — so the next time a tool quietly breaks, CI catches it before you do.' },
+    ],
+  },
+  {
     version: '1.0.3',
     headline: 'Diagram polish + auto-template + What\'s new popup',
     items: [
@@ -801,6 +813,15 @@ function SiteDiagram({ report, update }) {
   const [selectedStrokeIdx, setSelectedStrokeIdx] = useState(null);
   const dragRef = useRef(null);
   const [pinSize, setPinSize] = useState(18);
+  // Verdict the next pin will use. Picked from the sub-toolbar that shows
+  // when pin mode is active. We don't use window.prompt() — Electron
+  // disables it (returns null silently), so the prompt path would just
+  // drop the click on the floor on the .exe build.
+  const [pinVerdict, setPinVerdict] = useState('safe');
+  // Label for the next zone the user saves. Pre-populated to Z1/Z2/...
+  // when a draft starts; user can rename inline before tapping Save.
+  // Same Electron-prompt-disabled story as pinVerdict.
+  const [zoneLabel, setZoneLabel] = useState('');
   const [zonePattern, setZonePattern] = useState('hatch-red');
   // zoneDraft = { points: [...], controlPoints: [null|{x,y}, ...], pattern }
   //   controlPoints[i] = bezier control point for the curve from points[i] to
@@ -1118,12 +1139,10 @@ function SiteDiagram({ report, update }) {
     }
     if (tool === 'pin') {
       const nextLabel = String.fromCharCode(65 + report.diagramPins.length);
-      const v = prompt(`Pin ${nextLabel} verdict?\nType: safe / caution / nogo`, 'safe');
-      if (!v) return;
-      const n = v.toLowerCase().trim();
-      if (!['safe', 'caution', 'nogo'].includes(n)) return;
       update({
-        diagramPins: [...report.diagramPins, { x: pt.x, y: pt.y, label: nextLabel, verdict: n, size: pinSize }],
+        diagramPins: [...report.diagramPins, {
+          x: pt.x, y: pt.y, label: nextLabel, verdict: pinVerdict, size: pinSize,
+        }],
       });
     } else if (tool === 'draw-zone') {
       // If an editable draft exists, check first whether the user grabbed a
@@ -1184,7 +1203,7 @@ function SiteDiagram({ report, update }) {
       return;
     }
     const labelDefault = `Z${(report.diagramZones || []).length + 1}`;
-    const label = prompt('Zone label (e.g. "Z1", "Slab band", "BoH"):', labelDefault) || labelDefault;
+    const label = (zoneLabel || '').trim() || labelDefault;
     const id = `dz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Only persist controlPoints if any are actually set, to keep the saved
     // zone tidy in JSON exports.
@@ -1300,6 +1319,17 @@ function SiteDiagram({ report, update }) {
     setHoverPt(null);
     if (tool !== 'select') setSelectedStrokeIdx(null);
   }, [tool]);
+
+  // Seed/clear the zoneLabel field when a draft starts or finishes. Default
+  // is Z1/Z2/... so the engineer just taps Save unless they want a custom
+  // name (e.g. "Slab band", "BoH"). Inline edit happens in the toolbar.
+  useEffect(() => {
+    if (zoneDraft && !zoneLabel) {
+      setZoneLabel(`Z${(report.diagramZones || []).length + 1}`);
+    } else if (!zoneDraft && zoneLabel) {
+      setZoneLabel('');
+    }
+  }, [zoneDraft]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -1433,6 +1463,41 @@ function SiteDiagram({ report, update }) {
         {toolBtn('draw-crack', '⋯ Crack', '#cccccc')}
         {report.enableZones && toolBtn('draw-zone', '▦ Zone', '#e02020')}
       </div>
+      {/* Pin verdict picker — replaces window.prompt() (which is disabled in
+          Electron). Pick a verdict, tap the diagram to drop a pin with it. */}
+      {tool === 'pin' && (
+        <div style={{
+          background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: '8px 10px', marginBottom: 6,
+        }}>
+          <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 5,
+            textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+            Next pin verdict
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }}>
+            {[
+              { id: 'safe',    label: 'Safe',    bg: '#3fb950', fg: '#000' },
+              { id: 'caution', label: 'Caution', bg: '#e0a020', fg: '#000' },
+              { id: 'nogo',    label: 'No-go',   bg: '#e02020', fg: '#fff' },
+            ].map(v => (
+              <button key={v.id}
+                onClick={() => setPinVerdict(v.id)}
+                style={{
+                  background: pinVerdict === v.id ? v.bg : c.card,
+                  color: pinVerdict === v.id ? v.fg : c.text,
+                  border: `1px solid ${pinVerdict === v.id ? v.bg : c.border}`,
+                  borderRadius: 5, padding: '7px 8px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}>● {v.label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5, lineHeight: 1.4 }}>
+            Tap the diagram to drop a pin with the selected verdict. Switch the
+            verdict between drops for mixed sets.
+          </div>
+        </div>
+      )}
       {report.enableZones && tool === 'draw-zone' && (
         <div style={{
           background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
@@ -1468,6 +1533,24 @@ function SiteDiagram({ report, update }) {
               disabled={!!zoneDraft}
               style={{ fontSize: 11 }}>✥ Tap points</Btn>
           </div>
+          {zoneDraft && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 3,
+                textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+                Zone label
+              </div>
+              <input
+                value={zoneLabel}
+                onChange={(e) => setZoneLabel(e.target.value)}
+                placeholder={`Z${(report.diagramZones || []).length + 1}`}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: c.bg || c.cardAlt, color: c.text,
+                  border: `1px solid ${c.borderStrong}`, borderRadius: 5,
+                  padding: '6px 8px', fontSize: 12, fontFamily: 'inherit',
+                }} />
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Btn variant="primary" onClick={finishZone}
               disabled={!zoneDraft || zoneDraft.points.length < 3}
