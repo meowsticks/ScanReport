@@ -34,6 +34,14 @@ const wn = await page.getByRole('button', { name: 'Got it', exact: true }).isVis
 if (wn) await page.getByRole('button', { name: 'Got it', exact: true }).click();
 await page.waitForTimeout(200);
 
+// Setup cards are collapsed by default in v1.0.6+; expand so the tier
+// buttons (and Print setup) are reachable.
+const setupToggle = page.locator('button:has-text("⚙ Setup")');
+if (await setupToggle.isVisible().catch(() => false)) {
+  await setupToggle.click();
+  await page.waitForTimeout(300);
+}
+
 // Enable Zones via Full tier so the ▦ Zone button is available.
 await page.locator('button:has-text("Full")').first().scrollIntoViewIfNeeded();
 await page.locator('button:has-text("Full")').first().click({ force: true });
