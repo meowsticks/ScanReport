@@ -32,6 +32,18 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.7',
+    headline: 'Saved PDF — polished output, no more dark theme in the print',
+    items: [
+      { title: 'White pages, black text in the PDF', anchorClass: null,
+        body: 'The dark editor theme was bleeding into saved PDFs — most pages came out almost entirely black with tiny content. Fixed two CSS bugs (missing @media print wrapper around page-break rules + no print override for inline card backgrounds). Pages now print as clean white paper with readable black text. Color swatches and the brand-red headers still print in colour.' },
+      { title: 'Preview now matches what saves to PDF', anchorClass: null,
+        body: 'Hit 👁 Preview before saving — what you see is exactly what lands in the file. Same dark-theme kill applied, so the engineer can confirm the report is polished before sending.' },
+      { title: 'Markup color key card was being skipped', anchorClass: null,
+        body: 'The APWA color key was the only card not wired into the section system, so the print rules missed it entirely. Now wrapped properly — its swatches print clean alongside everything else.' },
+    ],
+  },
+  {
     version: '1.0.6',
     headline: 'Workflow polish — collapse setup, drag-reorder sections, jump nav, photo prompt',
     items: [
@@ -5248,6 +5260,38 @@ export default function GSSIReportApp() {
           background: #fff !important;
           color: #000 !important;
         }
+        /* Mirror the dark-theme kill from @media print so Preview matches
+           the saved PDF exactly — engineer sees what will actually print. */
+        body.preview-mode .ak-sec {
+          background: #fff !important;
+          color: #000 !important;
+          border-color: #999 !important;
+          box-shadow: none !important;
+        }
+        body.preview-mode .ak-sec div,
+        body.preview-mode .ak-sec section,
+        body.preview-mode .ak-sec article,
+        body.preview-mode .ak-sec li,
+        body.preview-mode .ak-sec td,
+        body.preview-mode .ak-sec th,
+        body.preview-mode .ak-sec label {
+          background-color: transparent !important;
+          box-shadow: none !important;
+        }
+        body.preview-mode .ak-sec,
+        body.preview-mode .ak-sec h1, body.preview-mode .ak-sec h2,
+        body.preview-mode .ak-sec h3, body.preview-mode .ak-sec h4,
+        body.preview-mode .ak-sec p, body.preview-mode .ak-sec span,
+        body.preview-mode .ak-sec div, body.preview-mode .ak-sec label,
+        body.preview-mode .ak-sec li, body.preview-mode .ak-sec strong,
+        body.preview-mode .ak-sec em, body.preview-mode .ak-sec a,
+        body.preview-mode .ak-sec td, body.preview-mode .ak-sec th {
+          color: #000 !important;
+        }
+        body.preview-mode .ak-sec div[style*="border"],
+        body.preview-mode .ak-sec section[style*="border"] {
+          border-color: #bbb !important;
+        }
         .preview-bar {
           position: fixed; top: 0; left: 0; right: 0;
           z-index: 9999;
@@ -5264,6 +5308,66 @@ export default function GSSIReportApp() {
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
+
+          /* === DARK-THEME PRINT KILL ===
+             Cards have inline background: c.card (dark) and text uses
+             dark-theme colors. Force the printed paper to white and text to
+             black; specific elements that need to keep colour (brand ribbon,
+             location header, photos, color swatches) opt back in below via
+             higher-specificity rules later in this @media block. */
+          html, body, .ak-shell {
+            background: #fff !important;
+            color: #000 !important;
+          }
+          .ak-shell {
+            padding: 0 !important;
+            max-width: none !important;
+          }
+          .ak-sec {
+            background: #fff !important;
+            color: #000 !important;
+            border-color: #999 !important;
+            box-shadow: none !important;
+          }
+          /* Cards have inline background: c.card on the structural wrappers
+             (div). Clear those, plus any nested dark sub-cards. Spans and
+             buttons keep their inline backgrounds so colour swatches, status
+             pills and pickers still render correctly. */
+          .ak-sec div,
+          .ak-sec section,
+          .ak-sec article,
+          .ak-sec li,
+          .ak-sec td,
+          .ak-sec th,
+          .ak-sec label {
+            background-color: transparent !important;
+            box-shadow: none !important;
+          }
+          /* Force all text-bearing elements to black — dark-theme inline
+             colors (c.text, c.textDim, c.textFaint) are dark greys/whites. */
+          .ak-sec, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4,
+          .ak-sec p, .ak-sec span, .ak-sec div, .ak-sec label,
+          .ak-sec li, .ak-sec strong, .ak-sec em, .ak-sec a,
+          .ak-sec td, .ak-sec th, .ak-sec dt, .ak-sec dd,
+          .ak-sec section, .ak-sec article {
+            color: #000 !important;
+          }
+          /* Borders fade to grey so they read as lines, not blocks. */
+          .ak-sec div[style*="border"],
+          .ak-sec section[style*="border"] {
+            border-color: #bbb !important;
+          }
+          .ak-sec input, .ak-sec textarea, .ak-sec select {
+            background: #fff !important;
+            color: #000 !important;
+            border: 1px solid #ccc !important;
+            -webkit-text-fill-color: #000 !important;
+          }
+          /* Preserve intentionally-coloured elements (brand red, swatches,
+             scan annotations, photo content, etc.) — !important rules that
+             follow these in the file will win because cascade is source-order
+             at equal specificity. */
+
           .cad-page {
             page: cad;
             page-break-before: always;
@@ -5328,7 +5432,9 @@ export default function GSSIReportApp() {
           .cad-tb-row:last-child { border-bottom: none; }
           .cad-tb-row span { color: #666; letter-spacing: 0.5px; text-transform: uppercase; font-size: 7pt; }
           .cad-tb-row strong { font-size: 9pt; }
-        }
+          /* (Earlier this brace closed @media print, leaking all rules below
+             into the live editor. Closing brace moved to line ~5478 so every
+             rule from here to .scan-location-card .loc-photo is print-only.) */
           input, select, textarea {
             border: 1px solid #ddd !important;
             background: white !important; color: black !important;
@@ -6246,7 +6352,7 @@ export default function GSSIReportApp() {
 
       {/* === MARKUP COLOR KEY (APWA-aligned) === */}
       {report.enableColorLegend && (
-        <Card title="Markup color key" dense>
+        <Card title="Markup color key" dense className="ak-sec ak-sec-colorLegend">
           <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
             Aligned to the APWA Uniform Color Code (utility-locating standard) plus concrete-scanning convention.
             Colors below match the annotation presets used on the scan photos.
