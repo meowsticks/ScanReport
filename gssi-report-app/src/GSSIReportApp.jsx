@@ -32,6 +32,18 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.8',
+    headline: 'Preview polish — ribbon glued to top, drag-reorder cards in Preview',
+    items: [
+      { title: 'Company logo + name pinned to the top in Preview', anchorClass: null,
+        body: 'Brand ribbon was hidden in Preview (rule missing). Now it sits at the very top of the report — clean strip with the logo, the company name in black, and "Know before you cut." in red. Not wrapped in a card, just glued to the top exactly like the PDF.' },
+      { title: 'Drag any card in Preview to reorder it', anchorClass: null,
+        body: 'In Preview mode, grab any section card and drop it above/below another — the new order saves to sectionOrder immediately and persists. Cursor turns into grab, red drop-indicator shows where the card will land. Cards stay column-aligned (no horizontal drift).' },
+      { title: '👁 Preview shortcut in the Setup bar', anchorClass: null,
+        body: 'New "👁 Preview saved PDF" button right at the top — no more scrolling into Print setup to preview. One tap from anywhere on the page.' },
+    ],
+  },
+  {
     version: '1.0.7',
     headline: 'Saved PDF — polished output, no more dark theme in the print',
     items: [
@@ -199,6 +211,52 @@ const BRAND_TAGLINE = 'Know before you cut.';
 // Logo lives in public/. Routed through BASE_URL so it resolves both on the web
 // (served at "/") and in the desktop build (loaded from a file:// path).
 const LOGO_SRC = `${import.meta.env.BASE_URL}kamikaze-logo.png`;
+
+// Dev-only debug fixture — loaded by the 🧪 Demo button in the setup bar
+// (visible only in `npm run dev`, stripped from prod builds). Lets the
+// engineer fill a realistic report in one tap so they can hit 👁 Preview
+// immediately and iterate on PDF styling without hand-typing every field.
+const DEMO_REPORT = {
+  tier: 'full',
+  projectNo: 'AKCC-2026-0518',
+  jobNote: 'P2 parkade — Bay 14 slab penetration set',
+  scanDate: '2026-05-26',
+  client: 'Stuart Olson Construction',
+  siteAddress: '1133 Melville St, Vancouver BC',
+  scanArea: 'P2 parkade slab — between gridlines C-D / 4-5, total 22 sqm',
+  weather: '14°C overcast, slab dry',
+  surface: 'Dry',
+  slabThickness: '300 mm (per as-built)',
+  slabAge: '> 30 days cured',
+  scanCoverage: '100%',
+  serialNo: 'XMT-7741',
+  firmware: '4.0.2',
+  uncertaintyZones:
+    'Near east column footing (NE corner of scan area): rebar congestion gives ' +
+    'overlapping reflections — depth confidence below 200 mm is reduced. Daylight ' +
+    'verify before any core in that 0.5 m radius.',
+  workflow: {
+    scanComplete:      '2026-05-26T09:45',
+    reportIssued:      '2026-05-26T11:30',
+    clearedForCoring:  '',
+  },
+  // Targets use schema: { id, type, depth, cover, note, confidence } — match
+  // addTarget() in the component or React renderers crash.
+  targets: [
+    { id: 'T-01', type: 'Rebar (top mat)',    depth: '50',  cover: '50',  confidence: 'high', note: '#4 @ 200 mm o/c' },
+    { id: 'T-02', type: 'Rebar (bottom mat)', depth: '230', cover: '70',  confidence: 'high', note: '#5 @ 250 mm o/c' },
+    { id: 'T-03', type: 'Post-tension cable', depth: '135', cover: '',    confidence: 'high', note: 'Two cables E-W, ~600 mm apart' },
+    { id: 'T-04', type: 'Conduit / unknown',  depth: '210', cover: '',    confidence: 'med',  note: '~25 mm dia, N-S near east edge' },
+  ],
+  // Cores use schema: { label, size, verdict, clearance, note }
+  cores: [
+    { label: 'A', size: '4"', verdict: 'safe',    clearance: '60 mm', note: 'Clear of all targets' },
+    { label: 'B', size: '6"', verdict: 'caution', clearance: '25 mm', note: 'PT cable within 25 mm — relocate 75 mm S' },
+    { label: 'C', size: '4"', verdict: 'nogo',    clearance: '0',     note: 'Directly over conduit; redesign required' },
+  ],
+  brandFlourishes: true,
+  enableColorLegend: true,
+};
 
 const DEFAULT_REPORT = {
   // Tier
@@ -4864,7 +4922,112 @@ export default function GSSIReportApp() {
     return () => document.body.classList.remove('preview-mode');
   }, [previewMode]);
 
+  // ---------- Preview-mode drag-to-reorder cards ----------
+  // In Preview, the engineer can grab any rendered section card and drop it
+  // above/below another to set print order — same data as the Print setup
+  // panel's drag rows, but applied directly on the live preview so they can
+  // see where it lands. Listeners are attached only while previewMode is on
+  // so the editor stays untouched.
+  useEffect(() => {
+    if (!previewMode) return;
+    const idFromEl = (el) => {
+      if (!el) return null;
+      const m = (el.className || '').toString().match(/ak-sec-([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : null;
+    };
+    let dragId = null;
+    let lastTarget = null;
+    const clearMarker = () => {
+      if (lastTarget) {
+        lastTarget.el.style.boxShadow = '';
+        lastTarget = null;
+      }
+    };
+    const onDragStart = (e) => {
+      const card = e.target.closest('.ak-sec');
+      const id = idFromEl(card);
+      if (!id) return;
+      dragId = id;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', id);
+      }
+      card.style.opacity = '0.4';
+    };
+    const onDragEnd = (e) => {
+      const card = e.target.closest('.ak-sec');
+      if (card) card.style.opacity = '';
+      dragId = null;
+      clearMarker();
+    };
+    const onDragOver = (e) => {
+      const card = e.target.closest('.ak-sec');
+      const id = idFromEl(card);
+      if (!id || !dragId || id === dragId) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      const r = card.getBoundingClientRect();
+      const side = (e.clientY - r.top) < r.height / 2 ? 'above' : 'below';
+      if (!lastTarget || lastTarget.el !== card || lastTarget.side !== side) {
+        clearMarker();
+        card.style.boxShadow = side === 'above'
+          ? 'inset 0 3px 0 0 #e02020'
+          : 'inset 0 -3px 0 0 #e02020';
+        lastTarget = { el: card, side };
+      }
+    };
+    const onDrop = (e) => {
+      const card = e.target.closest('.ak-sec');
+      const id = idFromEl(card);
+      if (id && dragId && id !== dragId) {
+        e.preventDefault();
+        const r = card.getBoundingClientRect();
+        const side = (e.clientY - r.top) < r.height / 2 ? 'above' : 'below';
+        reorderTo(dragId, id, side);
+      }
+      clearMarker();
+      dragId = null;
+    };
+    const cards = Array.from(document.querySelectorAll('.ak-sec'));
+    cards.forEach(card => {
+      card.setAttribute('draggable', 'true');
+      card.style.cursor = 'grab';
+      card.addEventListener('dragstart', onDragStart);
+      card.addEventListener('dragend',   onDragEnd);
+      card.addEventListener('dragover',  onDragOver);
+      card.addEventListener('drop',      onDrop);
+    });
+    return () => {
+      cards.forEach(card => {
+        card.removeAttribute('draggable');
+        card.style.cursor = '';
+        card.style.opacity = '';
+        card.style.boxShadow = '';
+        card.removeEventListener('dragstart', onDragStart);
+        card.removeEventListener('dragend',   onDragEnd);
+        card.removeEventListener('dragover',  onDragOver);
+        card.removeEventListener('drop',      onDrop);
+      });
+    };
+    // Re-bind whenever sectionOrder/visibility changes — new DOM may have
+    // appeared (e.g. tier change makes more cards visible).
+  }, [previewMode, report.sectionOrder, report.sectionVisibility, report.tier]);
+
   const update = (patch) => setReport(r => ({ ...r, ...patch }));
+
+  // Dev-only — wired to the 🧪 Demo button in the setup bar. Merges a
+  // realistic-looking report on top of the current one so the engineer can
+  // jump straight to 👁 Preview without typing every field. Visible in
+  // `npm run dev` only; stripped from prod by Vite (import.meta.env.DEV).
+  const loadDemoReport = () => {
+    if (!window.confirm('Overwrite current report with demo data?')) return;
+    setReport(r => {
+      const next = { ...r, ...DEMO_REPORT };
+      const id = currentIdRef.current;
+      if (id) saveReport(id, next);
+      return next;
+    });
+  };
 
   // ---------- Targets ----------
   const addTarget = () => update({
@@ -5166,6 +5329,11 @@ export default function GSSIReportApp() {
       )}
       <style>{`
         .print-only { display: none; }
+        /* In Preview mode, treat the page as if it were printing — so the
+           brand ribbon (logo + company name pinned to the very top of the
+           report) actually shows. Without this rule, the ribbon was hidden
+           in Preview even though it would appear in the saved PDF. */
+        body.preview-mode .print-only { display: block !important; }
         /* === Brand flourishes (opt-in via report.brandFlourishes) === */
         .brand-ribbon {
           display: flex; align-items: center; gap: 12px;
@@ -5199,6 +5367,13 @@ export default function GSSIReportApp() {
           .brand-ribbon-tagline { color: #a32626; }
           .brand-signoff { color: #555; border-top-color: #ccc; }
         }
+        /* Mirror brand-ribbon print colours into Preview mode — without
+           these, the title renders white-on-light (invisible) since the
+           dark-theme var(--ak-text) is still in effect on screen. */
+        body.preview-mode .brand-ribbon { background: #fafafa !important; }
+        body.preview-mode .brand-ribbon-title { color: #111 !important; }
+        body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
+        body.preview-mode .brand-signoff { color: #555 !important; border-top-color: #ccc !important; }
         .scan-location-card.dragging,
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
@@ -5716,6 +5891,22 @@ export default function GSSIReportApp() {
             </strong> on
           </div>
         )}
+        {/* Quick-access strip: Preview shortcut + (dev only) demo loader.
+            Without these, hitting Preview means scrolling into the Print
+            setup card every time — slow loop when debugging PDF styling. */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <Btn variant="primary" onClick={() => setPreviewMode(true)}
+            style={{ flex: 1, fontSize: 11, padding: '6px 8px' }}>
+            👁 Preview saved PDF
+          </Btn>
+          {import.meta.env.DEV && (
+            <Btn variant="ghost" onClick={loadDemoReport}
+              title="DEV ONLY — fill the current report with realistic sample data"
+              style={{ fontSize: 11, padding: '6px 10px' }}>
+              🧪 Demo
+            </Btn>
+          )}
+        </div>
       </div>
       {!setupCollapsed && (<>
 
