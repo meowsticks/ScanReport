@@ -10,11 +10,26 @@
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const contextMenu = require('electron-context-menu');
 const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
+
+// Right-click → Cut / Copy / Paste / Select All in every window. Without
+// this Chromium suppresses the OS menu in Electron and the user has no
+// way to copy highlighted text (boss reported this on v1.0.x). Suppress
+// the menu when nothing is actually copy/paste-able so the diagram
+// canvas's own right-click UX (cancel stroke, straighten edge) keeps
+// working.
+contextMenu({
+  showInspectElement: false,
+  showLearnSpelling: false,
+  showSearchWithGoogle: false,
+  shouldShowMenu: (_event, params) =>
+    !!(params.selectionText || params.isEditable || params.linkURL || params.srcURL),
+});
 
 // Set this when building a reviewer-only build to boot straight into a
 // remote preview (Vercel) on first launch. PRODUCTION BUILDS MUST LEAVE

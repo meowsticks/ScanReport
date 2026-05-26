@@ -32,6 +32,16 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.12',
+    headline: 'Right-click → Copy works, and photo comment input is bulletproof',
+    items: [
+      { title: 'Right-click → Cut / Copy / Paste / Select All', anchorClass: null,
+        body: 'Highlight any text in any field, on any photo comment, anywhere — right-click and the OS menu now appears with Cut, Copy, Paste, Select All, and spell-check suggestions. Electron suppresses the OS menu by default; we wire it up now via electron-context-menu in the main process. Diagram canvas right-click (cancel stroke / straighten edge) still works as before.' },
+      { title: 'Inline photo comment box: typing always lands', anchorClass: 'ak-sec-scanPhotos',
+        body: 'Boss reported the inline "Comment for this spot" box on photo annotations sometimes wouldn\'t accept keystrokes. Cause was a racy 30 ms focus setTimeout that could lose the race on slower Electron hardware, plus possible event bubbling from the input to the canvas underneath. Replaced with a rAF-driven focus that runs after React commits the DOM, added stopPropagation on the input so pointer events can\'t leak through to the canvas, and added a key prop so each new spot gets a fresh-mounted input.' },
+    ],
+  },
+  {
     version: '1.0.11',
     headline: 'Fix: no more Vercel sign-in prompt on launch',
     items: [
@@ -2272,8 +2282,12 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           content: pendingText.content.trim(), fontSize: 14, strokeScale,
         });
       }
-      setPendingText({ pt, content: '' });
-      setTimeout(() => pendingTextInputRef.current?.focus(), 30);
+      // Stamp the spot — a useEffect below focuses the input once React
+      // has actually committed the new <input> to the DOM. The old
+      // setTimeout(30 ms) sometimes lost the focus race on slower
+      // Electron hardware → boss reported "won't let me type" because
+      // the input was never focused.
+      setPendingText({ pt, content: '', stamp: Date.now() });
       return;
     }
     if (!anchor) {
@@ -2366,6 +2380,27 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     setDrawingPath(null);
   }, [tool]);
 
+  // Focus the inline comment input once it's actually in the DOM. This
+  // runs after React commits, so the ref is guaranteed populated — no
+  // racy setTimeout, no autoFocus quirks on Electron. Re-fires every time
+  // a new comment spot is opened (key on pendingText.stamp).
+  useEffect(() => {
+    if (!pendingText) return;
+    const el = pendingTextInputRef.current;
+    if (!el) return;
+    // Two-tick focus: rAF for the DOM to paint, then a microtask retry in
+    // case something stole focus on the same frame (the canvas's click
+    // bubble, for example).
+    const r1 = requestAnimationFrame(() => {
+      el.focus();
+      el.select?.();
+      queueMicrotask(() => {
+        if (document.activeElement !== el) el.focus();
+      });
+    });
+    return () => cancelAnimationFrame(r1);
+  }, [pendingText?.stamp]);
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -2445,23 +2480,42 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           const left = Math.max(8, Math.min(px + 8, (cr.left - co.left) + W - inputW - 8));
           const top  = Math.max(8, Math.min(py + 8, (cr.top  - co.top)  + H - 80));
           return (
-            <div style={{
-              position: 'absolute', left, top, zIndex: 5,
-              background: c.bgRaised, border: `1px solid ${c.accent}`,
-              borderRadius: 6, padding: 6, width: inputW,
-              boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
-              display: 'flex', flexDirection: 'column', gap: 5,
-            }}>
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute', left, top, zIndex: 5,
+                background: c.bgRaised, border: `1px solid ${c.accent}`,
+                borderRadius: 6, padding: 6, width: inputW,
+                boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
+                display: 'flex', flexDirection: 'column', gap: 5,
+              }}>
               <div style={{ fontSize: 10, color: c.textFaint, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                 Comment for this spot
               </div>
               <input
+                key={pendingText.stamp}
                 ref={pendingTextInputRef}
                 value={pendingText.content}
-                onChange={(e) => setPendingText(p => p ? { ...p, content: e.target.value } : p)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPendingText(p => p ? { ...p, content: v } : p);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter')  { e.preventDefault(); commit(); }
                   if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+                }}
+                // Stop pointer events from leaking to the canvas below.
+                // Without this, clicking the input could (on some Electron
+                // setups) re-trigger handleClick → setPendingText with
+                // empty content, wiping what the user is mid-typing.
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Defensive: if focus didn't land here, force it now.
+                  if (document.activeElement !== e.currentTarget) e.currentTarget.focus();
                 }}
                 placeholder="Type a comment, then Enter…"
                 autoFocus
