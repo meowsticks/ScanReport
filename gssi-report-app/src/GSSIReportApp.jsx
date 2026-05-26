@@ -32,6 +32,16 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.14',
+    headline: 'Critical fix: the .exe launches again',
+    items: [
+      { title: 'App no longer crashes on startup', anchorClass: null,
+        body: 'v1.0.12 and v1.0.13 shipped a context-menu library that turned out to be ESM-only — Electron\'s main process is CommonJS, so the app threw ERR_REQUIRE_ESM before the window even opened. Pinned the library to the last CommonJS-compatible release (v3.6.1). Right-click → Cut / Copy / Paste / Select All still works exactly as designed.' },
+      { title: 'How to recover if you were on v1.0.12 or v1.0.13', anchorClass: null,
+        body: 'Auto-update can\'t reach you from a crashed app (the updater runs in the same main process that\'s throwing). Download AK.ScanReport.Setup.exe for v1.0.14 from the GitHub releases page and run it — it installs over the broken version. Your reports survive: localStorage and any saved .akscan files on disk are preserved.' },
+    ],
+  },
+  {
     version: '1.0.13',
     headline: 'Update-safe save: your file is written before an update installs',
     items: [
