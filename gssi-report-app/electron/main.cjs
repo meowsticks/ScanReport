@@ -16,10 +16,13 @@ const path = require('path');
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || null;
 
-// When set, builds from this branch boot straight into the Test build (the live
-// web preview) on first launch — so a reviewer sees the latest with zero setup.
-// Leave '' for normal production builds (they load the bundled Stable app).
-const DEFAULT_TEST_URL = 'https://ak-scanreport-test.vercel.app/';
+// Set this when building a reviewer-only build to boot straight into a
+// remote preview (Vercel) on first launch. PRODUCTION BUILDS MUST LEAVE
+// THIS EMPTY — otherwise users hit the Vercel auth/sign-in wall on first
+// install (boss reported this on v1.0.x). Power-users who want to point
+// the shell at a custom preview URL can still toggle Test mode and enter
+// the URL from the UI.
+const DEFAULT_TEST_URL = '';
 const FILE_FILTERS = [
   { name: 'Scan report', extensions: ['akscan', 'json'] },
   { name: 'All files', extensions: ['*'] },
@@ -55,9 +58,19 @@ function readVersionMode() {
   let pref = null;
   try { pref = JSON.parse(fsSync.readFileSync(versionPrefPath(), 'utf8')); } catch {}
   if (!pref) {
-    // First launch: default to Test if a URL is baked into this build, so a
-    // reviewer gets the latest with nothing to configure.
+    // First launch: default to Test ONLY if a URL is baked into this build
+    // (reviewer builds). Production builds have DEFAULT_TEST_URL='' and so
+    // default to Stable (the bundled app) — no Vercel sign-in screen.
     return { testMode: !!DEFAULT_TEST_URL, testUrl: DEFAULT_TEST_URL };
+  }
+  // Self-heal: if a previous install put us in Test mode pointed at the
+  // old hard-coded Vercel URL, and this build no longer ships that URL,
+  // revert to Stable so users aren't stuck on the sign-in wall.
+  const staleVercel = pref.testMode && !DEFAULT_TEST_URL
+    && typeof pref.testUrl === 'string'
+    && pref.testUrl.includes('ak-scanreport-test.vercel.app');
+  if (staleVercel) {
+    return { testMode: false, testUrl: '' };
   }
   return { testMode: !!pref.testMode, testUrl: pref.testUrl || DEFAULT_TEST_URL };
 }
