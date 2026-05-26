@@ -32,6 +32,16 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.13',
+    headline: 'Update-safe save: your file is written before an update installs',
+    items: [
+      { title: 'Auto-update flushes the linked .akscan file too', anchorClass: null,
+        body: 'Already supported: File → Save / Save As writes a real .akscan file you can re-open later (great safety net before any update). New in this release: when an auto-update is about to install, the app now persists BOTH the in-app library (localStorage) AND the linked file on disk before letting the update proceed. So the .akscan on your disk is always current when an update lands — nothing lost.' },
+      { title: 'How to use the safety net', anchorClass: null,
+        body: 'Click 💾 Save on any report → "📌 Choose file & save" → pick a place on your hard drive (Documents, OneDrive, etc.). After that the same Save button writes silently to that file. If anything goes sideways with the app, double-click the .akscan file or use File → Open to load it back exactly as it was — every field, target, core, annotation, photo.' },
+    ],
+  },
+  {
     version: '1.0.12',
     headline: 'Right-click → Copy works, and photo comment input is bulletproof',
     items: [
@@ -4663,11 +4673,16 @@ export default function GSSIReportApp() {
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', onVis);
 
-    // Desktop: when an update is about to install, save first, then confirm.
+    // Desktop: when an update is about to install, save EVERYTHING first —
+    // localStorage (fast, the library of all reports) AND the linked
+    // .akscan file on disk if the user picked one. Only tell the main
+    // process we're done once both writes have completed, so an update
+    // can't install while the file is half-written.
     let offFlush;
     if (window.akDesktop?.onFlushSave) {
-      offFlush = window.akDesktop.onFlushSave(() => {
+      offFlush = window.akDesktop.onFlushSave(async () => {
         flush();
+        try { await autoSaveNowRef.current?.(); } catch {}
         window.akDesktop.flushSaveDone?.();
       });
     }
