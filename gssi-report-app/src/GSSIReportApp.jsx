@@ -32,6 +32,14 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
   {
+    version: '1.0.11',
+    headline: 'Fix: no more Vercel sign-in prompt on launch',
+    items: [
+      { title: 'Production builds load the bundled app, not a remote URL', anchorClass: null,
+        body: 'On a fresh install the .exe was defaulting to "Test mode" which loads a Vercel preview URL — and that preview is behind Vercel auth, so users hit a sign-in wall before they could even see the app. Production builds now correctly load the bundled Stable app on first launch. Users already trapped in Test mode auto-recover to Stable on next launch. The 🧪 Test toggle still works for power-users who set their own preview URL.' },
+    ],
+  },
+  {
     version: '1.0.10',
     headline: 'Typing is now truly instant — zero state-propagation lag',
     items: [
