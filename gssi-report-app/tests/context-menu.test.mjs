@@ -57,6 +57,19 @@ if (/shouldShowMenu/.test(main)) {
     'without this, the menu pops up over the diagram canvas and competes with cancel-stroke');
 }
 
+// v1.0.12/1.0.13 shipped electron-context-menu@^4.x which is ESM-only;
+// the .exe crashed on launch with ERR_REQUIRE_ESM because main.cjs
+// uses CommonJS require(). v3.x is the last CommonJS-compatible major.
+// Fail loud if anyone tries to bump back into ESM territory.
+const spec = pkg.dependencies && pkg.dependencies['electron-context-menu'];
+const majorMatch = spec && spec.match(/(\d+)/);
+if (majorMatch) {
+  const major = Number(majorMatch[1]);
+  if (major < 4) pass(`electron-context-menu pinned to CommonJS major (v${major}.x)`);
+  else fail('electron-context-menu major < 4',
+    `pinned to v${major}.x which is ESM-only; main.cjs require() will crash on launch. Pin to ^3.6.1.`);
+}
+
 console.log(`\n${FAILS.length} failures`);
 if (FAILS.length) process.exit(1);
 console.log('Right-click Cut/Copy/Paste is wired into the Electron shell.');
