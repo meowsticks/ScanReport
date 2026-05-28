@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>v1.0.15 · Branding extras (side spine + tier labels)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --muted: #6b7280;
+    --soft: #525252;
+    --line: #e5e7eb;
+    --accent: #1f2937;
+    --rule: #0a0a0a;
+    --bg: #ececec;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 30px 20px 80px; }
+  header.page-head { margin-bottom: 18px; }
+  header.page-head a { color: #b91c1c; text-decoration: none; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+  header.page-head h1 { margin: 8px 0 4px; font-size: 22px; }
+  header.page-head p { margin: 0 0 8px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+  .section-title { margin: 36px 0 4px; font-size: 14px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .section-sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  /* Two-up spine variant comparison (right default / left alternative) */
+  .variants { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) { .variants { grid-template-columns: 1fr; } }
+  .v-col {
+    background: white; border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+  }
+  .v-col h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .v-col h3.shipped { color: #15803d; }
+  .v-col h3.candidate { color: #b45309; }
+  .v-col .desc { font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; min-height: 48px; }
+
+  /* The faux "paper" */
+  .paper {
+    background: var(--paper); width: 100%; min-height: 460px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12); position: relative; padding: 0;
+    font-family: Helvetica, Arial, sans-serif; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Letterhead (neutral chrome) */
+  .lhd {
+    display: grid; grid-template-columns: 44px 1fr auto;
+    gap: 10px; padding: 12px 16px 8px;
+    border-bottom: 2px solid var(--rule);
+    align-items: start;
+  }
+  .lhd .logo {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #8b4513 0%, #3d1f0a 100%);
+    border: 1.5px solid #1a0d05;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .lhd .logo img { width: 100%; height: 100%; object-fit: contain; }
+  .lhd .co { line-height: 1.15; }
+  .lhd .co .name {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 13px; font-weight: 800; color: var(--ink); letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .lhd .co .name2 {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 8px; color: #5b2c0a; letter-spacing: 2px;
+    text-transform: uppercase; margin-top: 1px;
+  }
+  .lhd .co .tag {
+    font-style: italic;
+    font-size: 7px;
+    color: #6b7280; margin-top: 2px;
+  }
+  .lhd .co .info { color: var(--soft); font-size: 7px; margin-top: 3px; }
+  .lhd .meta { text-align: right; line-height: 1.3; }
+  .lhd .meta .projno {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 9px; color: var(--ink); font-weight: 700;
+  }
+  .lhd .meta .op { color: var(--soft); font-size: 7px; }
+
+  .body { padding: 10px 16px 12px; flex: 1; }
+  .body .rt { font-size: 11px; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+
+  .mini-card {
+    border: 1px solid var(--line); border-radius: 4px; padding: 7px;
+    margin-bottom: 6px; background: white;
+  }
+  .mini-card .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .mini-card .lbl { font-weight: 700; font-size: 9px; }
+  .mini-card .tier {
+    font-size: 7px; padding: 1px 5px; border-radius: 2px;
+    font-weight: 700; letter-spacing: 0.5px;
+  }
+  .mini-card .tier.t1 { background: #dcfce7; color: #15803d; }
+  .mini-card .tier.t2 { background: #fef3c7; color: #92400e; }
+  .mini-card .tier.t3 { background: #fee2e2; color: #991b1b; }
+  .mini-card .note { font-size: 7px; color: #374151; line-height: 1.3; }
+  .mini-card .note .k { color: var(--muted); font-weight: 600; }
+
+  /* Side spine — carries company name + stacked page indicator */
+  .spine {
+    position: absolute; top: 0; bottom: 0;
+    width: 18px;
+    background: #0a0a0a;
+    color: white;
+    display: flex; flex-direction: column; align-items: center;
+    z-index: 5;
+  }
+  .spine.left { left: 0; }
+  .spine.right { right: 0; }
+  .spine .page-indicator {
+    padding: 6px 0 5px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    line-height: 1;
+  }
+  .spine .page-indicator .num { font-size: 9px; font-weight: 700; }
+  .spine .page-indicator .rule { width: 8px; height: 1px; background: white; opacity: 0.6; }
+  .spine .page-indicator .total { font-size: 7px; opacity: 0.7; }
+  .spine .label-wrap {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 6px 0;
+  }
+  .spine .lbl {
+    writing-mode: vertical-rl;
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 7px; letter-spacing: 1.5px; white-space: nowrap;
+  }
+  .spine.left .lbl { transform: rotate(180deg); }
+  /* Shift content away from spine */
+  .paper.spine-left .lhd, .paper.spine-left .body { padding-left: 28px; }
+  .paper.spine-right .lhd, .paper.spine-right .body { padding-right: 28px; }
+
+  /* Settings panel */
+  .settings {
+    background: white; border: 1px solid var(--line); border-radius: 8px;
+    padding: 22px; margin-top: 16px;
+  }
+  .settings h2 { margin: 0 0 4px; font-size: 14px; }
+  .settings .desc { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .settings .section { padding: 14px 0; border-top: 1px solid var(--line); }
+  .settings .section:first-of-type { border-top: none; padding-top: 0; }
+  .settings .section h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); }
+  .settings .form { display: grid; grid-template-columns: 180px 1fr; gap: 10px 16px; align-items: center; font-size: 13px; }
+  .settings .form label { color: var(--soft); font-weight: 600; }
+  .settings .form input[type=text] {
+    padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px;
+    font-size: 12px; font-family: inherit;
+  }
+  .settings .form .hint { color: var(--muted); font-size: 11px; grid-column: 2; }
+
+  .tier-editor {
+    display: grid; grid-template-columns: 80px 1fr 60px 60px;
+    gap: 8px; align-items: center; font-size: 12px;
+    padding: 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 6px;
+  }
+  .tier-editor .num { font-weight: 700; color: var(--muted); font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11px; }
+  .tier-editor input[type=text] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; }
+  .tier-editor input[type=color] { width: 100%; height: 28px; padding: 2px; cursor: pointer; border: 1px solid var(--line); border-radius: 3px; }
+  .tier-editor .preview-pill {
+    padding: 2px 8px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-align: center;
+  }
+
+  .note-box {
+    background: #ecfdf5; border: 1px solid #10b981; border-radius: 6px;
+    padding: 12px 14px; margin-top: 20px;
+    font-size: 12px; color: #064e3b; line-height: 1.5;
+  }
+  .note-box strong { color: #047857; }
+  .note-box.amber {
+    background: #fef3c7; border-color: #f59e0b; color: #78350f;
+  }
+  .note-box.amber strong { color: #92400e; }
+
+  .toggle-row { display: flex; align-items: center; gap: 10px; }
+  .toggle { width: 36px; height: 20px; background: #1f2937; border-radius: 999px; position: relative; cursor: pointer; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; }
+  .toggle.off { background: #d1d5db; }
+  .toggle.off::after { left: 2px; right: auto; }
+
+  .badge { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.5px; font-weight: 700; }
+  .badge.v15 { background: #fef3c7; color: #92400e; }
+  .badge.v16 { background: #e0e7ff; color: #3730a3; }
+
+  /* Mobile — let everything reflow cleanly on a phone */
+  @media (max-width: 720px) {
+    .wrap { padding: 14px 14px 60px; }
+    header.page-head h1 { font-size: 18px; }
+    .section-title { font-size: 13px; }
+    .v-col { padding: 12px; }
+    .paper { min-height: auto; }
+    .settings { padding: 16px; }
+    .settings .form { grid-template-columns: 1fr; gap: 6px; }
+    .settings .form label { padding-top: 0; }
+    .tier-editor { grid-template-columns: 60px 1fr 50px 50px; gap: 6px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <a href="index.html">← back to v1.0.15 mockups</a>
+    <h1>05 · Side spine variants &amp; tier label preview</h1>
+    <p>Two things live here. <strong>Side spine</strong> ships in v1.0.15 with the right edge as default — a thin vertical band with the company name + stacked page indicator. <strong>Tier label customization</strong> previews v1.0.16 — changing CLEAR/CAUTION/DO NOT CORE to user-defined wording, deferred because it touches data model + every scan card render.</p>
+    <p><strong>Logo:</strong> each letterhead references <code>assets/logo.png</code>. Commit the full Aggarwal Kamikazes logo there and it renders; until then the brown circular fallback shows. <strong>Operator</strong> appears as a literal <code>{operator}</code> token — filled per-report at scan time.</p>
+    <p><strong>What you do not see here:</strong> a brand-color picker. Color inside a scan report is semantic — black = top bar, blue = bottom bar, red = conduit / no-scan zone. The letterhead and footer chrome stay neutral so the scan grammar reads clearly.</p>
+  </header>
+
+  <!-- SIDE SPINE — two-up comparison -->
+  <h2 class="section-title">Side spine — right vs left <span class="badge v15">v1.0.15 — shipping, default right</span></h2>
+  <p class="section-sub">Spine carries the company name <em>and</em> the page indicator (current page above a divider line, total below). No bottom footer band — that real estate goes to the scan cards. AK default is <strong>right edge</strong> (variant A, left column). Users can flip to left from Settings.</p>
+
+  <div class="variants">
+
+    <!-- Variant A: Right spine (DEFAULT) -->
+    <div class="v-col">
+      <h3 class="shipped">★ A · Right spine (DEFAULT)</h3>
+      <p class="desc">Spine on the outer (right) edge — what AK ships with. Company name reads top-to-bottom. Page indicator stacked at the top — current page above a line, total below.</p>
+      <div class="paper spine-right">
+        <div class="spine right">
+          <div class="page-indicator">
+            <div class="num">1</div>
+            <div class="rule"></div>
+            <div class="total">2</div>
+          </div>
+          <div class="label-wrap"><div class="lbl">AGGARWAL KAMIKAZES</div></div>
+        </div>
+        <div class="lhd">
+          <div class="logo"><img src="assets/logo.png" alt="" onerror="this.style.display='none'"></div>
+          <div class="co">
+            <div class="name">Aggarwal Kamikazes</div>
+            <div class="name2">Cutting and Coring Ltd.</div>
+            <div class="tag">— Shut up and cut straight</div>
+            <div class="info">123 Industrial Way, Toronto · (416) 555-0199</div>
+          </div>
+          <div class="meta">
+            <div class="projno">AKCC-2026-0017</div>
+            <div class="op">{operator}</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="rt">Concrete Scan — 845 Bay St</div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 01 · Col C-12</div><div class="tier t1">CLEAR</div></div>
+            <div class="note"><span class="k">Depth:</span> 200mm · <span class="k">Rebar:</span> #5 @ 12"</div>
+          </div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 02 · Beam B-08</div><div class="tier t2">CAUTION</div></div>
+            <div class="note"><span class="k">PT cable:</span> 1 detected at 75mm depth</div>
+          </div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 03 · Slab S-04</div><div class="tier t3">DO NOT CORE</div></div>
+            <div class="note"><span class="k">Multiple PT cables</span>, depths 60-90mm</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variant B: Left spine (alternative) -->
+    <div class="v-col">
+      <h3 class="candidate">B · Left spine (alternative)</h3>
+      <p class="desc">Same spine, flipped to the left edge. Company name reads bottom-to-top. Available via the edge picker in Settings.</p>
+      <div class="paper spine-left">
+        <div class="spine left">
+          <div class="page-indicator">
+            <div class="num">1</div>
+            <div class="rule"></div>
+            <div class="total">2</div>
+          </div>
+          <div class="label-wrap"><div class="lbl">AGGARWAL KAMIKAZES</div></div>
+        </div>
+        <div class="lhd">
+          <div class="logo"><img src="assets/logo.png" alt="" onerror="this.style.display='none'"></div>
+          <div class="co">
+            <div class="name">Aggarwal Kamikazes</div>
+            <div class="name2">Cutting and Coring Ltd.</div>
+            <div class="tag">— Shut up and cut straight</div>
+            <div class="info">123 Industrial Way, Toronto · (416) 555-0199</div>
+          </div>
+          <div class="meta">
+            <div class="projno">AKCC-2026-0017</div>
+            <div class="op">{operator}</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="rt">Concrete Scan — 845 Bay St</div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 01 · Col C-12</div><div class="tier t1">CLEAR</div></div>
+            <div class="note"><span class="k">Depth:</span> 200mm · <span class="k">Rebar:</span> #5 @ 12"</div>
+          </div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 02 · Beam B-08</div><div class="tier t2">CAUTION</div></div>
+            <div class="note"><span class="k">PT cable:</span> 1 detected at 75mm depth</div>
+          </div>
+          <div class="mini-card">
+            <div class="head"><div class="lbl">Scan 03 · Slab S-04</div><div class="tier t3">DO NOT CORE</div></div>
+            <div class="note"><span class="k">Multiple PT cables</span>, depths 60-90mm</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note-box">
+    <strong>Decided:</strong> spine ships in v1.0.15 with the <strong>right edge as default</strong>. Spine is mandatory (it carries pagination — disabling it would leave the report with no page count). Edge is configurable (left/right). The bottom footer band is dropped; the cards take the freed vertical space and photos render taller.
+  </div>
+
+  <!-- SETTINGS PANEL: SIDE SPINE -->
+  <div class="settings">
+    <h2>Settings → Letterhead → Side spine <span class="badge v15">v1.0.15</span></h2>
+    <p class="desc">Pick which edge the spine sits on. The spine reuses the company name from the letterhead — no separate field. Page indicator is auto-generated.</p>
+    <div class="section">
+      <div class="form">
+        <label>Edge</label>
+        <div class="toggle-row">
+          <button class="badge" style="background: white; color: #6b7280; padding: 6px 12px; border: 1px solid var(--line); cursor: pointer; font-size: 11px;">Left</button>
+          <button class="badge" style="background: #1f2937; color: white; padding: 6px 12px; border: 1px solid #1f2937; cursor: pointer; font-size: 11px; font-weight: 700;">Right (default)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIER LABEL PREVIEW (v1.0.16) -->
+  <h2 class="section-title" style="margin-top: 40px;">Tier label customization <span class="badge v16">v1.0.16 preview</span></h2>
+  <p class="section-sub">Replace CLEAR / CAUTION / DO NOT CORE with whatever wording fits the project — engineer language, color-coded handoff terminology, anything. This preview shows what the editor will look like; the feature itself ships in v1.0.16 because it touches the data model + every scan card render. Logged so it's not forgotten.</p>
+
+  <div class="settings">
+    <h2>Settings → Report → Tier labels</h2>
+    <p class="desc">Three tiers. Each has a label, a swatch color (background + text), and a description.</p>
+
+    <div class="section">
+      <div style="display: grid; grid-template-columns: 80px 1fr 80px 80px; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); padding: 0 8px 6px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;">
+        <div>Tier</div>
+        <div>Label</div>
+        <div>Bg color</div>
+        <div>Text color</div>
+      </div>
+      <div class="tier-editor">
+        <div class="num">Tier 1</div>
+        <input type="text" value="CLEAR" />
+        <input type="color" value="#dcfce7" />
+        <input type="color" value="#15803d" />
+      </div>
+      <div class="tier-editor">
+        <div class="num">Tier 2</div>
+        <input type="text" value="CAUTION" />
+        <input type="color" value="#fef3c7" />
+        <input type="color" value="#92400e" />
+      </div>
+      <div class="tier-editor">
+        <div class="num">Tier 3</div>
+        <input type="text" value="DO NOT CORE" />
+        <input type="color" value="#fee2e2" />
+        <input type="color" value="#991b1b" />
+      </div>
+
+      <p style="margin: 14px 0 8px; font-size: 12px; color: var(--soft); font-weight: 600;">Or pick a preset bundle:</p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="badge" style="background: white; color: #374151; padding: 6px 12px; border: 1px solid var(--line); cursor: pointer; font-size: 11px;">CLEAR · CAUTION · DO NOT CORE</button>
+        <button class="badge" style="background: white; color: #374151; padding: 6px 12px; border: 1px solid var(--line); cursor: pointer; font-size: 11px;">GO · HOLD · STOP</button>
+        <button class="badge" style="background: white; color: #374151; padding: 6px 12px; border: 1px solid var(--line); cursor: pointer; font-size: 11px;">SAFE · REVIEW · BLOCKED</button>
+        <button class="badge" style="background: white; color: #374151; padding: 6px 12px; border: 1px solid var(--line); cursor: pointer; font-size: 11px;">PASS · WARN · FAIL</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="note-box amber">
+    <strong>Decided 2026-05-27:</strong> v1.0.15 ships <strong>letterhead, page-break-safe cards (taller photos), DRAFT watermark, side spine (right-edge default, carries pagination)</strong>. Bottom footer band dropped — pagination moved to the spine, vertical space goes to scan photos. Company name throughout: <em>Aggarwal Kamikazes Cutting and Coring Ltd.</em>, tagline <em>"— Shut up and cut straight"</em>. Brand-color picker dropped — color is reserved for scan-content semantics (black / blue / red have meaning). Tier label customization defers to v1.0.16, previewed above. Letterhead settings travel inside the <code>.akscan</code> file so reports are self-describing across machines.
+  </div>
+
+  <div class="note-box" style="margin-top: 10px;">
+    <strong>v1.0.16 candidate — mobile-friendly PDF mode (per-report toggle):</strong> a customer-requested option that, when toggled on, switches the PDF to a layout tuned for small-screen viewing — spine dropped, page indicator moves inline to letterhead top-right (e.g., <code>2/5</code>), scan card body stacks vertically (photo on top, notes below), base font bumped. Default off; desktop viewing stays as v1.0.15. Not implementing in v1.0.15; logged so it's not forgotten.
+  </div>
+
+</div>
+</body>
+</html>

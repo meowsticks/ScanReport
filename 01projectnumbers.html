@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AK ScanReport v1.0.15 — Auto Project Numbers</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --brand: #b91c1c;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --chip: #f3f4f6;
+    --accent: #1f2937;
+  }
+  html, body { margin: 0; padding: 0; background: #f5f5f5; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 920px; margin: 28px auto; padding: 0 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--accent); }
+  .card p.note { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  /* Mock report header */
+  .report-header { border-top: 4px solid var(--brand); padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; background: var(--paper); border: 1px solid var(--line); }
+  .report-header .left .brand { font-weight: 700; font-size: 18px; letter-spacing: 0.5px; }
+  .report-header .left .client { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .report-header .right { text-align: right; }
+  .report-header .right .label { font-size: 10px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+  .report-header .right .pno { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 18px; font-weight: 600; color: var(--brand); display: inline-flex; align-items: center; gap: 8px; }
+  .pencil { width: 14px; height: 14px; opacity: 0.45; cursor: pointer; }
+  .pencil:hover { opacity: 0.9; }
+
+  /* New report dialog mock */
+  .dialog { width: 460px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; }
+  .dialog h3 { margin: 0 0 14px; font-size: 14px; letter-spacing: 0.4px; text-transform: uppercase; }
+  .field { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--chip); }
+  .field input { flex: 1; border: 0; background: transparent; font: 600 16px/1 "SFMono-Regular", Menlo, Consolas, monospace; color: var(--accent); outline: none; }
+  .field .hint { font-size: 11px; color: var(--muted); }
+  .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .btn { padding: 8px 14px; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .btn-primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+  /* Rollover diagram */
+  .rollover { display: flex; align-items: center; gap: 18px; }
+  .roll-box { flex: 1; border: 1px dashed var(--line); border-radius: 6px; padding: 14px 16px; }
+  .roll-box .year { font-size: 11px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+  .roll-box .num { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 17px; font-weight: 600; margin-top: 4px; }
+  .arrow { font-size: 22px; color: var(--muted); }
+
+  /* Filename strip */
+  .filenames { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fafafa; font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 13px; }
+  .file-row .ext { color: var(--muted); }
+  .back { display: inline-block; margin-bottom: 16px; font-size: 13px; color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← back to v1.0.15 mockups</a>
+  <h1>Auto project numbers — <code>AKCC-{YYYY}-{####}</code></h1>
+  <p class="sub">Mockup only. No real React, no real persistence. Mirrors the existing report visual language.</p>
+
+  <div class="card">
+    <h2>Report header — top-right project number</h2>
+    <p class="note">Always visible at the top of every report. Renders in brand-red, monospace, with a pencil affordance for manual override.</p>
+    <div class="report-header">
+      <div class="left">
+        <div class="brand">AK ScanReport</div>
+        <div class="client">Acme Warehouse — Bay 4 slab scan</div>
+      </div>
+      <div class="right">
+        <div class="label">Project No.</div>
+        <div class="pno">
+          AKCC-2026-0017
+          <svg class="pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>New report dialog — auto-suggested number</h2>
+    <p class="note">When the user clicks "New Report", the next sequential number for the current year is pre-filled. Click the pencil to override (e.g., backfill or skip).</p>
+    <div class="dialog">
+      <h3>New Report</h3>
+      <div class="field">
+        <input type="text" value="AKCC-2026-0018" />
+        <span class="hint">auto · editable</span>
+        <svg class="pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+      </div>
+      <div class="actions">
+        <button class="btn">Cancel</button>
+        <button class="btn btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Year rollover — counter resets Jan 1</h2>
+    <p class="note">Per-year counter, persisted in localStorage. Deterministic reset because the storage key includes the year.</p>
+    <div class="rollover">
+      <div class="roll-box">
+        <div class="year">Dec 31, 2026</div>
+        <div class="num">AKCC-2026-0142</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="roll-box">
+        <div class="year">Jan 1, 2027</div>
+        <div class="num">AKCC-2027-0001</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Filename when exporting</h2>
+    <p class="note">Project number prefixes both <code>.akscan</code> and <code>.pdf</code> filenames. Site name is slugified.</p>
+    <div class="filenames">
+      <div class="file-row">AKCC-2026-0017_acme-warehouse<span class="ext">.akscan</span></div>
+      <div class="file-row">AKCC-2026-0017_acme-warehouse<span class="ext">.pdf</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

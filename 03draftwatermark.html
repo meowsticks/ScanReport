@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AK ScanReport v1.0.15 — DRAFT Watermark</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --brand: #b91c1c;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --chip: #f3f4f6;
+    --accent: #1f2937;
+    --watermark: #e5e7eb;
+  }
+  html, body { margin: 0; padding: 0; background: #f5f5f5; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 28px auto; padding: 0 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--accent); }
+  .card p.note { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; background: #fafafa; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .toolbar .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; font-weight: 700;
+  }
+  .status.draft { background: #fef3c7; color: #92400e; }
+  .status.issued { background: #d1fae5; color: #065f46; }
+  .toolbar .spacer { flex: 1; }
+  .btn { padding: 8px 14px; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .btn-primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+  /* PDF page previews */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .preview-col h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+  .page {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 8.5 / 11;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+  .page-inner { position: absolute; inset: 0; padding: 28px 28px 22px; display: flex; flex-direction: column; }
+  .page .top-bar { border-top: 4px solid var(--brand); padding: 12px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+  .page .top-bar .brand { font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
+  .page .top-bar .pno { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; color: var(--brand); font-weight: 700; }
+  .page h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); }
+  .page p { margin: 0 0 8px; font-size: 11px; line-height: 1.5; color: var(--ink); }
+  .page .row { display: flex; gap: 8px; margin: 6px 0; }
+  .page .cell { flex: 1; border: 1px solid var(--line); padding: 6px 8px; font-size: 10px; }
+  .page .cell .lbl { color: var(--muted); font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; }
+  .page .scan-area {
+    margin-top: 8px; flex: 1; border: 1px dashed var(--line); border-radius: 4px;
+    background: repeating-linear-gradient(45deg, #fafafa 0 8px, #f3f4f6 8px 16px);
+    display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 11px;
+  }
+
+  /* Watermark — diagonal SVG text overlay, copy-pasteable into the PDF renderer */
+  .watermark-layer { position: absolute; inset: 0; pointer-events: none; }
+  .watermark-layer svg { width: 100%; height: 100%; }
+
+  .back { display: inline-block; margin-bottom: 16px; font-size: 13px; color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--ink); }
+  .callout { background: #fff7ed; border-left: 3px solid #f59e0b; padding: 10px 14px; font-size: 13px; color: #92400e; border-radius: 0 4px 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← back to v1.0.15 mockups</a>
+  <h1>DRAFT watermark on un-issued PDFs</h1>
+  <p class="sub">Mockup only. Watermark is a diagonal SVG text overlay (additive layer over the existing page); does NOT change the locked-in PDF colors (white paper, black text, brand-red headers).</p>
+
+  <div class="card">
+    <h2>Report toolbar — status toggle</h2>
+    <p class="note">A new <code>status</code> field on each report. Default <code>"draft"</code>. Flipping to <code>"issued"</code> removes the watermark on the next PDF export.</p>
+    <div class="toolbar">
+      <span class="status draft">● Draft</span>
+      <span style="font-size: 13px; color: var(--muted);">PDF exports will include a DRAFT watermark.</span>
+      <span class="spacer"></span>
+      <button class="btn">Re-export PDF</button>
+      <button class="btn btn-primary">Mark as Issued</button>
+    </div>
+    <div style="height: 12px;"></div>
+    <div class="toolbar">
+      <span class="status issued">✓ Issued</span>
+      <span style="font-size: 13px; color: var(--muted);">PDF exports are clean. Re-marking as draft is allowed.</span>
+      <span class="spacer"></span>
+      <button class="btn">Re-export PDF</button>
+      <button class="btn">Mark as Draft</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>PDF page preview — draft vs issued</h2>
+    <p class="note">Same page, same content. Only difference: the watermark layer.</p>
+    <div class="compare">
+      <div class="preview-col">
+        <h3>Status: Draft</h3>
+        <div class="page">
+          <div class="page-inner">
+            <div class="top-bar">
+              <div class="brand">AK ScanReport</div>
+              <div class="pno">AKCC-2026-0017</div>
+            </div>
+            <h4>Site information</h4>
+            <div class="row">
+              <div class="cell"><div class="lbl">Client</div>Acme Warehouse Inc.</div>
+              <div class="cell"><div class="lbl">Site</div>Bay 4 slab scan</div>
+            </div>
+            <div class="row">
+              <div class="cell"><div class="lbl">Scan date</div>2026-05-22</div>
+              <div class="cell"><div class="lbl">Operator</div>D. Cunningham</div>
+            </div>
+            <h4>Targets & verdicts</h4>
+            <p>Two rebar grids identified on grid A1–A4. Tier 1 cleared for coring at marked positions; one Tier 3 anomaly flagged near column C2 — see diagram.</p>
+            <div class="scan-area">scan diagram preview</div>
+          </div>
+          <div class="watermark-layer">
+            <svg viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              <g transform="rotate(-30 50 65)">
+                <text x="50" y="70" text-anchor="middle"
+                      font-family="Helvetica, Arial, sans-serif"
+                      font-size="24"
+                      font-weight="800"
+                      letter-spacing="2"
+                      fill="#9ca3af"
+                      fill-opacity="0.18">DRAFT</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-col">
+        <h3>Status: Issued</h3>
+        <div class="page">
+          <div class="page-inner">
+            <div class="top-bar">
+              <div class="brand">AK ScanReport</div>
+              <div class="pno">AKCC-2026-0017</div>
+            </div>
+            <h4>Site information</h4>
+            <div class="row">
+              <div class="cell"><div class="lbl">Client</div>Acme Warehouse Inc.</div>
+              <div class="cell"><div class="lbl">Site</div>Bay 4 slab scan</div>
+            </div>
+            <div class="row">
+              <div class="cell"><div class="lbl">Scan date</div>2026-05-22</div>
+              <div class="cell"><div class="lbl">Operator</div>D. Cunningham</div>
+            </div>
+            <h4>Targets & verdicts</h4>
+            <p>Two rebar grids identified on grid A1–A4. Tier 1 cleared for coring at marked positions; one Tier 3 anomaly flagged near column C2 — see diagram.</p>
+            <div class="scan-area">scan diagram preview</div>
+          </div>
+          <!-- no watermark layer when issued -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Regression check</h2>
+    <div class="callout">
+      <strong>Important:</strong> verify <code>tests/pdf-print-colors.test.mjs</code> still passes after the watermark lands. The watermark uses <code>#9ca3af</code> at 18% opacity — does NOT replace black text or brand-red headers. If the test pixel-samples a region the watermark overlaps, either sample outside the diagonal band or extend the test to assert the watermark renders only when <code>status === "draft"</code>.
+    </div>
+  </div>
+</div>
+</body>
+</html>

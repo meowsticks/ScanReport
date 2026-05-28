@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AK ScanReport v1.0.15 — Mockups</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --brand: #b91c1c;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #1f2937;
+  }
+  html, body { margin: 0; padding: 0; background: #f5f5f5; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 820px; margin: 40px auto; padding: 0 20px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .lede { color: var(--muted); font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+  .scope-card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 22px; margin-bottom: 22px; }
+  .scope-card h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); }
+  .scope-card ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink); }
+  .scope-card li { margin: 4px 0; }
+  .scope-card li .why { color: var(--muted); font-size: 12px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .tile {
+    display: block; text-decoration: none; color: var(--ink);
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+    padding: 18px; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .tile:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(185,28,28,0.08); transform: translateY(-1px); }
+  .tile .num { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11px; color: var(--brand); letter-spacing: 0.6px; }
+  .tile h3 { margin: 6px 0 4px; font-size: 15px; }
+  .tile p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .tile.primary { border-color: var(--brand); }
+  .tile.primary .num { background: var(--brand); color: white; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+
+  .out { background: #fafafa; border: 1px dashed var(--line); border-radius: 8px; padding: 16px 18px; font-size: 13px; color: var(--muted); margin-top: 24px; }
+  .out h2 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); }
+  .out ul { margin: 6px 0 0; padding-left: 18px; }
+  .out li { margin: 3px 0; }
+
+  .ribbon { display: inline-block; background: #fef3c7; color: #92400e; font-size: 11px; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.4px; font-weight: 700; }
+  .refocus { background: #fee2e2; color: #991b1b; font-size: 11px; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.4px; font-weight: 700; margin-left: 6px; }
+  .deferred { color: var(--muted); text-decoration: line-through; }
+
+  @media (max-width: 720px) {
+    .wrap { margin: 20px auto; padding: 0 14px 60px; }
+    h1 { font-size: 22px; }
+    .scope-card { padding: 16px; }
+    .scope-card ul { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="ribbon">PLANNING · NOT SHIPPED</span><span class="refocus">REFOCUSED 2026-05-27</span>
+  <h1 style="margin-top: 12px;">AK ScanReport v1.0.15 — Mockups</h1>
+  <p class="lede">v1.0.15 is now a <strong>PDF polish release</strong>: branded letterhead fixed at the top of every page, scan cards that never split across page breaks, and the DRAFT watermark on un-issued exports. Reports that look produced and read clean for the structural engineers receiving them.</p>
+  <p class="meta">Current shipping: v1.0.14 · Draft scope: v1.0.15 · Open each mockup in a browser to preview.</p>
+
+  <div class="scope-card">
+    <h2>v1.0.15 scope — PDF polish + branding (4 features)</h2>
+    <ul>
+      <li><strong>Branded letterhead</strong> — user-uploadable logo + company name + tagline + project no. + address + phone + email + operator, fixed at top of every page. Chrome stays neutral black — no colored accent. <span class="why">Absorbs the standalone "auto project numbers" feature.</span></li>
+      <li><strong>Side spine</strong> — thin vertical band on the right edge (default; flippable to left) with company name running top-to-bottom AND a stacked page indicator at the top (current page / divider / total). <span class="why">Replaces a bottom footer band — pagination lives on the spine, vertical space goes to photos.</span></li>
+      <li><strong>Page-break-safe scan cards (taller photos)</strong> — auto-keep-whole + visible page-break line in preview for drag-reorder fine-tuning. Photos given ~150px height (was 80) since the footer band is gone. <span class="why">Engineers stop losing context mid-card.</span></li>
+      <li><strong>DRAFT watermark</strong> — diagonal overlay on un-issued PDFs. <span class="why">Already in the PDF rendering layer; near-zero extra cost.</span></li>
+    </ul>
+    <p style="margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5;"><strong>Color reserved.</strong> The scan body uses black for top-bar markings, blue for bottom-bar, red for conduits and no-scan zones. The chrome (letterhead, spine, project no.) is kept neutral so it doesn't compete with the scan grammar.</p>
+    <p style="margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5;"><strong>Brand assets needed before ship:</strong> commit the full Aggarwal Kamikazes logo (mascot + wordmark, as supplied) to <code>docs/v1015-mockups/assets/logo.png</code>. One file is enough; renderer scales it for the letterhead slot.</p>
+  </div>
+
+  <div class="grid">
+    <a class="tile primary" href="04-letterhead-and-pagebreaks.html">
+      <div class="num">★ 04</div>
+      <h3>Letterhead &amp; page-break preview</h3>
+      <p>The big one: company branding fixed at top, scan cards never split, preview shows live page-break line as you drag-reorder.</p>
+    </a>
+    <a class="tile primary" href="05-branding-customization.html">
+      <div class="num">★ 05</div>
+      <h3>Side spine + tier label preview</h3>
+      <p>Optional vertical company-name spine on the outer edge (v1.0.15 candidate — A/B/C variant comparison) plus the tier label customization editor (deferred to v1.0.16). No brand-color picker — color is reserved for scan-content semantics.</p>
+    </a>
+    <a class="tile" href="03-draft-watermark.html">
+      <div class="num">03</div>
+      <h3>DRAFT watermark</h3>
+      <p>SVG diagonal overlay on un-issued PDFs. Toolbar toggle: Draft ↔ Issued. Re-marking allowed.</p>
+    </a>
+    <a class="tile" href="01-project-numbers.html">
+      <div class="num">01</div>
+      <h3>Auto project numbers</h3>
+      <p>Now lives inside the letterhead band (mockup 04). This page kept for reference on the per-year counter logic.</p>
+    </a>
+  </div>
+
+  <div class="out">
+    <h2>Deferred from v1.0.15</h2>
+    <ul>
+      <li><strong>Tier label customization</strong> (CLEAR/CAUTION/DO NOT CORE → user-defined) — moved to v1.0.16. Touches data model + every scan card render; cleaner to land alone. UX previewed in <a href="05-branding-customization.html">mockup 05</a>.</li>
+      <li><strong>Client/site autocomplete</strong> — moved to v1.0.16. Unrelated to the PDF surface; can ship anytime. See <a href="02-autocomplete.html">mockup 02</a> — design unchanged.</li>
+    </ul>
+    <h2 style="margin-top: 14px;">Out of scope (logged)</h2>
+    <ul>
+      <li>Engineer P.Eng signature/stamp + signoff — v1.0.16, alongside autocomplete + tier labels</li>
+      <li>Snap-to-page-break on drag — v1.0.16 polish; auto-keep-whole solves the core problem alone</li>
+      <li>AI-generated executive summary — v1.0.17 candidate; needs BYO-key plumbing finalized</li>
+      <li>A4 paper size — TBD; v1.0.15 hardcodes Letter</li>
+      <li>Trademark ™ — needs AI-lawyer review before any UI assertion</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

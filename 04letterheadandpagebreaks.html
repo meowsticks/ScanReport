@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>v1.0.15 · Letterhead &amp; page-break preview</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #111111;
+    --brand: #b91c1c;        /* preview chrome only; not used in paper */
+    --rule: #0a0a0a;         /* neutral chrome rule — letterhead + footer */
+    --muted: #6b7280;
+    --soft: #525252;
+    --line: #e5e7eb;
+    --accent: #1f2937;
+    --break: #f59e0b;
+    --warn-bg: #fef3c7;
+    --warn-fg: #92400e;
+    --bg: #ececec;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 30px 20px 80px; }
+  header.page-head { margin-bottom: 18px; }
+  header.page-head a { color: var(--brand); text-decoration: none; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+  header.page-head h1 { margin: 8px 0 4px; font-size: 22px; }
+  header.page-head p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+  /* App chrome (preview window) */
+  .app {
+    display: grid; grid-template-columns: 240px 1fr; gap: 0;
+    background: #ffffff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.06);
+  }
+  .toolbar {
+    background: #1f2937; color: #f3f4f6; padding: 14px 16px; font-size: 12px;
+  }
+  .toolbar h2 { margin: 0 0 12px; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: #9ca3af; }
+  .toolbar .btn {
+    display: block; width: 100%; text-align: left;
+    background: #111827; color: #e5e7eb;
+    border: 1px solid #374151; border-radius: 6px;
+    padding: 8px 10px; margin-bottom: 6px;
+    font-size: 12px; cursor: pointer;
+  }
+  .toolbar .btn:hover { border-color: var(--brand); }
+  .toolbar .btn.active { background: var(--brand); border-color: var(--brand); color: white; }
+  .toolbar .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  }
+  .toolbar .pill.draft { background: var(--warn-bg); color: var(--warn-fg); }
+
+  .preview-pane {
+    background: #d1d5db; padding: 24px; overflow-x: auto;
+  }
+  .preview-pane .pane-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; color: #374151; font-size: 12px;
+  }
+  .preview-pane .pane-head .legend { display: flex; gap: 14px; align-items: center; }
+  .preview-pane .pane-head .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .preview-pane .pane-head .legend i {
+    display: inline-block; width: 18px; height: 0; border-top: 2px dashed var(--break);
+  }
+  .preview-pane .pane-head .legend i.warn {
+    width: 12px; height: 12px; border-top: none; background: var(--warn-bg); border: 1px solid var(--warn-fg); border-radius: 3px;
+  }
+
+  /* Paper */
+  .paper-stack { display: flex; flex-direction: column; align-items: center; gap: 28px; position: relative; }
+  .paper {
+    background: var(--paper); width: 612px; min-height: 792px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18); position: relative; padding: 0;
+    font-family: Helvetica, Arial, sans-serif;
+  }
+
+  /* Letterhead band — fixed in print, shown once per page in the mockup */
+  .letterhead {
+    display: grid; grid-template-columns: 80px 1fr auto;
+    gap: 16px; padding: 20px 36px 14px; border-bottom: 3px solid var(--rule);
+    align-items: start;
+  }
+  /* Logo slot: img loads from assets/logo.png if present;
+     if missing, the styled fallback below shows through. */
+  .letterhead .logo {
+    width: 64px; height: 64px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 40% 35%, #8b4513 0%, #3d1f0a 100%);
+    border-radius: 50%;
+    border: 2px solid #1a0d05;
+    color: #fef3c7; text-align: center; line-height: 1;
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 9px; letter-spacing: 0.5px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .letterhead .logo img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    /* If the file is missing, img collapses and the styled background shows. */
+  }
+  .letterhead .logo .fallback {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    z-index: -1;
+  }
+  .letterhead .company { line-height: 1.2; }
+  .letterhead .company .name {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .letterhead .company .name2 {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 13px; color: #5b2c0a; letter-spacing: 3px;
+    text-transform: uppercase; margin-top: 1px;
+  }
+  .letterhead .company .tagline {
+    font-style: italic;
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 5px;
+  }
+  .letterhead .company .info {
+    color: var(--soft); font-size: 9px; margin-top: 5px;
+  }
+  .letterhead .meta { text-align: right; line-height: 1.4; }
+  .letterhead .meta .projno {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--ink); font-weight: 700; letter-spacing: 0.5px;
+  }
+  .letterhead .meta .operator {
+    color: var(--soft); font-size: 9px; margin-top: 4px;
+  }
+
+  /* Side spine — right edge by default. Carries company name + page indicator.
+     Footer band removed in this revision; the spine takes over pagination. */
+  .side-spine {
+    position: absolute; top: 0; bottom: 0; right: 0;
+    width: 26px;
+    background: #0a0a0a;
+    color: white;
+    display: flex; flex-direction: column; align-items: center;
+    z-index: 2;
+  }
+  .side-spine .page-indicator {
+    padding: 10px 0 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    line-height: 1;
+  }
+  .side-spine .page-indicator .num { font-size: 13px; font-weight: 700; }
+  .side-spine .page-indicator .rule {
+    width: 12px; height: 1px; background: white; opacity: 0.6;
+  }
+  .side-spine .page-indicator .total { font-size: 10px; opacity: 0.7; }
+  .side-spine .label-wrap {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px 0;
+  }
+  .side-spine .label {
+    writing-mode: vertical-rl;
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 11px; letter-spacing: 4px;
+    white-space: nowrap;
+  }
+  /* Every page has the spine now (default-on). Push body content away from it. */
+  .paper .letterhead { padding-right: 50px; }
+  .paper .report-body { padding-right: 50px; }
+
+  /* Report content area */
+  .report-body { padding: 18px 36px 28px; }
+  .report-title {
+    font-size: 18px; font-weight: 700; margin-bottom: 4px;
+  }
+  .report-sub {
+    color: var(--muted); font-size: 11px; margin-bottom: 16px;
+  }
+
+  /* Scan card */
+  .card {
+    border: 1px solid var(--line); border-radius: 6px; padding: 12px;
+    margin-bottom: 12px; background: white; position: relative;
+    /* CRITICAL: corresponds to break-inside: avoid in production print CSS */
+  }
+  .card .card-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .card .card-head .label { font-weight: 700; font-size: 12px; }
+  .card .card-head .tier {
+    font-size: 9px; padding: 1px 6px; border-radius: 3px;
+    font-weight: 700; letter-spacing: 0.5px;
+  }
+  .card .card-head .tier.t1 { background: #dcfce7; color: #15803d; }
+  .card .card-head .tier.t2 { background: #fef3c7; color: #92400e; }
+  .card .card-head .tier.t3 { background: #fee2e2; color: #991b1b; }
+  .card .body {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    font-size: 10px; color: #374151;
+  }
+  .card .body .photo {
+    background: #f3f4f6; border: 1px solid var(--line); border-radius: 4px;
+    height: 150px; display: flex; align-items: center; justify-content: center;
+    color: #9ca3af; font-size: 10px;
+  }
+  .card .body .notes p { margin: 0 0 4px; }
+  .card .body .notes .k { color: var(--muted); font-weight: 600; }
+  .card.warn {
+    border-color: var(--warn-fg); background: #fffbeb;
+  }
+  .card.warn .warn-badge {
+    position: absolute; top: -8px; right: 8px;
+    background: var(--warn-bg); color: var(--warn-fg);
+    font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--warn-fg); letter-spacing: 0.3px;
+  }
+
+  /* Mobile responsiveness — the mockup itself, not the PDF.
+     On narrow viewports the dark toolbar overlaps the paper. Stack the
+     toolbar above the preview, let the paper handle horizontal scroll/zoom. */
+  @media (max-width: 720px) {
+    .wrap { padding: 14px 0 60px; }
+    .app { grid-template-columns: 1fr; border-radius: 0; }
+    .toolbar { padding: 10px 12px; }
+    .toolbar h2 { display: inline-block; margin: 0 8px 0 0; vertical-align: middle; }
+    .toolbar .btn {
+      display: inline-block; width: auto; margin: 4px 4px 4px 0;
+      font-size: 11px; padding: 5px 9px;
+    }
+    .preview-pane { padding: 14px; overflow-x: auto; }
+    .pane-head { font-size: 11px; flex-wrap: wrap; gap: 8px; }
+    .paper-stack { gap: 18px; }
+    .paper { box-shadow: 0 1px 6px rgba(0,0,0,0.12); }
+  }
+
+  /* Page break visualization */
+  .pagebreak {
+    position: relative; margin: 18px 0;
+    border-top: 2px dashed var(--break);
+  }
+  .pagebreak::before {
+    content: attr(data-label); position: absolute; top: -10px; right: 0;
+    background: var(--break); color: white;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+    padding: 2px 8px; border-radius: 0 0 4px 4px;
+    transform: translateY(-100%);
+  }
+
+  /* Watermark layer */
+  .watermark {
+    position: absolute; inset: 105px 0 0 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 1;
+  }
+  .watermark svg { width: 70%; height: 70%; }
+
+  /* Side-by-side comparison */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 30px; }
+  .compare .col { background: white; border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+  .compare .col h3 { margin: 0 0 4px; font-size: 13px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--accent); }
+  .compare .col h3.bad { color: #991b1b; }
+  .compare .col h3.good { color: #15803d; }
+  .compare .col .desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+
+  /* Mini paper for comparison */
+  .mini-paper { background: white; border: 1px solid var(--line); padding: 10px; font-size: 8px; min-height: 220px; position: relative; }
+  .mini-paper .mini-card { border: 1px solid var(--line); border-radius: 3px; padding: 6px; margin-bottom: 6px; }
+  .mini-paper .mini-card.split-top { border-radius: 3px 3px 0 0; border-bottom: none; }
+  .mini-paper .mini-card.split-bot { border-radius: 0 0 3px 3px; border-top: none; }
+  .mini-paper .mini-break { border-top: 2px dashed var(--break); margin: 6px 0; }
+
+  /* Settings panel mockup */
+  .settings {
+    background: white; border: 1px solid var(--line); border-radius: 8px;
+    padding: 22px; margin-top: 30px;
+  }
+  .settings h2 { margin: 0 0 4px; font-size: 14px; }
+  .settings .desc { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .settings .form { display: grid; grid-template-columns: 200px 1fr; gap: 12px 18px; align-items: start; font-size: 13px; }
+  .settings .form label { color: var(--soft); font-weight: 600; padding-top: 8px; }
+  .settings .form input, .settings .form .file-slot {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 5px; font-size: 13px; font-family: inherit; box-sizing: border-box;
+  }
+  .settings .form .file-slot {
+    display: flex; align-items: center; gap: 12px;
+    background: #fafafa; color: var(--muted);
+  }
+  .settings .form .file-slot .uploaded {
+    background: #1f2937; color: white; padding: 6px 12px; border-radius: 4px;
+    font-family: "Bebas Neue", Impact, sans-serif; font-size: 14px; letter-spacing: 1px;
+  }
+  .settings .form .file-slot button {
+    margin-left: auto; background: white; border: 1px solid var(--line); padding: 4px 10px;
+    border-radius: 4px; font-size: 11px; cursor: pointer; color: var(--soft);
+  }
+  .settings .form .hint { color: var(--muted); font-size: 11px; grid-column: 2; margin-top: -6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <a href="index.html">← back to v1.0.15 mockups</a>
+    <h1>★ 04 · Letterhead, spine &amp; page-break preview</h1>
+    <p>The heart of v1.0.15. Fixed letterhead at the top of every page (logo + company + project no. + operator + contact), side spine on the right edge with company name + page indicator, and scan cards that never split across page breaks. Photos given more vertical room since the bottom footer band is gone — pagination moved to the spine.</p>
+    <p style="margin-top: 8px;"><strong>Color note:</strong> chrome (letterhead rule, project no.) is neutral black. The scan content reserves color semantically — black for top bar, blue for bottom bar, red for conduits and no-scan zones — so the chrome must not introduce a competing accent.</p>
+    <p style="margin-top: 8px;"><strong>Side spine carries pagination.</strong> Page number stacked above a divider line, with the total below — e.g., <code>1 / — / 2</code> on page one, <code>2 / — / 2</code> on page two. Company name fills the rest of the spine. No footer band; cards get the freed vertical space.</p>
+    <p style="margin-top: 8px;"><strong>Logo:</strong> commit the full Aggarwal Kamikazes logo at <code>docs/v1015-mockups/assets/logo.png</code> (lowercase, named exactly <code>logo.png</code>). All letterhead slots reference that path — once the file is in place, refresh and the actual mark renders. Until then, the brown circular fallback shows.</p>
+    <p style="margin-top: 8px;"><strong>Operator</strong> shown as literal <code>{operator}</code> token — per-report slot, filled by whoever creates the scan.</p>
+  </header>
+
+  <!-- App chrome with preview -->
+  <div class="app">
+    <aside class="toolbar">
+      <h2>Status</h2>
+      <div style="margin-bottom: 14px;">
+        <span class="pill draft">DRAFT</span>
+      </div>
+      <button class="btn">Mark as Issued</button>
+
+      <h2 style="margin-top: 22px;">View</h2>
+      <button class="btn active">Preview (with breaks)</button>
+      <button class="btn">Edit</button>
+      <button class="btn">Setup</button>
+
+      <h2 style="margin-top: 22px;">Export</h2>
+      <button class="btn">Export PDF</button>
+      <button class="btn">Save .akscan</button>
+
+      <h2 style="margin-top: 22px;">Letterhead</h2>
+      <button class="btn">Edit company info →</button>
+    </aside>
+
+    <main class="preview-pane">
+      <div class="pane-head">
+        <div><strong>Print preview</strong> · Letter · 2 pages · page 2 with side spine enabled</div>
+        <div class="legend">
+          <span><i></i> page break</span>
+          <span><i class="warn"></i> oversized card</span>
+        </div>
+      </div>
+
+      <div class="paper-stack">
+
+        <!-- PAGE 1 -->
+        <div class="paper">
+          <!-- Side spine: page indicator on top, company name running below -->
+          <div class="side-spine">
+            <div class="page-indicator">
+              <div class="num">1</div>
+              <div class="rule"></div>
+              <div class="total">2</div>
+            </div>
+            <div class="label-wrap">
+              <div class="label">AGGARWAL KAMIKAZES CUTTING AND CORING LTD.</div>
+            </div>
+          </div>
+          <!-- Letterhead (fixed on every page in print) -->
+          <div class="letterhead">
+            <div class="logo">
+              <img src="assets/logo.png" alt="Aggarwal Kamikazes logo" onerror="this.style.display='none'">
+            </div>
+            <div class="company">
+              <div class="name">Aggarwal Kamikazes</div>
+              <div class="name2">Cutting and Coring Ltd.</div>
+              <div class="tagline">— Shut up and cut straight</div>
+              <div class="info">
+                123 Industrial Way, Toronto ON  M1A 1A1<br>
+                (416) 555-0199 · contact@aggarwalkamikazes.ca
+              </div>
+            </div>
+            <div class="meta">
+              <div class="projno">AKCC-2026-0017</div>
+              <div class="operator">Operator: {operator}</div>
+            </div>
+          </div>
+
+          <!-- DRAFT watermark layer (page 1) -->
+          <div class="watermark">
+            <svg viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet">
+              <g transform="rotate(-30 50 65)">
+                <text x="50" y="70" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="800" letter-spacing="2" fill="#9ca3af" fill-opacity="0.18">DRAFT</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="report-body">
+            <div class="report-title">Concrete Scan Report — 845 Bay St, Level 3</div>
+            <div class="report-sub">Issued: 2026-05-27 · Client: Acme Structural Engineering</div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="label">Scan 01 · Column C-12</div>
+                <div class="tier t1">CLEAR</div>
+              </div>
+              <div class="body">
+                <div class="photo">[ photo ]</div>
+                <div class="notes">
+                  <p><span class="k">Depth scanned:</span> 200 mm</p>
+                  <p><span class="k">Rebar grid:</span> #5 @ 12" o.c.</p>
+                  <p><span class="k">Conduit:</span> none detected</p>
+                  <p>Safe to core 4" diameter at marked location.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="label">Scan 02 · Beam B-08</div>
+                <div class="tier t2">CAUTION</div>
+              </div>
+              <div class="body">
+                <div class="photo">[ photo ]</div>
+                <div class="notes">
+                  <p><span class="k">Depth scanned:</span> 250 mm</p>
+                  <p><span class="k">Rebar:</span> #6 stirrups @ 8" o.c.</p>
+                  <p><span class="k">PT cable:</span> 1 detected at 75 mm depth, runs E-W</p>
+                  <p>Avoid coring within 6" of marked PT cable.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card warn">
+              <div class="warn-badge">EXCEEDS PAGE</div>
+              <div class="card-head">
+                <div class="label">Scan 03 · Slab S-04 (full panel)</div>
+                <div class="tier t3">DO NOT CORE</div>
+              </div>
+              <div class="body">
+                <div class="photo">[ photo ]</div>
+                <div class="notes">
+                  <p><span class="k">Depth scanned:</span> 300 mm</p>
+                  <p><span class="k">Rebar:</span> #5 top &amp; bottom @ 10" o.c.</p>
+                  <p><span class="k">Multiple PT cables</span> in N-S direction, depths 60-90 mm</p>
+                  <p>Card flagged as oversized — consider splitting before final export, or accept page split.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Page-break label between papers -->
+        <div class="pagebreak" data-label="PAGE 2 →" style="width: 612px;"></div>
+
+        <!-- PAGE 2 -->
+        <div class="paper">
+          <!-- Side spine with page 2 of 2 indicator -->
+          <div class="side-spine">
+            <div class="page-indicator">
+              <div class="num">2</div>
+              <div class="rule"></div>
+              <div class="total">2</div>
+            </div>
+            <div class="label-wrap">
+              <div class="label">AGGARWAL KAMIKAZES CUTTING AND CORING LTD.</div>
+            </div>
+          </div>
+          <!-- Same letterhead, fixed/repeated -->
+          <div class="letterhead">
+            <div class="logo">
+              <img src="assets/logo.png" alt="Aggarwal Kamikazes logo" onerror="this.style.display='none'">
+            </div>
+            <div class="company">
+              <div class="name">Aggarwal Kamikazes</div>
+              <div class="name2">Cutting and Coring Ltd.</div>
+              <div class="tagline">— Shut up and cut straight</div>
+              <div class="info">
+                123 Industrial Way, Toronto ON  M1A 1A1<br>
+                (416) 555-0199 · contact@aggarwalkamikazes.ca
+              </div>
+            </div>
+            <div class="meta">
+              <div class="projno">AKCC-2026-0017</div>
+              <div class="operator">Operator: {operator}</div>
+            </div>
+          </div>
+
+          <!-- DRAFT watermark layer (page 2) -->
+          <div class="watermark">
+            <svg viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet">
+              <g transform="rotate(-30 50 65)">
+                <text x="50" y="70" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="800" letter-spacing="2" fill="#9ca3af" fill-opacity="0.18">DRAFT</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="report-body">
+            <div class="card">
+              <div class="card-head">
+                <div class="label">Scan 04 · Wall W-02</div>
+                <div class="tier t1">CLEAR</div>
+              </div>
+              <div class="body">
+                <div class="photo">[ photo ]</div>
+                <div class="notes">
+                  <p><span class="k">Depth scanned:</span> 180 mm</p>
+                  <p><span class="k">Rebar:</span> #4 @ 16" o.c.</p>
+                  <p><span class="k">Conduit:</span> none detected</p>
+                  <p>Safe to core 3" diameter at marked location.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="label">Scan 05 · Column C-13</div>
+                <div class="tier t1">CLEAR</div>
+              </div>
+              <div class="body">
+                <div class="photo">[ photo ]</div>
+                <div class="notes">
+                  <p><span class="k">Depth scanned:</span> 200 mm</p>
+                  <p><span class="k">Rebar:</span> #5 @ 12" o.c.</p>
+                  <p>Safe to core 4" diameter.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Before/after comparison -->
+  <div class="compare">
+    <div class="col">
+      <h3 class="bad">Before (v1.0.14) — cards split</h3>
+      <p class="desc">Scan 03 splits across pages 1 and 2. Engineer reading page 2 sees the bottom half of a card with no header context — has to flip back to page 1.</p>
+      <div class="mini-paper">
+        <div style="font-size: 7px; color: #9ca3af; margin-bottom: 4px;">PAGE 1</div>
+        <div class="mini-card">Scan 01 · CLEAR</div>
+        <div class="mini-card">Scan 02 · CAUTION</div>
+        <div class="mini-card split-top">Scan 03 · DO NOT CORE<br><span style="color:#9ca3af;">(header + half of notes...)</span></div>
+      </div>
+      <div class="mini-paper" style="margin-top: 10px;">
+        <div style="font-size: 7px; color: #9ca3af; margin-bottom: 4px;">PAGE 2</div>
+        <div class="mini-card split-bot"><span style="color:#9ca3af;">(...rest of notes, no header)</span></div>
+        <div class="mini-card">Scan 04 · CLEAR</div>
+      </div>
+    </div>
+    <div class="col">
+      <h3 class="good">After (v1.0.15) — cards stay whole</h3>
+      <p class="desc">Scan 03 pushes to page 2. Page 1 has whitespace at the bottom — that's fine. Every card opens with its header. Page-break line in preview lets the user drag a smaller card up to fill the gap if they want.</p>
+      <div class="mini-paper">
+        <div style="font-size: 7px; color: #9ca3af; margin-bottom: 4px;">PAGE 1</div>
+        <div class="mini-card">Scan 01 · CLEAR</div>
+        <div class="mini-card">Scan 02 · CAUTION</div>
+        <div style="height: 60px; border: 1px dashed #d1d5db; border-radius: 3px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 9px; font-style: italic;">whitespace (Scan 03 wouldn't fit)</div>
+      </div>
+      <div class="mini-paper" style="margin-top: 10px;">
+        <div style="font-size: 7px; color: #9ca3af; margin-bottom: 4px;">PAGE 2</div>
+        <div class="mini-card">Scan 03 · DO NOT CORE<br><span style="color:#9ca3af;">(full card, header + notes)</span></div>
+        <div class="mini-card">Scan 04 · CLEAR</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings panel mockup -->
+  <div class="settings">
+    <h2>Settings · Company Letterhead</h2>
+    <p class="desc">Configure once per install. Renders on every PDF and print preview. Stored locally — does not travel with `.akscan` files.</p>
+    <div class="form">
+      <label>Logo</label>
+      <div class="file-slot">
+        <div class="uploaded">AKCC</div>
+        <span>akcc-logo.png · 42 KB</span>
+        <button>Replace</button>
+      </div>
+      <div class="hint">PNG or SVG, max 200 KB. Fits within 60×60. Aspect-ratio preserved.</div>
+
+      <label>Company name</label>
+      <input type="text" value="AK Cutting &amp; Coring Inc." />
+
+      <label>Address</label>
+      <input type="text" value="123 Industrial Way, Toronto ON  M1A 1A1" />
+
+      <label>Phone</label>
+      <input type="text" value="(416) 555-0199" />
+
+      <label>Email</label>
+      <input type="text" value="contact@akcutting.ca" />
+
+      <label>Default operator</label>
+      <input type="text" value="D. Cunningham" />
+      <div class="hint">Pre-fills the operator field on new reports. Per-report override allowed.</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
