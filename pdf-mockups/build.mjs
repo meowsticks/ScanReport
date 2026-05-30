@@ -8,7 +8,7 @@ import { baseCSS, reportBody, logoData, CHROMIUM } from './content.mjs';
 const OUT = path.resolve('.');
 
 // ---- Three letterhead concepts ----------------------------------------------
-const concepts = {
+export const concepts = {
   'A-refined-classic': {
     css: `
       .lh{text-align:center;padding-bottom:12px;border-bottom:2px solid var(--ink);margin-bottom:4px}
@@ -93,15 +93,18 @@ const html = (c) => `<!doctype html><html><head><meta charset="utf-8">
   <body><div class="page">${c.header}${reportBody}
     <div class="pageno">Page 1 of 3 · AKCC-2026-0017</div></div></body></html>`;
 
-const browser = await chromium.launch({ executablePath: CHROMIUM });
-const page = await browser.newPage({ viewport: { width: 816, height: 1056 }, deviceScaleFactor: 2 });
-for (const [name, c] of Object.entries(concepts)) {
-  const file = path.join(OUT, name + '.html');
-  fs.writeFileSync(file, html(c));
-  await page.goto('file://' + file);
-  await page.waitForTimeout(150);
-  await (await page.$('.page')).screenshot({ path: path.join(OUT, name + '.png') });
-  console.log('rendered', name);
+// Only render when run directly (`node build.mjs`); importing just yields `concepts`.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const browser = await chromium.launch({ executablePath: CHROMIUM });
+  const page = await browser.newPage({ viewport: { width: 816, height: 1056 }, deviceScaleFactor: 2 });
+  for (const [name, c] of Object.entries(concepts)) {
+    const file = path.join(OUT, name + '.html');
+    fs.writeFileSync(file, html(c));
+    await page.goto('file://' + file);
+    await page.waitForTimeout(150);
+    await (await page.$('.page')).screenshot({ path: path.join(OUT, name + '.png') });
+    console.log('rendered', name);
+  }
+  await browser.close();
+  console.log('done');
 }
-await browser.close();
-console.log('done');
