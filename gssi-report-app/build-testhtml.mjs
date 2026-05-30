@@ -186,11 +186,13 @@ const seedScript = `<script>(function(){try{
   }
 }catch(e){console.warn('seed failed',e);}})();</script>`;
 
-// swap external css/js for inlined versions + inject seed before the module
+// swap external css/js for inlined versions + inject seed before the module.
+// IMPORTANT: use FUNCTION replacers — the bundle is full of '$', and a string
+// replacement would treat $&, $1, $` etc. as special and corrupt the code.
 html = html
-  .replace(/<link[^>]+href="(?:\.\/)?assets\/[^"]+\.css"[^>]*>/, `<style>${css}</style>`)
+  .replace(/<link[^>]+href="(?:\.\/)?assets\/[^"]+\.css"[^>]*>/, () => `<style>${css}</style>`)
   .replace(/<script[^>]*src="(?:\.\/)?assets\/[^"]+\.js"[^>]*><\/script>/,
-           `${seedScript}\n<script type="module">${js}</script>`);
+           () => `${seedScript}\n<script type="module">${js}</script>`);
 
 fs.writeFileSync(OUT, html);
 const kb = (fs.statSync(OUT).size / 1024).toFixed(0);
