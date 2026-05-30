@@ -16,6 +16,13 @@ Same report body in each — only the masthead/branding differs. Rendered at US 
 - `content.mjs` — single source of truth: brand CSS, report body, logo, chromium path.
 - `build.mjs` — renders concepts A/B/C.
 - `build-vignette.mjs` — renders the Centered Hybrid (D) flat + soft/strong vignette surrounds.
+- `build-focus.mjs` — renders Pure-B clean vs focus-aided.
+- `build-pdf.mjs` — renders the full 3-page Pure-B report to `ScanReport-mockup.pdf`.
+- `ScanReport-playground.html` — **interactive** single-file Pure-B builder (open in any
+  browser). Touch-friendly: reorder/add/remove scan locations with ▲▼/＋/✕ buttons, edit any
+  title/observation/stat/recommendation inline, and toggle header mode, card size, paper
+  (Letter/A4), margins, density, sections, accent colour, DRAFT watermark, and footer — then
+  Print/Save-PDF. Pages repaginate live so you can see how arranging cards fills each page.
 
 ## Regenerate
 
