@@ -76,7 +76,9 @@
     transform:rotate(-32deg);letter-spacing:.1em;text-transform:uppercase}
   .content,.lh,.foot,.header-wrap{position:relative;z-index:1}
 
-  h2.sec{font-size:10.5pt;letter-spacing:.12em;text-transform:uppercase;color:#111;
+  h2.sec{font-size:var(--rg-head-fs,10.5pt);letter-spacing:var(--rg-head-ls,.12em);
+    text-transform:var(--rg-head-tt,uppercase);color:#111;
+    font-family:var(--rg-head-ff,'Segoe UI',system-ui,sans-serif);font-weight:var(--rg-head-fw,700);
     border-bottom:1px solid var(--line);padding-bottom:4px;margin:0 0 10px}
   .block{margin-bottom:var(--bgap,14px)}
   .block:last-child{margin-bottom:0}
@@ -85,15 +87,22 @@
   .lh{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;
     border-bottom:3px solid #111;padding-bottom:10px}
   .lh img{height:var(--logo-h,80px);width:auto}
-  .lh .co .nm{font-size:15pt;font-weight:800;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+  .lh .co .nm{font-size:var(--rg-company-fs,15pt);font-weight:var(--rg-company-fw,800);
+    letter-spacing:var(--rg-company-ls,.04em);text-transform:var(--rg-company-tt,uppercase);line-height:1}
   .lh .co .sub{font-size:8.5pt;color:var(--red);letter-spacing:.14em;text-transform:uppercase;margin-top:3px}
   .lh .co .addr{font-size:7.5pt;color:var(--faint);margin-top:4px;line-height:1.4}
   .lh .box{font-size:8pt;text-align:right;line-height:1.5;border-left:1px solid var(--line);padding-left:12px}
   .lh .box b{display:block;color:var(--mut);font-size:7pt;letter-spacing:.08em;text-transform:uppercase}
   .lh .box .v{font-size:9.5pt;font-weight:700;margin-bottom:4px}
   /* company name lettering is swappable (header font only) */
-  .lh .co .nm,.rh .nm{font-family:var(--co-font,'Segoe UI',system-ui,sans-serif);
-    text-transform:var(--co-tt,uppercase);letter-spacing:var(--co-ls,.04em)}
+  .rh .nm{font-family:var(--rg-company-ff,'Segoe UI',system-ui,sans-serif);
+    text-transform:var(--rg-company-tt,uppercase);letter-spacing:var(--rg-company-ls,.04em)}
+  .lh .co .nm{font-family:var(--rg-company-ff,'Segoe UI',system-ui,sans-serif)}
+  /* region currently being styled gets a dashed highlight in style mode */
+  body.styling [data-region]{cursor:pointer}
+  body.styling [data-region]:hover{outline:2px dashed var(--red);outline-offset:2px}
+  [data-region].rg-active{outline:2px solid var(--red) !important;outline-offset:2px;
+    background:rgba(192,40,45,.05)}
   .rh{display:flex;align-items:center;gap:10px;border-bottom:2px solid #111;padding-bottom:7px}
   .rh .nm{font-size:10.5pt;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
   .rh .meta{margin-left:auto;font-size:7.5pt;color:var(--faint)}
@@ -105,7 +114,9 @@
   .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;font-size:9.5pt}
   .pgrid .r{display:flex;justify-content:space-between;border-bottom:1px dotted #e2e2e2;padding:3px 0}
   .pgrid .r b{color:var(--mut);font-weight:600}
-  .summary{font-size:9.5pt;line-height:1.5;color:#222}
+  .summary{font-size:var(--rg-para-fs,9.5pt);line-height:var(--rg-para-lh,1.5);color:#222;
+    font-family:var(--rg-para-ff,'Segoe UI',system-ui,sans-serif);font-weight:var(--rg-para-fw,400);
+    letter-spacing:var(--rg-para-ls,0);text-transform:var(--rg-para-tt,none)}
   table.find{width:100%;border-collapse:collapse;font-size:9pt}
   table.find th{background:#f0f0f0;text-transform:uppercase;font-size:7.5pt;letter-spacing:.08em;
     text-align:left;padding:6px 8px;border:1px solid #ccc;color:#333}
@@ -117,7 +128,9 @@
   .scard{border:1px solid #cfcfcf;border-radius:4px;overflow:hidden}
   .scard .hd{display:flex;justify-content:space-between;align-items:center;
     background:#fafafa;border-bottom:1px solid #e3e3e3;padding:6px 8px;gap:8px}
-  .scard .hd .t{font-weight:700;font-size:10pt}
+  .scard .hd .t{font-weight:var(--rg-cardtitle-fw,700);font-size:var(--rg-cardtitle-fs,10pt);
+    font-family:var(--rg-cardtitle-ff,'Segoe UI',system-ui,sans-serif);
+    letter-spacing:var(--rg-cardtitle-ls,0);text-transform:var(--rg-cardtitle-tt,none)}
   .scard .hd .m{font-size:8pt;color:var(--faint)}
   .cardtools{display:flex;gap:4px;align-items:center;flex-shrink:0}
   .cardtools button{border:1px solid #ccc;background:#fff;border-radius:4px;width:24px;height:22px;
@@ -155,6 +168,21 @@
   .sig .slot b{display:block;font-size:7.5pt;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
   [contenteditable]:focus{outline:2px solid #8ab4ff;outline-offset:1px;border-radius:2px}
 
+  .rg-sheet{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#1c1d20;color:#eee;
+    border-top:2px solid var(--red);box-shadow:0 -8px 30px rgba(0,0,0,.5);transform:translateY(110%);
+    transition:transform .22s ease;max-width:520px;margin:0 auto;border-radius:14px 14px 0 0}
+  .rg-sheet.open{transform:translateY(0)}
+  .rg-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;
+    border-bottom:1px solid #2c2d31;font-weight:700;font-size:14px}
+  .rg-head button{background:#3a3b40;border:0;color:#fff;width:30px;height:30px;border-radius:8px;font-size:15px;cursor:pointer}
+  .rg-body{padding:14px 16px 20px}
+  .rg-body label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#7f8088;margin:0 0 5px}
+  .rg-body select,.rg-body input[type=range]{width:100%}
+  .rg-body select{background:#2b2c30;color:#fff;border:1px solid #44454a;border-radius:6px;padding:8px;font-size:14px;margin-bottom:12px}
+  .rg-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .rg-body input[type=range]{margin-bottom:12px;accent-color:var(--red)}
+  .rg-actions{display:flex;gap:10px;margin-top:6px}
+  .rg-actions .btn{flex:1}
   #measurer{position:absolute;left:-9999px;top:0;visibility:hidden}
 
   @media (max-width:820px){
@@ -286,16 +314,45 @@
     </div>
 
     <div class="grp">
+      <button class="btn" id="btn-style" style="background:#2b2c30;border:1px solid var(--red)">🎨 Style text — tap a section</button>
+      <p style="font-size:11px;color:#7f8088;margin-top:8px;line-height:1.5">
+        Turn this on, then <b>tap any heading, the company name, a paragraph, a card title or the
+        findings</b> in the report to restyle that lettering. With style mode off, tap text to edit the words.</p>
+    </div>
+
+    <div class="grp">
       <div class="btnrow">
         <button class="btn ghost" id="btn-reset">Reset</button>
         <button class="btn" id="btn-print">Print / PDF</button>
       </div>
-      <p style="font-size:11px;color:#7f8088;margin-top:10px;line-height:1.5">
-        Tip: tap any title, observation, stat or recommendation text in the report to edit it directly.</p>
     </div>
   </aside>
 
   <main class="main"><div class="stack" id="stack"></div></main>
+</div>
+<div class="rg-sheet" id="rg-sheet">
+  <div class="rg-head"><span id="rg-title">Style: Heading</span>
+    <button id="rg-close" title="Close">✕</button></div>
+  <div class="rg-body">
+    <label>Font</label>
+    <select id="rg-ff"></select>
+    <div class="rg-grid">
+      <div><label>Case</label><select id="rg-tt">
+        <option value="none">As typed</option><option value="uppercase">UPPER</option>
+        <option value="lowercase">lower</option><option value="capitalize">Capitalize</option></select></div>
+      <div><label>Weight</label><select id="rg-fw">
+        <option value="400">Regular</option><option value="600">Semibold</option>
+        <option value="700">Bold</option><option value="800">Heavy</option><option value="900">Black</option></select></div>
+    </div>
+    <div class="rg-grid">
+      <div><label>Size <span id="rg-fs-v"></span></label><input type="range" id="rg-fs" min="60" max="180" step="2"></div>
+      <div><label>Spacing <span id="rg-ls-v"></span></label><input type="range" id="rg-ls" min="-3" max="30" step="1"></div>
+    </div>
+    <div class="rg-actions">
+      <button class="btn ghost" id="rg-reset-one">Reset this</button>
+      <button class="btn" id="rg-done">Done</button>
+    </div>
+  </div>
 </div>
 <button class="btn menu-toggle" id="menu-toggle">☰ Controls</button>
 <div id="measurer"></div>
@@ -326,10 +383,18 @@ const DEFAULT_META={company:'Aggarwal Kamikazes', project:'AKCC-2026-0017',
   operator:'D. Cunningham', date:'2026-05-28'};
 
 let locs, opts, meta;
+// Per-region lettering overrides. Each region maps to CSS custom props consumed
+// by the report rules (--rg-<region>-ff/-tt/-fw/-fs/-ls). Empty = use default.
+const REGION_LABEL={company:'Company name', head:'Section headings', para:'Paragraph text',
+  cardtitle:'Scan-card titles'};
+const REGION_DEFAULT_FS={company:15, head:10.5, para:9.5, cardtitle:10}; // pt baselines
+let regionStyles={};            // e.g. {head:{ff:'anton',tt:'uppercase',fw:'700',fs:11,ls:.12}}
+let styleMode=false, activeRegion=null;
 function loadDefaults(){
   locs=JSON.parse(JSON.stringify(DEFAULT_LOCS));
   opts=JSON.parse(JSON.stringify(DEFAULT_OPTS));
   meta=JSON.parse(JSON.stringify(DEFAULT_META));
+  regionStyles={ company:{ ff:DEFAULT_OPTS.headfont, tt:'uppercase' } };  // seed Bebas wordmark
 }
 loadDefaults();
 
@@ -374,13 +439,13 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 
 function fullLH(){return `
   <div class="lh"><img src="${LOGO}" alt="">
-    <div class="co"><div class="nm">${esc(meta.company)}</div>
+    <div class="co"><div class="nm" data-region="company">${esc(meta.company)}</div>
       <div class="sub">Cutting &amp; Coring Ltd.</div>
       <div class="addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div></div>
     <div class="box"><b>Project</b><div class="v">${esc(meta.project)}</div>
       <b>Operator</b><div class="v">${esc(meta.operator)}</div>
       <b>Date</b><div class="v">${esc(meta.date)}</div></div></div>`;}
-function slimLH(){return `<div class="rh"><span class="nm">${esc(meta.company)}</span>
+function slimLH(){return `<div class="rh"><span class="nm" data-region="company">${esc(meta.company)}</span>
   <span class="meta"><b>GPR Scan Report</b> · ${esc(meta.project)} · ${esc(meta.site)}</span></div>`;}
 
 function radar(c){
@@ -397,9 +462,9 @@ function cardBlock(i){
     <div><b>Targets</b><span contenteditable data-i="${i}" data-f="targets">${c.targets}</span></div></div>`:'';
   const obs=opts.obs?`<div class="cobs"><b>Observation.</b> <span contenteditable data-i="${i}" data-f="obs">${c.obs}</span></div>`:'';
   return `<div class="block scan-block">
-    <h2 class="sec">Scan Location — Grid ${c.label} (Core ${c.label})</h2>
+    <h2 class="sec" data-region="head">Scan Location — Grid ${c.label} (Core ${c.label})</h2>
     <div class="scard"><div class="hd">
-      <span class="t" contenteditable data-i="${i}" data-f="title">${c.title}</span>
+      <span class="t" data-region="cardtitle" contenteditable data-i="${i}" data-f="title">${c.title}</span>
       <span class="cardtools">
         <select data-i="${i}" class="vsel">
           <option value="safe"${c.verdict==='safe'?' selected':''}>Safe</option>
@@ -417,7 +482,7 @@ function cardBlock(i){
           <div style="margin-top:6px" class="faint">Targets chalk-marked on slab in matching colours.</div>
         </div></div>${obs}</div></div>`;
 }
-function infoBlock(){return `<div class="block"><h2 class="sec">Project Information</h2>
+function infoBlock(){return `<div class="block"><h2 class="sec" data-region="head">Project Information</h2>
   <div class="pgrid"><div>
     <div class="r"><b>Site</b><span>${esc(meta.site)}</span></div>
     <div class="r"><b>Client</b><span>${esc(meta.client)}</span></div>
@@ -428,8 +493,8 @@ function infoBlock(){return `<div class="block"><h2 class="sec">Project Informat
     <div class="r"><b>Slab type</b><span>200 mm two-way, post-tensioned</span></div>
     <div class="r"><b>Operator</b><span>${esc(meta.operator)}</span></div>
     <div class="r"><b>Project no.</b><span>${esc(meta.project)}</span></div></div></div></div>`;}
-function summaryBlock(){return `<div class="block"><h2 class="sec">Scan Summary</h2>
-  <p class="summary" contenteditable data-i="-1" data-f="summary">Ground-penetrating radar survey performed on the level-2
+function summaryBlock(){return `<div class="block"><h2 class="sec" data-region="head">Scan Summary</h2>
+  <p class="summary" data-region="para" contenteditable data-i="-1" data-f="summary">Ground-penetrating radar survey performed on the level-2
   suspended deck to locate embedded reinforcement, post-tension cables and electrical conduit prior to core
   drilling at ${locs.length} proposed location${locs.length===1?'':'s'}. Top-mat rebar identified at ~45&nbsp;mm cover on
   200&nbsp;mm centres.</p></div>`;}
@@ -437,16 +502,16 @@ function findingsBlock(){
   const rows=locs.map((c,i)=>`<tr><td><b>${c.label}</b></td><td>${c.size}</td>
     <td><span class="pill ${c.verdict}">${VERDICT_LABEL[c.verdict]}</span></td>
     <td contenteditable data-i="${i}" data-f="rec">${c.rec}</td></tr>`).join('');
-  return `<div class="block"><h2 class="sec">Core Clearance Findings</h2>
+  return `<div class="block"><h2 class="sec" data-region="head">Core Clearance Findings</h2>
     <table class="find"><thead><tr><th style="width:54px">Core</th><th style="width:48px">Size</th>
       <th style="width:92px">Verdict</th><th>Clearance &amp; recommendation</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;}
-function methodBlock(){return `<div class="block"><h2 class="sec">Methodology &amp; Standard Notes</h2>
-  <ol class="notes"><li>Survey performed with a GSSI StructureScan Mini XT (1.6 GHz) on orthogonal 50 mm line spacing.</li>
+function methodBlock(){return `<div class="block"><h2 class="sec" data-region="head">Methodology &amp; Standard Notes</h2>
+  <ol class="notes" data-region="para"><li>Survey performed with a GSSI StructureScan Mini XT (1.6 GHz) on orthogonal 50 mm line spacing.</li>
   <li>Depths are estimates based on an assumed dielectric for cured concrete and are ±15%.</li>
   <li>Targets marked on the slab supersede this report where any discrepancy exists.</li>
   <li>Clearances reference the marked grid origin; verify on site before cutting.</li></ol></div>`;}
-function limitBlock(){return `<div class="block"><div class="disc"><b>Limitations.</b> GPR results are interpretive and
+function limitBlock(){return `<div class="block"><div class="disc" data-region="para"><b>Limitations.</b> GPR results are interpretive and
   depend on moisture, cover and congestion. Non-metallic and deeply embedded targets may not be detected.
   ${esc(meta.company)} Cutting &amp; Coring Ltd. accepts no liability for drilling outside the cleared zones
   described above. Report valid for the slab, locations and date stated.</div></div>`;}
@@ -475,14 +540,24 @@ function headerHTML(idx){
 function measure(html,width){ measurer.style.width=width+'px'; measurer.innerHTML=html;
   const el=measurer.firstElementChild; return el?el.getBoundingClientRect().height:0; }
 
+function applyRegionStyles(){
+  const root=document.documentElement.style;
+  // clear then set
+  ['company','head','para','cardtitle'].forEach(r=>{
+    ['ff','tt','fw','fs','ls'].forEach(p=>root.removeProperty(`--rg-${r}-${p}`));
+    const st=regionStyles[r]; if(!st) return;
+    if(st.ff) root.setProperty(`--rg-${r}-ff`, COFONT[st.ff]||st.ff);
+    if(st.tt) root.setProperty(`--rg-${r}-tt`, st.tt);
+    if(st.fw) root.setProperty(`--rg-${r}-fw`, st.fw);
+    if(typeof st.fs==='number') root.setProperty(`--rg-${r}-fs`, st.fs+'pt');
+    if(typeof st.ls==='number') root.setProperty(`--rg-${r}-ls`, (st.ls/100)+'em');
+  });
+}
 function render(){
   document.documentElement.style.setProperty('--red',opts.accent);
-  document.documentElement.style.setProperty('--co-font',COFONT[opts.headfont]);
-  const SCRIPT=['pacifico','lobster','dancing','greatvibes','satisfy','caveat','marker'];
-  document.documentElement.style.setProperty('--co-tt', SCRIPT.includes(opts.headfont)?'none':'uppercase');
-  document.documentElement.style.setProperty('--co-ls', SCRIPT.includes(opts.headfont)?'0':'.04em');
   document.documentElement.style.setProperty('--logo-h',({s:60,m:80,l:100,xl:124}[opts.logo])+'px');
   document.body.style.setProperty('--bgap', opts.density==='compact'?'8px':'14px');
+  applyRegionStyles();
   const SPACING=opts.density==='compact'?8:14;
   const g=geo(); const sz=sheetSize(); const contentW=g.wpx-2*g.padS;
   const fullH=measure(`<div class="header-wrap">${fullLH()}</div>`,contentW);
@@ -514,6 +589,7 @@ function render(){
   }).join('');
   buildLocControls();
   bindReport();
+  bindRegions();
 }
 
 function buildLocControls(){
@@ -563,7 +639,12 @@ $('opt-stats').onchange=e=>{opts.stats=e.target.checked;render();};
 $('opt-obs').onchange=e=>{opts.obs=e.target.checked;render();};
 ['summary','findings','methodology','limitations','signoff'].forEach(k=>{
   $('sec-'+k).onchange=e=>{opts.show[k]=e.target.checked;render();};});
-$('opt-headfont').onchange=e=>{opts.headfont=e.target.value;render();};
+$('opt-headfont').onchange=e=>{const v=e.target.value;
+  const st=regionStyles.company=regionStyles.company||{};
+  if(v==='default'){delete st.ff; delete st.tt;}
+  else{ st.ff=v; const SCRIPT=['pacifico','lobster','dancing','greatvibes','satisfy','caveat','marker'];
+    st.tt=SCRIPT.includes(v)?'none':'uppercase'; }
+  applyRegionStyles();};
 $('opt-accent').oninput=e=>{opts.accent=e.target.value;render();};
 $('opt-draft').onchange=e=>{opts.draft=e.target.checked;render();};
 $('opt-footer').oninput=e=>{opts.footer=e.target.value;render();};
@@ -573,7 +654,7 @@ $('opt-footer').oninput=e=>{opts.footer=e.target.value;render();};
 $('add-loc').onclick=addLoc;
 $('btn-print').onclick=()=>window.print();
 $('menu-toggle').onclick=()=>$('panel').classList.toggle('collapsed');
-$('btn-reset').onclick=()=>{loadDefaults();
+$('btn-reset').onclick=()=>{loadDefaults(); if(typeof setStyleMode==='function') setStyleMode(false);
   $('opt-header').value=opts.header; $('opt-stats').checked=false; $('opt-obs').checked=false;
   $('opt-headfont').value=opts.headfont;
   $('opt-accent').value=opts.accent; $('opt-draft').checked=false; $('opt-footer').value=opts.footer;
@@ -583,6 +664,72 @@ $('btn-reset').onclick=()=>{loadDefaults();
   document.querySelectorAll('.seg').forEach(sg=>sg.querySelectorAll('button').forEach(b=>
     b.classList.toggle('on', b.dataset.v===opts[sg.id.replace('seg-','')] )));
   render();};
+
+// ---- Style-text mode: tap a region in the report to restyle its lettering ----
+const FONT_KEYS=Object.keys(COFONT); // includes 'default'
+function fontOptions(sel){
+  return FONT_KEYS.map(k=>{
+    const label=(k==='default')?'Default (Inter/Segoe)':k.charAt(0).toUpperCase()+k.slice(1);
+    return `<option value="${k}"${sel===k?' selected':''}>${label}</option>`;
+  }).join('');
+}
+function bindRegions(){
+  document.querySelectorAll('[data-region]').forEach(el=>{
+    el.onclick=ev=>{
+      if(!styleMode) return;        // off => normal (inline edit) behaviour
+      ev.preventDefault(); ev.stopPropagation();
+      openSheet(el.dataset.region);
+    };
+  });
+}
+function setStyleMode(on){
+  styleMode=on;
+  document.body.classList.toggle('styling',on);
+  const b=$('btn-style');
+  b.textContent = on ? '✓ Style mode ON — tap a section' : '🎨 Style text — tap a section';
+  b.style.background = on ? 'var(--red)' : '#2b2c30';
+  // when turning on, make report text non-editable so taps select instead of caret
+  document.querySelectorAll('[contenteditable]').forEach(e=>e.setAttribute('contenteditable', on?'false':'true'));
+  if(!on) closeSheet();
+}
+const sheet=$('rg-sheet');
+function openSheet(region){
+  activeRegion=region;
+  document.querySelectorAll('[data-region]').forEach(e=>e.classList.toggle('rg-active', e.dataset.region===region));
+  const st=regionStyles[region]||{};
+  $('rg-title').textContent='Style: '+(REGION_LABEL[region]||region);
+  $('rg-ff').innerHTML=fontOptions(st.ff||'default');
+  $('rg-tt').value=st.tt||'';
+  $('rg-fw').value=st.fw||'';
+  const baseFs=REGION_DEFAULT_FS[region]||10;
+  const fs=(typeof st.fs==='number')?st.fs:baseFs;
+  $('rg-fs').min=Math.round(baseFs*0.6*10)/10; $('rg-fs').max=Math.round(baseFs*2.2);
+  $('rg-fs').step=0.5; $('rg-fs').value=fs; $('rg-fs-v').textContent=fs+'pt';
+  const ls=(typeof st.ls==='number')?st.ls:0;
+  $('rg-ls').value=ls; $('rg-ls-v').textContent=(ls/100).toFixed(2)+'em';
+  sheet.classList.add('open');
+}
+function closeSheet(){ sheet.classList.remove('open'); activeRegion=null;
+  document.querySelectorAll('[data-region]').forEach(e=>e.classList.remove('rg-active')); }
+function setRegion(prop,val){
+  if(!activeRegion) return;
+  const st=regionStyles[activeRegion]=regionStyles[activeRegion]||{};
+  if(val===''||val==null) delete st[prop]; else st[prop]=val;
+  // script fonts read better in natural case — auto-suggest 'none' the first time
+  applyRegionStyles();
+}
+$('btn-style').onclick=()=>setStyleMode(!styleMode);
+$('rg-close').onclick=closeSheet;
+$('rg-done').onclick=closeSheet;
+$('rg-ff').onchange=e=>{ setRegion('ff', e.target.value==='default'?'':e.target.value);
+  // when picking a script font, default the case to as-typed for legibility
+  const SCRIPT=['pacifico','lobster','dancing','greatvibes','satisfy','caveat','marker'];
+  if(SCRIPT.includes(e.target.value)){ regionStyles[activeRegion].tt='none'; $('rg-tt').value='none'; applyRegionStyles(); } };
+$('rg-tt').onchange=e=>setRegion('tt',e.target.value);
+$('rg-fw').onchange=e=>setRegion('fw',e.target.value);
+$('rg-fs').oninput=e=>{ $('rg-fs-v').textContent=e.target.value+'pt'; setRegion('fs',parseFloat(e.target.value)); };
+$('rg-ls').oninput=e=>{ $('rg-ls-v').textContent=(e.target.value/100).toFixed(2)+'em'; setRegion('ls',parseFloat(e.target.value)); };
+$('rg-reset-one').onclick=()=>{ if(activeRegion){ delete regionStyles[activeRegion]; applyRegionStyles(); openSheet(activeRegion); } };
 
 render();
 </script>
