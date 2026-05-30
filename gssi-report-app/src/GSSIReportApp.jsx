@@ -6011,6 +6011,20 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
             break-inside: avoid;
           }
 
+          /* Keep small repeating items whole so a single target row or core
+             card never splits across a page boundary (info getting cut). */
+          .tgt-row, .tgt-group, .core-card {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          /* Don't strand a confidence-band heading at a page bottom away from
+             its rows, or a card/section heading alone at the foot of a page. */
+          .tgt-group-label, .ak-sec h2, .ak-sec h3, .ak-card-head {
+            page-break-after: avoid;
+            break-after: avoid;
+          }
+          .ak-sec p, .ak-sec li, .tgt-row, .core-card { orphans: 3; widows: 3; }
+
           .scan-photo-row {
             page-break-inside: avoid;
             break-inside: avoid;
