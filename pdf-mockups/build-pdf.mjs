@@ -15,16 +15,7 @@ const lhCSS = `
     padding:0.55in 0.6in 0.5in}
   .sheet + .sheet{page-break-before:always}
   .content{position:absolute;left:0.6in;right:0.6in;top:1.35in;bottom:0.55in}
-  .content.tall{top:0.95in}
-  /* taller scan photos + per-card detail so pages fill (no dead space) */
-  .radar{height:210px}
-  .cstats{display:flex;background:#fff;border-bottom:1px solid #e3e3e3}
-  .cstats div{flex:1;padding:6px 10px;border-right:1px solid #eee;font-size:8.5pt;font-weight:600}
-  .cstats div:last-child{border-right:none}
-  .cstats b{display:block;font-size:6.8pt;color:var(--mut);text-transform:uppercase;
-    letter-spacing:.06em;font-weight:700;margin-bottom:1px}
-  .cobs{padding:7px 10px;border-top:1px solid #eee;font-size:8.5pt;color:#333;line-height:1.45}
-  .cobs b{color:#000}
+  .content.tall{top:0.55in}   /* continuation pages have no header */
   /* full letterhead */
   .lh{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;
     border-bottom:3px solid var(--ink);padding-bottom:10px}
@@ -67,23 +58,17 @@ const fullLH = `
     </div>
   </div>`;
 
-// continuation header: text only, no logo/mascot
-const compactLH = `
-  <div class="rh">
-    <span class="nm">Aggarwal Kamikazes</span>
-    <span class="meta"><b>GPR Scan Report</b> · ${PROJ} · 1450 Industrial Way, Burnaby BC</span>
-  </div>`;
+// Continuation pages (2+) carry no header — letterhead is page 1 only.
 
 const foot = (n, total) => `<div class="foot">
   <span>Aggarwal Kamikazes Cutting &amp; Coring Ltd.</span>
   <span class="c">Confidential — for the named recipient</span>
   <span>Page ${n} of ${total} · ${PROJ}</span></div>`;
 
-// reusable scan-location card — taller photo + stats strip + observation line
-const scard = ({ title, meta, stats, rebars, hyp, obs }) => `
+// reusable scan-location card (normal size)
+const scard = (title, meta, rebars, hyp, note) => `
   <div class="scard">
     <div class="hd"><span class="t">${title}</span><span class="m">${meta}</span></div>
-    <div class="cstats">${stats.map(([k, v]) => `<div><b>${k}</b>${v}</div>`).join('')}</div>
     <div class="bd">
       <div class="radar">
         <div class="scale"><span>0</span><span>100</span><span>200</span></div>
@@ -95,10 +80,9 @@ const scard = ({ title, meta, stats, rebars, hyp, obs }) => `
         <div><span class="k" style="background:#111"></span>Rebar — top mat, ~45 mm</div>
         <div><span class="k" style="background:#2b6cff"></span>Post-tension tendon</div>
         <div><span class="k" style="background:#c0282d"></span>Conduit / no-scan zone</div>
-        <div style="margin-top:6px" class="faint">Targets chalk-marked on slab in matching colours; marked-up photo on file.</div>
+        <div style="margin-top:6px" class="faint">${note}</div>
       </div>
     </div>
-    <div class="cobs"><b>Observation.</b> ${obs}</div>
   </div>`;
 
 const rebRow = [[70,42],[120,40],[170,43],[220,41]];
@@ -152,29 +136,23 @@ const page1 = `
   ${foot(1,3)}`;
 
 const page2 = `
-  ${compactLH}
   <div class="content tall">
     <h2 class="sec">Scan Location — Grid A (Core A)</h2>
-    ${scard({ title:'Grid A · Bay 1 mid-span', meta:'0.9 m × 0.9 m · depth scale 0–200 mm',
-      stats:[['Cover','45 mm'],['Spacing','200 mm'],['Max depth','165 mm'],['Targets','Rebar only']],
-      rebars:rebRow, hyp:null,
-      obs:'Clear cone at the proposed core centre — no targets within 60 mm in any direction. Top mat consistent at ~45 mm cover. Safe to drill as marked.' })}
+    ${scard('Grid A · Bay 1 mid-span', '0.9 m × 0.9 m · depth scale 0–200 mm', rebRow, null,
+      'Clear cone at core centre. No targets within 60 mm. Safe to drill as marked.')}
     <h2 class="sec">Scan Location — Grid B (Core B)</h2>
-    ${scard({ title:'Grid B · Bay 2 column line', meta:'0.9 m × 0.9 m · depth scale 0–200 mm',
-      stats:[['Cover','45 mm'],['Spacing','200 mm'],['Max depth','180 mm'],['Targets','Rebar + PT']],
-      rebars:rebRow, hyp:{l:150,t:90,w:90,h:46,c:'#5aa0ff'},
-      obs:'Post-tension tendon crosses on a diagonal within 25 mm of the proposed centre. Relocate the core 75 mm south, clear of the tendon envelope, and re-scan before drilling.' })}
+    ${scard('Grid B · Bay 2 column line', '0.9 m × 0.9 m · depth scale 0–200 mm', rebRow,
+      {l:150,t:70,w:90,h:46,c:'#5aa0ff'},
+      'Post-tension tendon crosses within 25 mm of the proposed centre. Relocate 75 mm south and re-scan.')}
   </div>
   ${foot(2,3)}`;
 
 const page3 = `
-  ${compactLH}
   <div class="content tall">
     <h2 class="sec">Scan Location — Grid C (Core C)</h2>
-    ${scard({ title:'Grid C · Bay 2 wall line', meta:'0.9 m × 0.9 m · depth scale 0–200 mm',
-      stats:[['Cover','45 mm'],['Spacing','200 mm'],['Max depth','120 mm'],['Targets','Rebar + conduit']],
-      rebars:rebRow, hyp:{l:120,t:120,w:130,h:30,c:'#ff5a5a'},
-      obs:'Energised electrical conduit detected directly beneath the proposed centre at ~110 mm. No-go — do not drill at this location; refer back to the EOR for a redesigned core position.' })}
+    ${scard('Grid C · Bay 2 wall line', '0.9 m × 0.9 m · depth scale 0–200 mm', rebRow,
+      {l:120,t:96,w:130,h:30,c:'#ff5a5a'},
+      'Energised conduit detected directly beneath the proposed centre. No-go — redesign required.')}
 
     <h2 class="sec">Methodology &amp; Standard Notes</h2>
     <ol class="notes">

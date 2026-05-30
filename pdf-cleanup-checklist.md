@@ -50,10 +50,12 @@
 
 ## C. Implementations (finish the look you liked)
 
-- [ ] **C1 — Repeating letterhead on every PDF page.** The roadmap-blessed feature: logo +
-  company line that renders identically on every page. Decide CSS `position: running()` vs.
-  `position: fixed` fallback for the project's Electron/Chromium version, and **verify with a
-  real 3-page export** (acceptance criterion already written in `v1015roadmap.md`).
+- [ ] **C1 — Letterhead placement is a per-report CHOICE (not hard-coded).** Direction
+  locked with the mock-up (`pdf-mockups/ScanReport-mockup.pdf`): **default = full letterhead on
+  page 1 only, no header on continuation pages.** Build the *option* to repeat (full or a slim
+  text-only line) for users who want it, but ship page-1-only as the default. Decide CSS
+  `position: running()` vs. `position: fixed` for the repeat mode and **verify with a real
+  3-page export**.
 - [ ] **C2 — User-uploadable logo (replace hardcoded `LOGO_SRC`).** Settings → Company
   Letterhead: upload PNG/SVG, persist as base64 (`akscan.letterhead.v1`), validate ≤200 KB.
   Falls back to current bundled logo if none uploaded so nothing breaks. (Roadmap §1.)
@@ -65,6 +67,23 @@
   and strings only; nothing renders actual pages. Add a render-to-PDF + page-screenshot check
   so "logo in the right spot / card didn't split / Preview matches PDF" fails loudly instead
   of being eyeballed in print preview.
+
+## D. Customizable report builder (user direction 2026-05-29)
+
+> "When we are doing the report, make it customizable." The report look is **Pure B**, but the
+> knobs below should be user-controllable rather than baked in. Card size stays at the current
+> default; users opt into changes.
+
+- [ ] **D1 — Header per page: choose `Page 1 only` (default) · `Slim text line` · `Full letterhead`.**
+- [ ] **D2 — Card / scan-photo size: keep current default; expose a size control** (e.g.
+  Compact / Normal / Tall) so users fill pages by choice, not by a forced larger card.
+- [ ] **D3 — Card order: drag-reorder (already shipped v1.0.6) + the C3 page-break indicator**
+  so cards can be rearranged to fill each page. This is the answer to "fill the open space"
+  without enlarging cards.
+- [ ] **D4 — Optional card detail: stats strip (cover/spacing/depth/targets) and an
+  observation line as toggles**, off by default (they were tried in the mock and pulled back).
+- [ ] **D5 — Footer text customizable** (the "Confidential — for the named recipient" line,
+  page-number format, project number).
 
 ---
 
