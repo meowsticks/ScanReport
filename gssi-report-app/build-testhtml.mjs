@@ -56,17 +56,19 @@ const SEED = {
   },
 
   // { id, type, depth, cover, confidence, note }
-  // NOTE: `type` MUST be one of TARGET_TYPES in GSSIReportApp.jsx, or the
-  // dropdown silently falls back to "Rebar (top mat)". Keep these in sync.
+  // NOTE: `type` MUST be one of the exact dropdown options in GSSIReportApp.jsx
+  // (Rebar (top mat) / Rebar (bottom mat) / PT cable / Conduit (metallic) /
+  // Conduit (non-metallic) / Void / Pan decking / Unknown anomaly), or the
+  // select silently falls back to "Rebar (top mat)". Verified against the DOM.
   targets: [
-    { id:'T-01', type:'Rebar (top mat)',          depth:'45',  cover:'45', confidence:'high', note:'#4 @ 200 mm o/c — consistent across all three decks' },
-    { id:'T-02', type:'Rebar (top mat)',          depth:'95',  cover:'',   confidence:'med',  note:'L2 second mat — two-way congestion reduces sub-100 mm clarity' },
-    { id:'T-03', type:'Rebar (bottom mat)',       depth:'235', cover:'65', confidence:'high', note:'#5 @ 250 mm o/c' },
-    { id:'T-04', type:'Post-tension cable',  depth:'135', cover:'',   confidence:'high', note:'Single tendon crossing Grid B on a diagonal — DANGER' },
-    { id:'T-05', type:'Conduit',             depth:'110', cover:'',   confidence:'high', note:'Energised electrical conduit beneath Grid C — treat as live' },
-    { id:'T-06', type:'Water line',          depth:'160', cover:'',   confidence:'med',  note:'Hydronic radiant tubing loop, Grid F mechanical room' },
-    { id:'T-07', type:'Unknown / anomaly',   depth:'90',  cover:'',   confidence:'low',  note:'Strong isolated metallic reflection, Grid G — verify intrusively' },
-    { id:'T-08', type:'Unknown / anomaly',   depth:'140', cover:'',   confidence:'low',  note:'Low-amplitude zone near Grid H slab edge — suspected void / delamination' },
+    { id:'T-01', type:'Rebar (top mat)',         depth:'45',  cover:'45', confidence:'high', note:'#4 @ 200 mm o/c — consistent across all three decks' },
+    { id:'T-02', type:'Rebar (top mat)',         depth:'95',  cover:'',   confidence:'med',  note:'L2 second mat — two-way congestion reduces sub-100 mm clarity' },
+    { id:'T-03', type:'Rebar (bottom mat)',      depth:'235', cover:'65', confidence:'high', note:'#5 @ 250 mm o/c' },
+    { id:'T-04', type:'PT cable',                depth:'135', cover:'',   confidence:'high', note:'Single tendon crossing Grid B on a diagonal — DANGER' },
+    { id:'T-05', type:'Conduit (metallic)',      depth:'110', cover:'',   confidence:'high', note:'Energised electrical conduit beneath Grid C — treat as live' },
+    { id:'T-06', type:'Conduit (non-metallic)',  depth:'160', cover:'',   confidence:'med',  note:'Hydronic radiant tubing loop, Grid F mechanical room' },
+    { id:'T-07', type:'Unknown anomaly',         depth:'90',  cover:'',   confidence:'low',  note:'Strong isolated metallic reflection, Grid G — verify intrusively' },
+    { id:'T-08', type:'Void',                    depth:'140', cover:'',   confidence:'low',  note:'Low-amplitude zone near Grid H slab edge — suspected void / delamination' },
   ],
 
   // { label, size, verdict, clearance, note }
