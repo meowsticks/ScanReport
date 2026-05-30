@@ -79,9 +79,13 @@
 
 ## D. Customizable report builder (user direction 2026-05-29)
 
-> "When we are doing the report, make it customizable." The report look is **Pure B**, but the
-> knobs below should be user-controllable rather than baked in. Card size stays at the current
-> default; users opt into changes.
+> ⚠️ **SCOPE CORRECTION (2026-05-30): these controls are a DESIGN TOOL, not shipping features.**
+> The playground's knobs (header mode, card size, paper, density, fonts, tap-to-style, accent,
+> watermark, etc.) exist ONLY to dial the PDF until the **preview is a shippable file**. Once the
+> look is locked, the app gets the **fixed final output**, not the controls. Do NOT wire these
+> sliders/pickers into `GSSIReportApp.jsx`. The deliverable is the PDF, not a builder UI.
+> Re-evaluate which (if any) of D1–D6 ever become real user options only after the user says
+> "let's test this live."
 
 - [ ] **D1 — Header per page: choose `Page 1 only` (default) · `Slim text line` · `Full letterhead`.**
 - [ ] **D2 — Card / scan-photo size: keep current default; expose a size control** (e.g.
