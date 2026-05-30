@@ -5681,28 +5681,34 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
            in Preview even though it would appear in the saved PDF. */
         body.preview-mode .print-only { display: block !important; }
         /* === Brand flourishes (opt-in via report.brandFlourishes) === */
+        /* Header: big logo filling the left, company name centered in the
+           rest. A spacer mirrors the logo's width so the wordmark is centered
+           across the FULL ribbon, not just the space to the right of the logo. */
         .brand-ribbon {
           display: flex; align-items: center; gap: 12px;
-          padding: 10px 14px; margin-bottom: 12px;
+          padding: 10px 16px; margin-bottom: 12px;
           background: linear-gradient(90deg, rgba(212,69,69,0.08), rgba(212,69,69,0));
-          border-left: 3px solid var(--ak-accent);
+          border-bottom: 2px solid var(--ak-accent);
           border-radius: 6px;
         }
         .brand-ribbon-mark {
-          height: 44px; width: auto; flex-shrink: 0;
+          height: 92px; width: auto; flex-shrink: 0;
           filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
         }
-        .brand-ribbon-text { line-height: 1.05; }
+        /* spacer = same width as the logo so the centered text is centered on
+           the whole ribbon. Keeps the logo hard-left, name dead-centered. */
+        .brand-ribbon-spacer { width: 92px; flex-shrink: 0; }
+        .brand-ribbon-text { flex: 1; text-align: center; line-height: 1.02; }
         /* Two-tone handwritten wordmark: company in ink, division in brand red. */
         .brand-ribbon-title {
           font-family: 'Caveat', 'Segoe Script', cursive;
-          font-size: 26pt; font-weight: 700; letter-spacing: 0.3px;
+          font-size: 32pt; font-weight: 700; letter-spacing: 0.3px;
         }
-        .brand-ribbon-title .nm-co  { color: var(--ak-text); }
-        .brand-ribbon-title .nm-div { color: var(--ak-accent); font-size: 18pt; display: block; margin-top: -2px; }
+        .brand-ribbon-title .nm-co  { color: var(--ak-text); display: block; }
+        .brand-ribbon-title .nm-div { color: var(--ak-accent); font-size: 22pt; display: block; margin-top: -4px; }
         .brand-ribbon-tagline {
-          font-size: 9.5pt; font-style: italic;
-          color: var(--ak-accent); margin-top: 3px;
+          font-size: 10pt; font-style: italic;
+          color: var(--ak-accent); margin-top: 4px;
         }
         .brand-signoff {
           margin-top: 18px; padding-top: 10px;
