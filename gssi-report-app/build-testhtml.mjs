@@ -162,6 +162,13 @@ const logoData = 'data:image/png;base64,' + b64(path.join(DIST, 'kamikaze-logo.p
 js = js.split('./kamikaze-logo.png').join(logoData)
        .split('kamikaze-logo.png').join(logoData); // catch any unprefixed use
 
+// CRITICAL: when inlining a bundle into <script>, any literal "</script" inside
+// the JS would terminate the tag early (the HTML parser doesn't know JS). Escape
+// it so the browser sees the full module. Same guard for the CSS block.
+const guard = (s) => s.replace(/<\/(script|style)/gi, '<\\/$1');
+js = guard(js);
+css = guard(css);
+
 // favicon — drop the external ref to keep it single-file & quiet
 html = html.replace(/<link[^>]+rel="[^"]*icon[^"]*"[^>]*>/g, '');
 
