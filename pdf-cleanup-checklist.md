@@ -34,6 +34,15 @@
   ("cascade is source-order at equal specificity", line 5700). High risk of regression on
   the next edit — candidate for careful consolidation. (See B1.)
 
+- [x] **A6 — Photo-annotation arrows drift in the exported PDF.** ✅ FIXED — `AnnotatedImage`
+  (the overlay used in the printed report, 7 call sites) sized its canvas in *screen* pixels
+  via `getBoundingClientRect()` at draw time and never recomputed for print, so when the image
+  reflowed to PDF width the arrows shifted off-target — a report-validity risk. Fix: canvas
+  backing-store now derives from the image's intrinsic size (capped) and CSS-stretches to cover
+  the image (`inset:0; width/height:100%`); annotation coords are normalized, so arrows stay
+  pinned at any render size including the PDF reflow. Build-verified; before/after proof in
+  `pdf-mockups/annotation-fix-proof.png`.
+
 ## B. Cleanups (tech debt — no visible change)
 
 - [ ] **B1 — Consolidate the `@media print` blocks.** There are multiple separate
