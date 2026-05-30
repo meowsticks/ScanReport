@@ -6019,7 +6019,7 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
           }
           /* Don't strand a confidence-band heading at a page bottom away from
              its rows, or a card/section heading alone at the foot of a page. */
-          .tgt-group-label, .ak-sec h2, .ak-sec h3, .ak-card-head {
+          .tgt-group-label, .ak-sec h2, .ak-sec h3 {
             page-break-after: avoid;
             break-after: avoid;
           }
@@ -6659,8 +6659,8 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
             .filter(({ t }) => (t.confidence || 'high') === level);
           if (items.length === 0) return null;
           return (
-            <div key={level} style={{ marginBottom: 10 }}>
-              <div style={{
+            <div key={level} className="tgt-group" style={{ marginBottom: 10 }}>
+              <div className="tgt-group-label" style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '6px 9px', marginBottom: 7,
                 background: meta.bg, borderLeft: `3px solid ${meta.color}`,
@@ -6676,7 +6676,7 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
               </div>
 
               {items.map(({ t, i }) => (
-                <div key={i} style={{
+                <div key={i} className="tgt-row" style={{
                   border: `1px solid ${c.border}`, borderRadius: 6,
                   padding: 9, marginBottom: 7,
                 }}>
@@ -7078,7 +7078,7 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
             nogo:    { color: c.red,   bg: c.redBg,   label: '✕ Do not drill' },
           }[co.verdict];
           return (
-            <div key={i} style={{
+            <div key={i} className="core-card" style={{
               borderLeft: `3px solid ${v.color}`, background: v.bg,
               padding: '9px 11px', borderRadius: '0 6px 6px 0', marginBottom: 7,
             }}>
