@@ -62,11 +62,11 @@ const SEED = {
     { id:'T-01', type:'Rebar (top mat)',          depth:'45',  cover:'45', confidence:'high', note:'#4 @ 200 mm o/c — consistent across all three decks' },
     { id:'T-02', type:'Rebar (top mat)',          depth:'95',  cover:'',   confidence:'med',  note:'L2 second mat — two-way congestion reduces sub-100 mm clarity' },
     { id:'T-03', type:'Rebar (bottom mat)',       depth:'235', cover:'65', confidence:'high', note:'#5 @ 250 mm o/c' },
-    { id:'T-04', type:'Post-tension cable',       depth:'135', cover:'',   confidence:'high', note:'Single tendon crossing Grid B on a diagonal — DANGER' },
-    { id:'T-05', type:'Electrical conduit',       depth:'110', cover:'',   confidence:'high', note:'Energised run beneath Grid C — treat as live' },
-    { id:'T-06', type:'Cooling / radiant tubing', depth:'160', cover:'',   confidence:'med',  note:'Hydronic radiant loop, Grid F mechanical room' },
-    { id:'T-07', type:'Unknown / anomaly',        depth:'90',  cover:'',   confidence:'low',  note:'Strong isolated metallic reflection, Grid G — verify intrusively' },
-    { id:'T-08', type:'Void',                     depth:'140', cover:'',   confidence:'low',  note:'Low-amplitude zone near Grid H slab edge — suspected void/delamination' },
+    { id:'T-04', type:'Post-tension cable',  depth:'135', cover:'',   confidence:'high', note:'Single tendon crossing Grid B on a diagonal — DANGER' },
+    { id:'T-05', type:'Conduit',             depth:'110', cover:'',   confidence:'high', note:'Energised electrical conduit beneath Grid C — treat as live' },
+    { id:'T-06', type:'Water line',          depth:'160', cover:'',   confidence:'med',  note:'Hydronic radiant tubing loop, Grid F mechanical room' },
+    { id:'T-07', type:'Unknown / anomaly',   depth:'90',  cover:'',   confidence:'low',  note:'Strong isolated metallic reflection, Grid G — verify intrusively' },
+    { id:'T-08', type:'Unknown / anomaly',   depth:'140', cover:'',   confidence:'low',  note:'Low-amplitude zone near Grid H slab edge — suspected void / delamination' },
   ],
 
   // { label, size, verdict, clearance, note }
