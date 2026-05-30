@@ -4626,7 +4626,9 @@ function deriveReportName(r) {
   return (r.projectNo || r.jobNote || r.client || 'Untitled report').toString().slice(0, 60);
 }
 
-export default function GSSIReportApp() {
+export default function GSSIReportApp({ previewOnly = false } = {}) {
+  // `previewOnly` renders this app as a read-only PDF mirror inside the separate
+  // preview window: no tools, no persistence, state arrives live from the editor.
   // Multi-report library: the open report plus a lightweight index of all reports.
   const [lib] = useState(() => ensureLibrary(DEFAULT_REPORT, deriveReportName));
   const [currentId, setCurrentIdState] = useState(lib.currentId);
@@ -4670,12 +4672,14 @@ export default function GSSIReportApp() {
 
   const saveTimerRef = useRef(null);
   useEffect(() => {
+    if (previewOnly) return; // mirror window never persists — the editor owns state
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => persistNow.current(), 500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [report]);
+  }, [report, previewOnly]);
 
   useEffect(() => {
+    if (previewOnly) return; // mirror window does not flush/save anything
     const flush = () => {
       if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
       persistNow.current();
@@ -4717,7 +4721,9 @@ export default function GSSIReportApp() {
   const applyRemote = useCallback((data) => {
     setReport({ ...DEFAULT_REPORT, ...data });
   }, []);
-  const sync = useCloudSync({ session: auth.session, report, applyRemote });
+  // The mirror window never syncs — the editor owns state, so we pass a null
+  // session to keep the hook inert (no cloud push/pull clobbering live IPC state).
+  const sync = useCloudSync({ session: previewOnly ? null : auth.session, report, applyRemote });
 
   // ---------- Auto-fill: build a fresh report carrying sticky fields forward ----------
   const freshReport = () => {
@@ -4994,6 +5000,17 @@ export default function GSSIReportApp() {
 
   // ---------- Print preview + per-section include/exclude ----------
   const [previewMode, setPreviewMode] = useState(false);
+
+  // ---------- Live PDF preview window (separate, movable mirror) ----------
+  // Editor side: whether the preview window is currently open (drives the toggle).
+  const [previewWinOpen, setPreviewWinOpen] = useState(false);
+  // Preview side: which view the mirror is showing — 'live' (instant HTML
+  // render, exact content) or 'final' (the real paginated PDF). A view control
+  // only; it never changes the report and never appears in the saved file.
+  const [previewView, setPreviewView] = useState('live');
+  // Preview side: object URL of the rendered "Final" PDF, and a busy flag.
+  const [finalPdfUrl, setFinalPdfUrl] = useState('');
+  const [finalPdfBusy, setFinalPdfBusy] = useState(false);
   // Setup cards (Tier / Sections / Print setup) collapse to a single toggle
   // by default so the report body starts near the top of the screen.
   // Persisted so it stays the way the engineer left it last session.
@@ -5087,7 +5104,7 @@ export default function GSSIReportApp() {
   // see where it lands. Listeners are attached only while previewMode is on
   // so the editor stays untouched.
   useEffect(() => {
-    if (!previewMode) return;
+    if (!previewMode || previewOnly) return; // mirror window is read-only — no drag tool
     const idFromEl = (el) => {
       if (!el) return null;
       const m = (el.className || '').toString().match(/ak-sec-([a-zA-Z0-9_-]+)/);
@@ -5169,7 +5186,7 @@ export default function GSSIReportApp() {
     };
     // Re-bind whenever sectionOrder/visibility changes — new DOM may have
     // appeared (e.g. tier change makes more cards visible).
-  }, [previewMode, report.sectionOrder, report.sectionVisibility, report.tier]);
+  }, [previewMode, previewOnly, report.sectionOrder, report.sectionVisibility, report.tier]);
 
   const update = (patch) => setReport(r => ({ ...r, ...patch }));
 
@@ -5225,6 +5242,65 @@ export default function GSSIReportApp() {
   // Desktop build (Electron) exposes a native file API; when present we save/open
   // real files through OS dialogs instead of the browser.
   const desktop = typeof window !== 'undefined' && window.akDesktop && window.akDesktop.isDesktop;
+
+  // ---------- Live PDF preview window: state sync ----------
+  // PREVIEW side: force preview styling (hides all .no-print editor chrome via
+  // existing CSS), announce we're ready, and apply live report state pushed
+  // from the editor. The mirror never persists — it only renders.
+  useEffect(() => {
+    if (!previewOnly) return;
+    setPreviewMode(true); // reuse the print-true styling; the preview-bar is gated off below
+    let off;
+    if (window.akDesktop?.onPreviewState) {
+      off = window.akDesktop.onPreviewState((incoming) => {
+        if (incoming && typeof incoming === 'object') setReport({ ...DEFAULT_REPORT, ...incoming });
+      });
+      window.akDesktop.previewReady?.();
+    }
+    return () => { off && off(); };
+  }, [previewOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // EDITOR side: push report to the mirror live whenever it changes (debounced
+  // so big photo payloads don't flood IPC), and on the window's initial request.
+  const sendPreviewRef = useRef(null);
+  sendPreviewRef.current = () => { try { window.akDesktop?.sendPreviewState?.(report); } catch {} };
+  useEffect(() => {
+    if (previewOnly || !desktop || !previewWinOpen) return;
+    const t = setTimeout(() => sendPreviewRef.current(), 120);
+    return () => clearTimeout(t);
+  }, [report, previewWinOpen, previewOnly, desktop]);
+  useEffect(() => {
+    if (previewOnly || !desktop) return;
+    const offReq = window.akDesktop?.onPreviewRequestState?.(() => sendPreviewRef.current());
+    const offClosed = window.akDesktop?.onPreviewClosed?.(() => setPreviewWinOpen(false));
+    return () => { offReq && offReq(); offClosed && offClosed(); };
+  }, [previewOnly, desktop]);
+
+  // EDITOR side: open/close the movable preview window.
+  const togglePreviewWindow = async () => {
+    if (!desktop) { setPreviewMode(true); return; } // browser: fall back to in-page preview
+    if (previewWinOpen) { await window.akDesktop.closePreview(); setPreviewWinOpen(false); }
+    else { await window.akDesktop.openPreview(); setPreviewWinOpen(true); }
+  };
+
+  // PREVIEW side: render the REAL PDF for the "Final" view (exact pagination).
+  const refreshFinalPdf = async () => {
+    if (!window.akDesktop?.renderPdf) return;
+    setFinalPdfBusy(true);
+    try {
+      const bytes = await window.akDesktop.renderPdf();
+      if (bytes) {
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        setFinalPdfUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
+      }
+    } catch {} finally { setFinalPdfBusy(false); }
+  };
+  // When the engineer switches to Final, render it; refresh on edits while Final is up.
+  useEffect(() => {
+    if (!previewOnly || previewView !== 'final') return;
+    refreshFinalPdf();
+  }, [previewOnly, previewView, report]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fileHandleRef = useRef(null);                     // the file we keep updating (this session)
   const desktopPathRef = useRef(null);                    // native file path (desktop build)
   const [savedFileName, setSavedFileName] = useState(null);
@@ -5442,7 +5518,7 @@ export default function GSSIReportApp() {
     'print': exportPDF,
   };
   useEffect(() => {
-    if (!desktop) return;
+    if (!desktop || previewOnly) return; // mirror window ignores menu/open-file actions
     const offMenu = window.akDesktop.onMenu((action) => {
       const fn = desktopActionsRef.current[action];
       if (fn) fn();
@@ -5466,7 +5542,7 @@ export default function GSSIReportApp() {
       padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
     }}>
       <ThemeStyles />
-      {previewMode && (
+      {previewMode && !previewOnly && (
         <div className="preview-bar">
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
             👁 PDF Preview · {SECTION_IDS.filter(s => vis(s.id)).length} of {SECTION_IDS.length} sections
@@ -5483,6 +5559,51 @@ export default function GSSIReportApp() {
               cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
             }}>📄 Save / send PDF</button>
           </div>
+        </div>
+      )}
+
+      {/* Live PDF-preview window: minimal Live/Final view switch. This is the
+          ONLY control in the mirror — it never edits the report and is marked
+          no-print so it can never bleed into the document. */}
+      {previewOnly && (
+        <div className="no-print" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 10px', background: '#111', color: '#fff',
+          fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+        }}>
+          <span style={{ opacity: 0.7 }}>👁 PDF Preview</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            {['live', 'final'].map((v) => (
+              <button key={v} onClick={() => setPreviewView(v)} style={{
+                background: previewView === v ? '#e02020' : 'transparent',
+                color: '#fff', border: `1px solid ${previewView === v ? '#e02020' : '#555'}`,
+                borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 800,
+                cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+              }}>{v === 'live' ? 'Live' : 'Final'}</button>
+            ))}
+            {previewView === 'final' && (
+              <button onClick={refreshFinalPdf} disabled={finalPdfBusy} style={{
+                background: 'transparent', color: '#fff', border: '1px solid #555',
+                borderRadius: 6, padding: '5px 10px', fontSize: 11, fontWeight: 700,
+                cursor: finalPdfBusy ? 'default' : 'pointer', opacity: finalPdfBusy ? 0.5 : 1,
+              }}>{finalPdfBusy ? '…' : '↻'}</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Final view: the REAL paginated PDF, rendered by Chromium's built-in
+          viewer over the live render. Exact page breaks — literally the file. */}
+      {previewOnly && previewView === 'final' && (
+        <div className="no-print" style={{
+          position: 'fixed', top: 33, left: 0, right: 0, bottom: 0, zIndex: 9998, background: '#525659',
+        }}>
+          {finalPdfUrl
+            ? <iframe title="Final PDF" src={finalPdfUrl} style={{ width: '100%', height: '100%', border: 0 }} />
+            : <div style={{ color: '#fff', textAlign: 'center', marginTop: 60, fontSize: 13 }}>
+                {desktop ? 'Rendering the final PDF…' : 'Final view needs the desktop app.'}
+              </div>}
         </div>
       )}
       <style>{`
@@ -6060,6 +6181,13 @@ export default function GSSIReportApp() {
             style={{ flex: 1, fontSize: 11, padding: '6px 8px' }}>
             👁 Preview saved PDF
           </Btn>
+          {desktop && (
+            <Btn variant={previewWinOpen ? 'ghost' : 'default'} onClick={togglePreviewWindow}
+              title="Open a separate, movable window that mirrors the PDF live as you edit"
+              style={{ fontSize: 11, padding: '6px 10px' }}>
+              {previewWinOpen ? '🪟 Close live preview' : '🪟 Live preview window'}
+            </Btn>
+          )}
           {import.meta.env.DEV && (
             <Btn variant="ghost" onClick={loadDemoReport}
               title="DEV ONLY — fill the current report with realistic sample data"

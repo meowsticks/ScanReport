@@ -63,4 +63,45 @@ contextBridge.exposeInMainWorld('akDesktop', {
   getVersionMode: () => ipcRenderer.invoke('version:get'),
   setVersionMode: (testMode, testUrl) =>
     ipcRenderer.invoke('version:set', { testMode, testUrl }),
+
+  // ---------- Live PDF preview window ----------
+  // A separate, movable window that mirrors what the saved PDF will look like.
+  // The editor pushes report state to it live; it shows a read-only render
+  // (no tools) so the engineer reviews exactly the document they'll send.
+
+  // Open the preview window (idempotent — focuses it if already open).
+  openPreview: () => ipcRenderer.invoke('preview:open'),
+  // Close the preview window.
+  closePreview: () => ipcRenderer.invoke('preview:close'),
+  // Is the preview window currently open?
+  isPreviewOpen: () => ipcRenderer.invoke('preview:is-open'),
+
+  // EDITOR → main → preview: push the latest report so the mirror updates live.
+  sendPreviewState: (report) => ipcRenderer.send('preview:state', report),
+  // EDITOR side: the preview window just opened and wants the current report.
+  onPreviewRequestState: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('preview:request-state', handler);
+    return () => ipcRenderer.removeListener('preview:request-state', handler);
+  },
+  // EDITOR side: the preview window was closed (so the toggle can update).
+  onPreviewClosed: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('preview:closed', handler);
+    return () => ipcRenderer.removeListener('preview:closed', handler);
+  },
+
+  // PREVIEW side: receive live report state from the editor.
+  onPreviewState: (cb) => {
+    const handler = (_e, report) => cb(report);
+    ipcRenderer.on('preview:state', handler);
+    return () => ipcRenderer.removeListener('preview:state', handler);
+  },
+  // PREVIEW side: tell the editor we're mounted and need the current report.
+  previewReady: () => ipcRenderer.send('preview:ready'),
+
+  // PREVIEW side ("Final" view): render the REAL PDF — the exact same
+  // printToPDF call that Save PDF uses, against the editor window — and get
+  // the bytes back so we can show the true paginated document.
+  renderPdf: () => ipcRenderer.invoke('preview:render-pdf'),
 });

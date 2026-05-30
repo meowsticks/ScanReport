@@ -44,6 +44,7 @@ const FILE_FILTERS = [
 ];
 
 let mainWindow = null;
+let previewWindow = null; // live PDF-preview mirror (separate, movable window)
 // A file path passed at launch (double-click / "Open with"), held until the
 // renderer asks for it via the 'app:get-launch-file' channel.
 let pendingOpenPath = pickFileFromArgv(process.argv);
@@ -92,14 +93,18 @@ function readVersionMode() {
 function writeVersionMode(pref) {
   try { fsSync.writeFileSync(versionPrefPath(), JSON.stringify(pref)); } catch {}
 }
-function loadContent(win) {
+// `hash` (e.g. 'preview') loads the same bundle into an alternate renderer
+// surface — the preview window passes 'preview' so main.jsx mounts the
+// read-only mirror instead of the editor.
+function loadContent(win, hash) {
   const distIndex = path.join(__dirname, '..', 'dist', 'index.html');
-  if (DEV_SERVER_URL) { win.loadURL(DEV_SERVER_URL); return; }
+  const h = hash ? '#' + hash : '';
+  if (DEV_SERVER_URL) { win.loadURL(DEV_SERVER_URL + h); return; }
   const pref = readVersionMode();
   if (pref.testMode && pref.testUrl) {
-    win.loadURL(pref.testUrl).catch(() => win.loadFile(distIndex)); // fall back if offline/bad URL
+    win.loadURL(pref.testUrl + h).catch(() => win.loadFile(distIndex, { hash })); // fall back if offline/bad URL
   } else {
-    win.loadFile(distIndex);
+    win.loadFile(distIndex, hash ? { hash } : undefined);
   }
 }
 
@@ -166,7 +171,48 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // The preview mirrors the editor — if the editor is gone, so is its purpose.
+    if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
+  });
+}
+
+// Live PDF-preview window: a second, movable window that loads the same
+// bundle in read-only "#preview" mode. It carries no tools — the editor pushes
+// report state to it over IPC and it renders exactly what the PDF will be.
+function createPreviewWindow() {
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    previewWindow.show();
+    previewWindow.focus();
+    return previewWindow;
+  }
+  previewWindow = new BrowserWindow({
+    width: 720,
+    height: 960,
+    minWidth: 420,
+    minHeight: 560,
+    title: 'PDF Preview',
+    backgroundColor: '#ffffff',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  loadContent(previewWindow, 'preview');
+  previewWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  previewWindow.on('closed', () => {
+    previewWindow = null;
+    // Let the editor flip its toggle back off.
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('preview:closed');
+  });
+  return previewWindow;
 }
 
 // ---------- IPC: filesystem access on behalf of the renderer ----------
@@ -228,6 +274,45 @@ ipcMain.handle('pdf:save', async (_e, { suggestedName, currentFilePath }) => {
 ipcMain.handle('shell:show', async (_e, filePath) => {
   if (filePath) shell.showItemInFolder(filePath);
   return true;
+});
+
+// ---------- IPC: live PDF preview window ----------
+
+ipcMain.handle('preview:open', () => {
+  const win = createPreviewWindow();
+  return !!win;
+});
+ipcMain.handle('preview:close', () => {
+  if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
+  return true;
+});
+ipcMain.handle('preview:is-open', () => !!(previewWindow && !previewWindow.isDestroyed()));
+
+// Editor pushed new state → forward it to the preview window's renderer.
+ipcMain.on('preview:state', (_e, report) => {
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    previewWindow.webContents.send('preview:state', report);
+  }
+});
+
+// Preview window mounted and wants the current report → ask the editor to send it.
+ipcMain.on('preview:ready', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('preview:request-state');
+  }
+});
+
+// "Final" view: render the REAL PDF off the editor window — the identical
+// printToPDF call Save PDF uses — and hand the bytes back to the preview
+// window so it can show the true, paginated document.
+ipcMain.handle('preview:render-pdf', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const data = await mainWindow.webContents.printToPDF({
+    printBackground: true,
+    preferCSSPageSize: true,
+    pageSize: 'Letter',
+  });
+  return data; // Buffer → arrives in the renderer as a Uint8Array
 });
 
 ipcMain.handle('shell:open-external', async (_e, url) => {
