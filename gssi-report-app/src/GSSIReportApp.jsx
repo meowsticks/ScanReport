@@ -5635,8 +5635,11 @@ export default function GSSIReportApp() {
         }
         @media print { .preview-bar { display: none !important; } }
         @media print {
-          @page { size: A4; margin: 1.5cm; }
-          @page cad { size: A4 landscape; margin: 1.0cm; }
+          /* US Letter to match Preview (8.5in × 11in) and the BC/Canada
+             letter-size-portrait intent noted in the README. Previously A4,
+             which silently disagreed with the on-screen Preview. */
+          @page { size: letter; margin: 1.5cm; }
+          @page cad { size: letter landscape; margin: 1.0cm; }
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }

@@ -11,11 +11,10 @@
 
 ## A. Bugs / inconsistencies spotted (fix without changing the look)
 
-- [ ] **A1 — Preview is sized to US Letter, PDF prints A4.** Preview shell is
-  `max-width: 8.5in` / `min-height: 11in` (lines 5578, 5583) but `@page { size: A4 }`
-  (line 5638). What you see in Preview is not the page you get in the PDF — margins,
-  wrapping, and page breaks all shift. Pick one (Letter for BC/Canada is the likely
-  intent given the README says "letter-size portrait") and make Preview + `@page` agree.
+- [x] **A1 — Preview is sized to US Letter, PDF prints A4.** ✅ FIXED — `@page` now
+  `size: letter` (and `letter landscape` for the CAD page) to match the Preview shell
+  (`8.5in × 11in`) and the README's "letter-size portrait" intent. Preview now reflects the
+  real PDF page.
 - [ ] **A2 — Three separate logo systems, one hardcoded source.** `LOGO_SRC` is a fixed
   file path (line 267) consumed by three unrelated render paths:
   `.brand-ribbon-mark` (line 6319), the centered hero `.ak-logo` (line 5995), and
