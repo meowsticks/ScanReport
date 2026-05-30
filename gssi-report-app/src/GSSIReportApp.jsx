@@ -6049,11 +6049,22 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
           .loc-scan-ref { page-break-inside: avoid; break-inside: avoid; }
 
           .scan-location-card {
+            /* Try to keep a card whole, but NEVER clip: if a card is taller
+               than the page it must flow onto the next page, not lose info.
+               overflow:visible overrides the inline overflow:hidden that was
+               cutting tall cards off at the page boundary. */
             page-break-inside: avoid;
             break-inside: avoid;
+            overflow: visible !important;
             border: 1px solid #999 !important;
             border-radius: 0 !important;
             margin-bottom: 14px;
+          }
+          /* Keep the red header attached to the start of its card. */
+          .scan-location-card .loc-header { break-after: avoid; page-break-after: avoid; }
+          /* Keep the photo (and its caption) together as one unit. */
+          .scan-location-card .loc-right, .scan-location-card .loc-photo {
+            page-break-inside: avoid; break-inside: avoid;
           }
           .scan-location-card .loc-header {
             background: #e02020 !important;
