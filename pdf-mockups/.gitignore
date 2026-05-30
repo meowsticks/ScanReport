@@ -4,3 +4,4 @@ node_modules/
 # Per-page PNG previews are regenerable from the build scripts — keep the
 # committed PDF as the source of truth, not the screenshots.
 ScanReport-midjob-p*.png
+testhtml-*.png
