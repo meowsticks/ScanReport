@@ -166,6 +166,16 @@ const logoData = 'data:image/png;base64,' + b64(path.join(DIST, 'kamikaze-logo.p
 js = js.split('./kamikaze-logo.png').join(logoData)
        .split('kamikaze-logo.png').join(logoData); // catch any unprefixed use
 
+// Inline the Caveat wordmark fonts referenced from the bundle's @font-face
+// url(./fonts/caveat-*.woff2) so the handwritten header works in this one file.
+for (const f of ['caveat-700.woff2', 'caveat-400.woff2']) {
+  const fp = path.join(DIST, 'fonts', f);
+  if (fs.existsSync(fp)) {
+    const data = 'data:font/woff2;base64,' + b64(fp);
+    js = js.split('./fonts/' + f).join(data).split('fonts/' + f).join(data);
+  }
+}
+
 // CRITICAL: when inlining a bundle into <script>, any literal "</script" inside
 // the JS would terminate the tag early (the HTML parser doesn't know JS). Escape
 // it so the browser sees the full module. Same guard for the CSS block.

@@ -266,50 +266,78 @@ const BRAND_TAGLINE = 'Know before you cut.';
 // (served at "/") and in the desktop build (loaded from a file:// path).
 const LOGO_SRC = `${import.meta.env.BASE_URL}kamikaze-logo.png`;
 
-// Dev-only debug fixture — loaded by the 🧪 Demo button in the setup bar
-// (visible only in `npm run dev`, stripped from prod builds). Lets the
-// engineer fill a realistic report in one tap so they can hit 👁 Preview
-// immediately and iterate on PDF styling without hand-typing every field.
+// Sample report — loaded by the "Load sample" button in the setup bar so an
+// engineer can see a fully filled, realistic report in one tap (and iterate on
+// PDF styling without hand-typing every field). A mid-sized multi-level job.
+// `type` values MUST match the target-type dropdown options or the select
+// silently falls back to "Rebar (top mat)".
 const DEMO_REPORT = {
   tier: 'full',
-  projectNo: 'AKCC-2026-0518',
-  jobNote: 'P2 parkade — Bay 14 slab penetration set',
-  scanDate: '2026-05-26',
-  client: 'Stuart Olson Construction',
-  siteAddress: '1133 Melville St, Vancouver BC',
-  scanArea: 'P2 parkade slab — between gridlines C-D / 4-5, total 22 sqm',
-  weather: '14°C overcast, slab dry',
+  projectNo: 'AKCC-2026-0431',
+  jobNote: 'Cedar Crossing podium — multi-level core clearance set',
+  scanDate: '2026-05-29',
+  client: 'Northpoint Construction Ltd.',
+  siteAddress: '8800 Cambie St, Vancouver BC',
+  scanArea: 'P1 / L2 / L3 suspended decks — 9 proposed cores across gridlines C-H, ~22.4 sqm scanned',
+  weather: '16°C overcast, slabs dry',
   surface: 'Dry',
-  slabThickness: '300 mm (per as-built)',
+  slabThickness: '300 mm (per as-built), L2 two-way PT',
   slabAge: '> 30 days cured',
   scanCoverage: '100%',
   serialNo: 'XMT-7741',
   firmware: '4.0.2',
   uncertaintyZones:
-    'Near east column footing (NE corner of scan area): rebar congestion gives ' +
-    'overlapping reflections — depth confidence below 200 mm is reduced. Daylight ' +
-    'verify before any core in that 0.5 m radius.',
+    'Grid H sits ~300 mm from the L2 slab edge with a low-amplitude zone beneath, ' +
+    'consistent with a void or delamination — depth confidence reduced in that 0.5 m radius. ' +
+    'Grid G shows a strong isolated reflection not matching rebar spacing; treat as unknown ' +
+    'until daylight-verified. Heavy second-mat congestion at Grid E reduces sub-100 mm clarity.',
   workflow: {
-    scanComplete:      '2026-05-26T09:45',
-    reportIssued:      '2026-05-26T11:30',
+    scanComplete:      '2026-05-29T10:15',
+    reportIssued:      '2026-05-29T13:40',
     clearedForCoring:  '',
   },
-  // Targets use schema: { id, type, depth, cover, note, confidence } — match
-  // addTarget() in the component or React renderers crash.
+  // Targets: { id, type, depth, cover, confidence, note }
   targets: [
-    { id: 'T-01', type: 'Rebar (top mat)',    depth: '50',  cover: '50',  confidence: 'high', note: '#4 @ 200 mm o/c' },
-    { id: 'T-02', type: 'Rebar (bottom mat)', depth: '230', cover: '70',  confidence: 'high', note: '#5 @ 250 mm o/c' },
-    { id: 'T-03', type: 'Post-tension cable', depth: '135', cover: '',    confidence: 'high', note: 'Two cables E-W, ~600 mm apart' },
-    { id: 'T-04', type: 'Conduit / unknown',  depth: '210', cover: '',    confidence: 'med',  note: '~25 mm dia, N-S near east edge' },
+    { id: 'T-01', type: 'Rebar (top mat)',        depth: '45',  cover: '45', confidence: 'high', note: '#4 @ 200 mm o/c — consistent across all three decks' },
+    { id: 'T-02', type: 'Rebar (top mat)',        depth: '95',  cover: '',   confidence: 'med',  note: 'L2 second mat — two-way congestion reduces sub-100 mm clarity' },
+    { id: 'T-03', type: 'Rebar (bottom mat)',     depth: '235', cover: '65', confidence: 'high', note: '#5 @ 250 mm o/c' },
+    { id: 'T-04', type: 'PT cable',               depth: '135', cover: '',   confidence: 'high', note: 'Single tendon crossing Grid B on a diagonal — DANGER' },
+    { id: 'T-05', type: 'Conduit (metallic)',     depth: '110', cover: '',   confidence: 'high', note: 'Energised electrical conduit beneath Grid C — treat as live' },
+    { id: 'T-06', type: 'Conduit (non-metallic)', depth: '160', cover: '',   confidence: 'med',  note: 'Hydronic radiant tubing loop, Grid F mechanical room' },
+    { id: 'T-07', type: 'Unknown anomaly',        depth: '90',  cover: '',   confidence: 'low',  note: 'Strong isolated metallic reflection, Grid G — verify intrusively' },
+    { id: 'T-08', type: 'Void',                   depth: '140', cover: '',   confidence: 'low',  note: 'Low-amplitude zone near Grid H slab edge — suspected void / delamination' },
   ],
-  // Cores use schema: { label, size, verdict, clearance, note }
+  // Cores: { label, size, verdict, clearance, note }
   cores: [
-    { label: 'A', size: '4"', verdict: 'safe',    clearance: '60 mm', note: 'Clear of all targets' },
-    { label: 'B', size: '6"', verdict: 'caution', clearance: '25 mm', note: 'PT cable within 25 mm — relocate 75 mm S' },
-    { label: 'C', size: '4"', verdict: 'nogo',    clearance: '0',     note: 'Directly over conduit; redesign required' },
+    { label: 'A', size: '4"', verdict: 'safe',    clearance: '65 mm', note: 'Clear of all targets — drill as marked' },
+    { label: 'B', size: '6"', verdict: 'caution', clearance: '30 mm', note: 'PT tendon within 30 mm — relocate 80 mm S, re-scan' },
+    { label: 'C', size: '4"', verdict: 'nogo',    clearance: '0',     note: 'Directly over energised conduit — do not drill, EOR redesign' },
+    { label: 'D', size: '8"', verdict: 'safe',    clearance: '55 mm', note: 'Clear at top mat; limit depth to 130 mm (bottom mat)' },
+    { label: 'E', size: '4"', verdict: 'caution', clearance: '18 mm', note: 'Two-mat congestion — tight, centre precisely' },
+    { label: 'F', size: '5"', verdict: 'safe',    clearance: '55 mm', note: 'Radiant tubing mapped & avoided — cleared' },
+    { label: 'G', size: '4"', verdict: 'nogo',    clearance: '0',     note: 'Unknown metallic at 90 mm — verify before drilling' },
+    { label: 'H', size: '6"', verdict: 'caution', clearance: '',      note: 'Near slab edge, suspected void — pilot slowly' },
+    { label: 'J', size: '4"', verdict: 'safe',    clearance: '70 mm', note: 'Single top mat, generous spacing — cleared' },
   ],
+  // Scan-location cards: { id, label, gridRef, photo, photoAnnotations, targetsPresent, verdict, clearance, notes, recommendation }
+  scanLocations: [
+    { id: 'L-a', label: 'Core A', gridRef: 'P1 · Bay 1 mid-span',    photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar only (~45 mm)',                  verdict: 'safe',    clearance: '65 mm', notes: 'Clear cone at the proposed centre — no targets within 65 mm in any direction.', recommendation: 'Safe to drill as marked.' },
+    { id: 'L-b', label: 'Core B', gridRef: 'P1 · Bay 2 column line', photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar + PT tendon (diagonal)',          verdict: 'caution', clearance: '30 mm', notes: 'A post-tension tendon crosses on a diagonal within 30 mm of the proposed centre.', recommendation: 'Relocate the core 80 mm south, clear of the tendon envelope, and re-scan before drilling.' },
+    { id: 'L-c', label: 'Core C', gridRef: 'P1 · Bay 2 wall line',   photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar + energised conduit (~110 mm)', verdict: 'nogo',    clearance: '0',     notes: 'Energised electrical conduit detected directly beneath the proposed centre at ~110 mm.', recommendation: 'No-go — do not drill; refer to the EOR for a redesigned core position.' },
+    { id: 'L-d', label: 'Core D', gridRef: 'P1 · Bay 3 mid-span',    photo: null, photoAnnotations: [], targetsPresent: 'Top + bottom mat',                              verdict: 'safe',    clearance: '55 mm', notes: 'Large-diameter (8") core clear at top mat; bottom mat noted at ~150 mm.', recommendation: 'Cleared — limit drill depth to 130 mm to stay clear of the bottom mat.' },
+    { id: 'L-e', label: 'Core E', gridRef: 'L2 · Bay 4 mid-span',    photo: null, photoAnnotations: [], targetsPresent: 'Top mat (~40 mm) + second mat (~95 mm)',       verdict: 'caution', clearance: '18 mm', notes: 'Heavy two-way reinforcement — top and second mats both present. Best clear gap at the mark is 18 mm.', recommendation: 'Workable for a 4" core if centred precisely; flag the tight tolerance to the operator.' },
+    { id: 'L-f', label: 'Core F', gridRef: 'L2 · mechanical room',   photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar + hydronic radiant tubing',     verdict: 'safe',    clearance: '55 mm', notes: 'Radiant floor-heating tubing mapped along the south of the grid and avoided.', recommendation: 'Cleared to drill as marked — 55 mm clear of both rebar and tubing.' },
+    { id: 'L-g', label: 'Core G', gridRef: 'L2 · Bay 5 wall line',   photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar + unidentified metallic object', verdict: 'nogo',    clearance: '0',     notes: 'A strong, isolated metallic reflection sits at ~90 mm directly below — not consistent with rebar spacing.', recommendation: 'No-go until its nature is confirmed by intrusive verification (small inspection hole).' },
+    { id: 'L-h', label: 'Core H', gridRef: 'L2 · slab edge',         photo: null, photoAnnotations: [], targetsPresent: 'Top-mat rebar + suspected void',              verdict: 'caution', clearance: '',      notes: 'Core sits ~300 mm from a slab edge with a low-amplitude zone suggesting a void/delamination beneath.', recommendation: 'Reduced confidence — proceed slowly with a pilot; stop and reassess if the bit breaks through.' },
+    { id: 'L-j', label: 'Core J', gridRef: 'L3 · Bay 1 mid-span',    photo: null, photoAnnotations: [], targetsPresent: 'Single top mat, generous spacing',           verdict: 'safe',    clearance: '70 mm', notes: 'Single top mat with wide bar spacing. 70 mm clear in all directions.', recommendation: 'Cleared to drill as marked.' },
+  ],
+  preparedBy: 'D. Cunningham',
+  preparedRole: 'Certified GPR Technician',
+  preparedCert: 'Decifer #DC-22841',
+  coreStandoff: '50 mm',
   brandFlourishes: true,
   enableColorLegend: true,
+  enableConfidenceBand: true,
 };
 
 const DEFAULT_REPORT = {
@@ -4384,7 +4412,9 @@ function ScanLocations({ report, update }) {
 
 function getAssistantTips(report) {
   const tips = [];
-  const need = (cond, level, text) => { if (cond) tips.push({ level, text }); };
+  // `anchor` is a SECTION_IDS id so the UI can offer a "Go" button that jumps
+  // straight to the spot the tip is about.
+  const need = (cond, level, text, anchor) => { if (cond) tips.push({ level, text, anchor }); };
 
   // Critical: PT slab needs explicit exclusion language
   if (report.slabType === 'PT') {
@@ -4393,22 +4423,22 @@ function getAssistantTips(report) {
       ((co.note || '') + ' ' + (co.clearance || '')).toLowerCase().includes('tendon')
     );
     need(!hasPtNote && (report.cores || []).length > 0, 'high',
-      'PT slab: at least one core should explicitly call out the tendon exclusion zone (e.g. "no cores within 300 mm of tendon band").');
+      'PT slab: at least one core should explicitly call out the tendon exclusion zone (e.g. "no cores within 300 mm of tendon band").', 'cores');
     const hasPtTarget = (report.targets || []).some(t => t.type && t.type.includes('PT'));
     need(!hasPtTarget && (report.targets || []).length > 0, 'med',
-      'PT slab but no PT cable target logged. If tendons are present, log them; if not visible on radargram, note it in uncertainty zones.');
+      'PT slab but no PT cable target logged. If tendons are present, log them; if not visible on radargram, note it in uncertainty zones.', 'targets');
   }
 
   // Cure status vs. depth confidence
   if (report.slabAge && report.slabAge.includes('green')) {
     need(true, 'med',
-      'Green concrete (<7 days): GPR signal is attenuated. Add a limitation noting reduced depth confidence and consider a follow-up scan after cure.');
+      'Green concrete (<7 days): GPR signal is attenuated. Add a limitation noting reduced depth confidence and consider a follow-up scan after cure.', 'limitations');
   }
 
   // Dielectric sanity check
   const eps = parseFloat(report.dielectric);
   need(!isNaN(eps) && (eps < 4 || eps > 12), 'med',
-    `Dielectric εr=${report.dielectric} is outside the typical concrete range (4–12). Verify calibration on a known target before relying on depths.`);
+    `Dielectric εr=${report.dielectric} is outside the typical concrete range (4–12). Verify calibration on a known target before relying on depths.`, 'equipment');
 
   // Coverage polygon: pins outside the scanned area
   const cov = report.coveragePolygon?.points || [];
@@ -4425,10 +4455,10 @@ function getAssistantTips(report) {
     };
     const outside = (report.diagramPins || []).filter(p => !pip(p));
     need(outside.length > 0, 'high',
-      `${outside.length} pin(s) sit outside the scanned coverage area. Either extend the scan or relocate the cores — drilling outside the scanned zone is high-risk.`);
+      `${outside.length} pin(s) sit outside the scanned coverage area. Either extend the scan or relocate the cores — drilling outside the scanned zone is high-risk.`, 'diagram');
   } else if ((report.diagramPins || []).length > 0 && (report.coveragePolygon?.points || []).length < 3) {
     need(true, 'low',
-      'Consider outlining the scanned coverage area on the diagram so the reviewer can tell what was vs. wasn\'t surveyed.');
+      'Consider outlining the scanned coverage area on the diagram so the reviewer can tell what was vs. wasn\'t surveyed.', 'diagram');
   }
 
   // Rebar mat summary populated?
@@ -4436,38 +4466,38 @@ function getAssistantTips(report) {
   if (rs && (report.targets || []).some(t => (t.type || '').toLowerCase().includes('rebar'))) {
     const blank = !rs.topBarSize && !rs.bottomBarSize && !rs.topSpacing && !rs.bottomSpacing;
     need(blank, 'low',
-      'Rebar targets logged but the mat summary is empty. Add bar size / spacing estimates so the EoR can back-calc capacity.');
+      'Rebar targets logged but the mat summary is empty. Add bar size / spacing estimates so the EoR can back-calc capacity.', 'coverSummary');
   }
 
   // Pin / core consistency
   const coresArr = report.cores || [];
   const pinsArr = report.diagramPins || [];
   need(coresArr.length > 0 && pinsArr.length === 0, 'med',
-    'You have core verdicts but no pins on the diagram. Pin each core location so the crew can find them.');
+    'You have core verdicts but no pins on the diagram. Pin each core location so the crew can find them.', 'diagram');
   need(coresArr.length > pinsArr.length && pinsArr.length > 0, 'low',
-    `${coresArr.length - pinsArr.length} core(s) without a matching pin on the diagram.`);
+    `${coresArr.length - pinsArr.length} core(s) without a matching pin on the diagram.`, 'diagram');
 
   // Pin datum references
   const pinsMissingDatum = pinsArr.filter(p => !p.datumA && !p.datumB);
   need(pinsMissingDatum.length > 0, 'med',
-    `${pinsMissingDatum.length} pin(s) missing datum offset. Chalk washes off — add at least one measured offset per pin.`);
+    `${pinsMissingDatum.length} pin(s) missing datum offset. Chalk washes off — add at least one measured offset per pin.`, 'diagram');
 
   // Drill envelope on safe cores
   const safeUnscoped = coresArr.filter(co =>
     co.verdict === 'safe' && (!co.drillMaxDepth || !co.drillDia)
   );
   need(safeUnscoped.length > 0, 'med',
-    `${safeUnscoped.length} safe core(s) without a drill envelope. State max bit Ø and max depth — the crew shouldn't have to guess.`);
+    `${safeUnscoped.length} safe core(s) without a drill envelope. State max bit Ø and max depth — the crew shouldn't have to guess.`, 'cores');
 
   // Cover essentials
-  need(!report.projectNo, 'low', 'Project number is blank.');
-  need(!report.client, 'low', 'Client field is blank.');
-  need(!report.siteAddress, 'low', 'Site address is blank.');
-  need(!report.preparedBy, 'med', 'Sign-off: prepared-by name is empty.');
+  need(!report.projectNo, 'low', 'Project number is blank.', 'cover');
+  need(!report.client, 'low', 'Client field is blank.', 'cover');
+  need(!report.siteAddress, 'low', 'Site address is blank.', 'cover');
+  need(!report.preparedBy, 'med', 'Sign-off: prepared-by name is empty.', 'signoff');
 
   // Revision sanity
   need(report.rev && report.rev !== '0' && !report.revNotes, 'low',
-    'Revision is past 0 — add a "Changes since last rev" note for the reviewer.');
+    'Revision is past 0 — add a "Changes since last rev" note for the reviewer.', 'signoff');
 
   // Custom user-added reminders — always shown, tagged so UI can offer delete
   const customs = (report.customReminders || []).map(r => ({
@@ -4493,11 +4523,24 @@ function Assistant({ report, update }) {
   const tips = useMemo(() => getAssistantTips(report), [report]);
   if (!report.assistantOn) return null;
 
+  // Red / amber / green importance — solid dot so the priority reads at a
+  // glance (matches the verdict palette). 'dot' is the at-a-glance swatch.
   const tone = {
-    high: { bd: c.red, bg: c.redBg, fg: c.redStrong, icon: '⚠' },
-    med:  { bd: c.amber, bg: c.amberBg, fg: c.amberStrong, icon: '•' },
-    low:  { bd: c.border, bg: c.cardAlt, fg: c.textDim, icon: '·' },
-    ok:   { bd: c.green, bg: c.greenBg, fg: c.greenStrong, icon: '✓' },
+    high: { bd: '#c0282d', bg: c.redBg,   fg: c.redStrong,   dot: '#c0282d', icon: '⚠' },
+    med:  { bd: '#b8770a', bg: c.amberBg, fg: c.amberStrong, dot: '#d9a35a', icon: '•' },
+    low:  { bd: '#9a9a9a', bg: c.cardAlt, fg: c.textDim,     dot: '#9a9a9a', icon: '·' },
+    ok:   { bd: '#1d7a3a', bg: c.greenBg, fg: c.greenStrong, dot: '#1d7a3a', icon: '✓' },
+  };
+  // Jump to the report section a tip refers to and flash it, so the engineer
+  // is taken straight to the spot the assistant is talking about.
+  const jumpTo = (anchor) => {
+    if (!anchor) return;
+    const el = document.querySelector('.ak-sec-' + anchor);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.style.transition = 'box-shadow 0.4s';
+    el.style.boxShadow = `0 0 0 3px ${c.accent}`;
+    setTimeout(() => { el.style.boxShadow = ''; }, 1500);
   };
 
   const addCustom = () => {
@@ -4544,13 +4587,27 @@ function Assistant({ report, update }) {
             const s = tone[t.level];
             return (
               <div key={t.customId || i} style={{
-                background: s.bg, borderLeft: `3px solid ${s.bd}`,
+                background: s.bg, borderLeft: `4px solid ${s.bd}`,
                 padding: '7px 9px', marginBottom: 6, borderRadius: '0 6px 6px 0',
                 fontSize: 12, color: c.text, lineHeight: 1.4,
-                display: 'flex', alignItems: 'flex-start', gap: 6,
+                display: 'flex', alignItems: 'flex-start', gap: 7,
               }}>
-                <span style={{ color: s.fg, fontWeight: 700, flexShrink: 0 }}>{s.icon}</span>
+                {/* solid red/amber/green dot = importance at a glance */}
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%', background: s.dot,
+                  flexShrink: 0, marginTop: 3,
+                }} title={t.level === 'high' ? 'High importance' : t.level === 'med' ? 'Medium importance' : t.level === 'ok' ? 'All good' : 'Low importance'} />
                 <span style={{ flex: 1 }}>{t.text}</span>
+                {t.anchor && (
+                  <button onClick={() => jumpTo(t.anchor)}
+                    title="Jump to this section"
+                    style={{
+                      background: s.bd, border: 'none', color: '#fff',
+                      cursor: 'pointer', fontSize: 10, fontWeight: 800, lineHeight: 1,
+                      padding: '3px 7px', borderRadius: 4, flexShrink: 0,
+                      letterSpacing: 0.5, textTransform: 'uppercase',
+                    }}>Go →</button>
+                )}
                 {t.customId && (
                   <button onClick={() => removeCustom(t.customId)}
                     title="Delete this custom reminder"
@@ -5198,13 +5255,14 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
   // jump straight to 👁 Preview without typing every field. Visible in
   // `npm run dev` only; stripped from prod by Vite (import.meta.env.DEV).
   const loadDemoReport = () => {
-    if (!window.confirm('Overwrite current report with demo data?')) return;
-    setReport(r => {
-      const next = { ...r, ...DEMO_REPORT };
-      const id = currentIdRef.current;
-      if (id) saveReport(id, next);
-      return next;
-    });
+    // Only nag if the current report already has real data to lose.
+    const hasData = (report.targets || []).length || (report.cores || []).length ||
+      report.projectNo || report.client;
+    if (hasData && !window.confirm('Load the sample report? This replaces the current report.')) return;
+    const next = { ...DEFAULT_REPORT, ...DEMO_REPORT };
+    const id = currentIdRef.current;
+    if (id) saveReport(id, next);
+    setReport(next);
   };
 
   // ---------- Targets ----------
@@ -5610,6 +5668,12 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
         </div>
       )}
       <style>{`
+        /* Caveat — the handwritten wordmark font. Bundled in public/fonts so it
+           works offline (real app + single-file build alike). */
+        @font-face{font-family:'Caveat';font-weight:700;font-display:swap;
+          src:url(${import.meta.env.BASE_URL}fonts/caveat-700.woff2) format('woff2');}
+        @font-face{font-family:'Caveat';font-weight:400;font-display:swap;
+          src:url(${import.meta.env.BASE_URL}fonts/caveat-400.woff2) format('woff2');}
         .print-only { display: none; }
         /* In Preview mode, treat the page as if it were printing — so the
            brand ribbon (logo + company name pinned to the very top of the
@@ -5628,14 +5692,17 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
           height: 44px; width: auto; flex-shrink: 0;
           filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
         }
-        .brand-ribbon-text { line-height: 1.2; }
+        .brand-ribbon-text { line-height: 1.05; }
+        /* Two-tone handwritten wordmark: company in ink, division in brand red. */
         .brand-ribbon-title {
-          font-size: 11pt; font-weight: 800;
-          color: var(--ak-text); letter-spacing: 0.3px;
+          font-family: 'Caveat', 'Segoe Script', cursive;
+          font-size: 26pt; font-weight: 700; letter-spacing: 0.3px;
         }
+        .brand-ribbon-title .nm-co  { color: var(--ak-text); }
+        .brand-ribbon-title .nm-div { color: var(--ak-accent); font-size: 18pt; display: block; margin-top: -2px; }
         .brand-ribbon-tagline {
           font-size: 9.5pt; font-style: italic;
-          color: var(--ak-accent); margin-top: 2px;
+          color: var(--ak-accent); margin-top: 3px;
         }
         .brand-signoff {
           margin-top: 18px; padding-top: 10px;
@@ -5645,7 +5712,8 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
         }
         @media print {
           .brand-ribbon { background: #fafafa; }
-          .brand-ribbon-title { color: #111; }
+          .brand-ribbon-title .nm-co { color: #111; }
+          .brand-ribbon-title .nm-div { color: #c0282d; }
           .brand-ribbon-tagline { color: #a32626; }
           .brand-signoff { color: #555; border-top-color: #ccc; }
         }
@@ -5653,7 +5721,8 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
            these, the title renders white-on-light (invisible) since the
            dark-theme var(--ak-text) is still in effect on screen. */
         body.preview-mode .brand-ribbon { background: #fafafa !important; }
-        body.preview-mode .brand-ribbon-title { color: #111 !important; }
+        body.preview-mode .brand-ribbon-title .nm-co { color: #111 !important; }
+        body.preview-mode .brand-ribbon-title .nm-div { color: #c0282d !important; }
         body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
         body.preview-mode .brand-signoff { color: #555 !important; border-top-color: #ccc !important; }
         .scan-location-card.dragging,
@@ -6191,13 +6260,11 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
               {previewWinOpen ? '🪟 Close live preview' : '🪟 Live preview window'}
             </Btn>
           )}
-          {import.meta.env.DEV && (
-            <Btn variant="ghost" onClick={loadDemoReport}
-              title="DEV ONLY — fill the current report with realistic sample data"
-              style={{ fontSize: 11, padding: '6px 10px' }}>
-              🧪 Demo
-            </Btn>
-          )}
+          <Btn variant="ghost" onClick={loadDemoReport}
+            title="Fill the report with a realistic sample job so you can see a finished report"
+            style={{ fontSize: 11, padding: '6px 10px' }}>
+            📋 Load sample
+          </Btn>
         </div>
       </div>
       {!setupCollapsed && (<>
@@ -6453,7 +6520,7 @@ export default function GSSIReportApp({ previewOnly = false } = {}) {
         <div className="print-only brand-ribbon">
           <img src={LOGO_SRC} alt="" className="brand-ribbon-mark" />
           <div className="brand-ribbon-text">
-            <div className="brand-ribbon-title">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
+            <div className="brand-ribbon-title"><span className="nm-co">Aggarwal Kamikazes</span><span className="nm-div">Cutting &amp; Coring Ltd.</span></div>
             <div className="brand-ribbon-tagline">{BRAND_TAGLINE}</div>
           </div>
         </div>
