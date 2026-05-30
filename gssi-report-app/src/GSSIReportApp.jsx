@@ -742,10 +742,13 @@ function ExecutiveSummary({ report }) {
     if (cs.includes('med')) return 'med';
     return 'high';
   }, [report.cores]);
+  // Solid background + white text so the rating is legible (the old faint-tint
+  // pill made green text blend into the green background). Matches the
+  // verdict-pill palette used elsewhere in the report.
   const confMeta = {
-    high: { label: 'HIGH', color: c.green, bg: c.greenBg },
-    med:  { label: 'MEDIUM', color: c.amber, bg: c.amberBg },
-    low:  { label: 'LOW', color: c.red, bg: c.redBg },
+    high: { label: 'HIGH',   color: '#fff', bg: '#1d7a3a' },
+    med:  { label: 'MEDIUM', color: '#fff', bg: '#b8770a' },
+    low:  { label: 'LOW',    color: '#fff', bg: '#c0282d' },
   }[confidence] || null;
 
   const overallVerdict =
