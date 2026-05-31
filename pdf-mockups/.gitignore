@@ -5,3 +5,6 @@ node_modules/
 # committed PDF as the source of truth, not the screenshots.
 ScanReport-midjob-p*.png
 testhtml-*.png
+# Header/divider decision renders — regenerable from build-options.mjs
+header-*.png
+div-*.png
