@@ -320,6 +320,10 @@ const DEFAULT_REPORT = {
   assistantOn: true,
   customReminders: [],  // [{ id, text, level: 'high'|'med'|'low' }]
 
+  // Report status — drives the DRAFT watermark on PDF/print exports.
+  // 'draft' (default) stamps a diagonal DRAFT watermark; 'issued' exports clean.
+  status: 'draft',       // 'draft' | 'issued'
+
   // Cover
   projectNo: '',
   jobNote: '',           // short description used to make saved file names recognizable
@@ -5531,6 +5535,17 @@ export default function GSSIReportApp() {
         body.preview-mode .brand-ribbon-title { color: #111 !important; }
         body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
         body.preview-mode .brand-signoff { color: #555 !important; border-top-color: #ccc !important; }
+        /* === DRAFT watermark (report.status === 'draft') ===
+           Additive diagonal overlay. Fixed so Chrome repeats it on every
+           printed page. Pure translucent grey — does NOT alter the locked-in
+           PDF palette (white paper, black text, brand-red headers). */
+        .draft-watermark {
+          position: fixed; inset: 0; z-index: 9000;
+          pointer-events: none; display: none;
+        }
+        .draft-watermark svg { width: 100%; height: 100%; }
+        @media print { .draft-watermark { display: block !important; } }
+        body.preview-mode .draft-watermark { display: block !important; }
         .scan-location-card.dragging,
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
@@ -5909,6 +5924,20 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
+            title={report.status === 'issued'
+              ? 'Issued — PDF exports are clean. Click to mark back to Draft.'
+              : 'Draft — PDF exports carry a DRAFT watermark. Click to mark as Issued.'}
+            aria-label="Toggle draft / issued status"
+            style={{
+              background: report.status === 'issued' ? c.greenBg : c.amberBg,
+              color: report.status === 'issued' ? c.green : c.amber,
+              border: `1px solid ${report.status === 'issued' ? c.green : c.amber}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+            }}>
+            {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
+          </button>
           <SyncControl auth={auth} sync={sync} c={c} />
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
@@ -6262,6 +6291,18 @@ export default function GSSIReportApp() {
 
       {/* === REPORT BODY (flex column; section order set via CSS) === */}
       <div className="report-body">
+        {/* === DRAFT watermark — print/preview only, while status !== 'issued' === */}
+        {report.status !== 'issued' && (
+          <div className="draft-watermark" aria-hidden="true">
+            <svg viewBox="0 0 1000 1300" preserveAspectRatio="xMidYMid meet">
+              <text x="500" y="700" textAnchor="middle"
+                transform="rotate(-30 500 660)"
+                fontFamily="Helvetica, Arial, sans-serif"
+                fontSize="230" fontWeight="800" letterSpacing="14"
+                fill="#9ca3af" fillOpacity="0.18">DRAFT</text>
+            </svg>
+          </div>
+        )}
 
       {/* === SAME-DAY WORKFLOW STATUS === */}
       <Card title="Workflow status" dense className={ph('workflowStatus')}>
