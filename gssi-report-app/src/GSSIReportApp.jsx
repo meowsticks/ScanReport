@@ -5596,6 +5596,33 @@ export default function GSSIReportApp() {
         .report-body { display: flex; flex-direction: column; }
         .report-body > .brand-ribbon  { order: -100; }
         .report-body > .brand-signoff { order: 100000; }
+        /* === v2: 3-column responsive workspace shell (screen only) === */
+        .ws-grid { display: block; }
+        .ws-nav, .ws-rail { display: none; }
+        @media (min-width: 900px) {
+          .ws-grid {
+            display: grid;
+            grid-template-columns: 172px minmax(0, 1fr) 208px;
+            gap: 18px; align-items: start;
+          }
+          .ws-nav, .ws-rail { display: block; position: sticky; top: 12px; align-self: start; }
+        }
+        .ws-nav .sep {
+          font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+          color: ${c.textFaint}; margin: 0 0 6px 11px;
+        }
+        .ws-nav .ni {
+          display: block; width: 100%; text-align: left; cursor: pointer;
+          background: transparent; border: 0; border-left: 2px solid transparent;
+          color: ${c.textDim}; font: inherit; font-size: 12px; line-height: 1.3;
+          padding: 6px 11px; border-radius: 0 7px 7px 0; margin-bottom: 1px;
+          transition: background .12s, color .12s, border-color .12s;
+        }
+        .ws-nav .ni:hover { background: ${c.cardAlt}; color: ${c.text}; border-left-color: ${c.accent}; }
+        @media print {
+          .ws-grid { display: block !important; }
+          .ws-nav, .ws-rail { display: none !important; }
+        }
         /* CAD-page on-screen container (matches the print landscape look loosely) */
         .cad-page {
           background: #fff; color: #000;
@@ -6064,8 +6091,8 @@ export default function GSSIReportApp() {
       <style>{`
         /* Responsive shell — phone first, breathes on wider screens */
         .ak-shell { max-width: 720px; }
-        @media (min-width: 900px)  { .ak-shell { max-width: 820px; padding-left: 20px; padding-right: 20px; } }
-        @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
+        @media (min-width: 900px)  { .ak-shell { max-width: 1180px; padding-left: 20px; padding-right: 20px; } }
+        @media (min-width: 1200px) { .ak-shell { max-width: 1280px; padding-left: 28px; padding-right: 28px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
           .ak-header .ak-logo { height: 110px !important; }
@@ -6316,7 +6343,21 @@ export default function GSSIReportApp() {
       }</style>
 
       {/* === REPORT BODY (flex column; section order set via CSS) === */}
-      <div className="report-body">
+      <div className="ws-grid">
+      {/* LEFT: jump-nav — scrolls via existing .ak-sec-<id> classes. Screen only. */}
+      <nav className="ws-nav no-print" aria-label="Report sections">
+        <div className="sep">Report</div>
+        {effectiveOrder.filter(id => vis(id)).map(id => {
+          const L = { workflowStatus: 'Workflow', summary: 'Summary', cover: 'Project', slab: 'Slab', targets: 'Targets', findings: 'Findings', coverSummary: 'Cover depths', diagram: 'Diagram', drawingNotes: 'Drawing notes', scanPhotos: 'Photos', zones: 'Zones', locations: 'Scan locations', proposedCores: 'Proposed cores', gprScans: 'GPR scans', cores: 'Core verdicts', uncertainty: 'Uncertainty', equipment: 'Equipment', methods: 'Methods', limitations: 'Limitations', standardNotes: 'Std notes', cadPage: 'CAD page', disclaimer: 'Disclaimer', signoff: 'Sign-off' };
+          return (
+            <button key={id} type="button" className="ni"
+              onClick={() => { const el = document.querySelector('.ak-sec-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              {L[id] || id}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="report-body ws-main">
         {/* === DRAFT watermark — print/preview only, while status !== 'issued' === */}
         {report.status !== 'issued' && (
           <div className="draft-watermark" aria-hidden="true">
@@ -7296,6 +7337,35 @@ export default function GSSIReportApp() {
       )}
 
       </div>{/* === END REPORT BODY === */}
+      {/* RIGHT: At-a-glance rail — live core verdict tallies. Screen only. */}
+      <aside className="ws-rail no-print" aria-label="At a glance">
+        <Card title="At a glance" dense>
+          {(() => {
+            const cc = report.cores.reduce((a, co) => { a[co.verdict] = (a[co.verdict] || 0) + 1; return a; }, {});
+            const rows = [
+              { label: 'Safe',    n: cc.safe || 0,    color: c.greenStrong },
+              { label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
+              { label: 'No-go',   n: cc.nogo || 0,    color: c.redStrong },
+            ];
+            const cell = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px' };
+            return (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {rows.map(r => (
+                  <div key={r.label} style={cell}>
+                    <span style={{ fontSize: 12, color: c.textDim }}>{r.label}</span>
+                    <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
+                  </div>
+                ))}
+                <div style={cell}>
+                  <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
+                  <b style={{ fontSize: 14, color: c.text }}>{report.cores.length} · {report.targets.length}</b>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      </aside>
+      </div>{/* === END WS-GRID === */}
 
       {/* === ACTIONS === */}
       <div className="no-print" style={{
