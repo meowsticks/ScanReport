@@ -87,6 +87,17 @@ const DEFAULT_REPORT = {
   egbcEnabled: false,   // Off by default — most scan reports aren't P.Eng stamped
   permitNo: '',
   signDate: new Date().toISOString().slice(0, 10),
+
+  // Marking colours — must match the scanner's chalk on the slab. Editable + addable;
+  // these drive the site-diagram draw tools and the report legend so there's one colour key.
+  markings: [
+    { key: 'rebar',   label: 'Rebar',          color: '#FAC775' },
+    { key: 'pt',      label: 'PT cable',        color: '#F09595' },
+    { key: 'conduit', label: 'Conduit',        color: '#9BC5E8' },
+    { key: 'note',    label: 'Note / other',   color: '#5DCAA5' },
+  ],
+  // Scan-photo display size in the cards (percent)
+  photoScale: 100,
 };
 
 // ============================================================
@@ -105,8 +116,9 @@ const c = {
   text: '#e6edf3',
   textDim: '#8a96a3',
   textFaint: '#5d6874',
-  accent: '#4a9eff',       // steel blue — engineering primary
-  accentDim: '#1f4d80',
+  accent: '#7aa2c8',       // steel — v2 accent (lightened slate for the dark UI)
+  accentDim: '#314c68',
+  accent2: '#a9caea',      // brighter steel for highlights/focus rings
   green: '#3fb950',
   greenBg: '#0d2818',
   greenStrong: '#56d364',
@@ -122,13 +134,14 @@ const c = {
 // UI Primitives
 // ============================================================
 
-const Card = ({ title, badge, children, dense, accent }) => (
-  <div style={{
+const Card = ({ title, badge, children, dense, accent, id }) => (
+  <div id={id} style={{
     background: c.card,
     border: `1px solid ${accent ? c.accent : c.border}`,
     borderRadius: 10,
     padding: dense ? 12 : 14,
     marginBottom: 12,
+    scrollMarginTop: 16,
     ...(accent && { boxShadow: `0 0 0 1px ${c.accentDim}` }),
   }}>
     {title && (
@@ -501,12 +514,9 @@ function SiteDiagram({ report, update, setReport }) {
   const [drawing, setDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState(null);
 
-  const toolColors = {
-    'draw-rebar': '#FAC775',
-    'draw-pt': '#F09595',
-    'draw-conduit': '#9BC5E8',
-    'draw-note': '#5DCAA5',
-  };
+  // colours come from the editable report markings (one source of truth)
+  const toolColors = {};
+  (report.markings || []).forEach(m => { toolColors['draw-' + m.key] = m.color; });
 
   const coveragePoints = report.coveragePolygon?.points || [];
 
@@ -880,7 +890,7 @@ export default function GSSIReportApp() {
     cores: [...report.cores, {
       label: String.fromCharCode(65 + report.cores.length),
       size: '4"', verdict: 'safe', clearance: '', note: '',
-      drillDia: '', drillMaxDepth: '',
+      drillDia: '', drillMaxDepth: '', photo: null,
     }],
   });
   const updateCore = (i, patch) => {
@@ -889,6 +899,41 @@ export default function GSSIReportApp() {
     update({ cores: next });
   };
   const removeCore = (i) => update({ cores: report.cores.filter((_, j) => j !== i) });
+  // downscale phone photos so several fit in localStorage (~5 MB cap)
+  const downscalePhoto = (file, maxDim, cb) => {
+    const r = new FileReader();
+    r.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { cb(canvas.toDataURL('image/jpeg', 0.82)); }
+        catch { cb(ev.target.result); }
+      };
+      img.onerror = () => cb(ev.target.result);
+      img.src = ev.target.result;
+    };
+    r.readAsDataURL(file);
+  };
+  const readCorePhoto = (i, e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    downscalePhoto(file, 1280, (dataUrl) => updateCore(i, { photo: dataUrl }));
+    e.target.value = '';
+  };
+
+  // ---------- Marking colours (match the chalk on the slab) ----------
+  const updateMarking = (i, patch) => {
+    const next = [...(report.markings || [])];
+    next[i] = { ...next[i], ...patch };
+    update({ markings: next });
+  };
+  const addMarking = () => update({
+    markings: [...(report.markings || []), { key: 'm' + Math.random().toString(36).slice(2, 7), label: 'New marking', color: '#cccccc' }],
+  });
+  const removeMarking = (i) => update({ markings: (report.markings || []).filter((_, j) => j !== i) });
 
   // ---------- Export ----------
   const exportJSON = () => {
@@ -925,7 +970,7 @@ export default function GSSIReportApp() {
     <div style={{
       background: c.bg, minHeight: '100vh', color: c.text,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '14px 12px 100px', maxWidth: 760, margin: '0 auto',
+      padding: '14px 14px 100px', maxWidth: 1180, margin: '0 auto',
     }}>
       <style>{`
         @media print {
@@ -941,6 +986,25 @@ export default function GSSIReportApp() {
         input:focus, textarea:focus, select:focus {
           outline: none; border-color: ${c.accent};
         }
+        /* === direction-3 responsive workspace shell === */
+        .ws-grid { display: grid; grid-template-columns: 178px 1fr 220px; gap: 16px; align-items: start; }
+        .ws-nav, .ws-rail { position: sticky; top: 12px; align-self: start; }
+        .ws-nav .ni {
+          display: block; width: 100%; text-align: left; background: transparent;
+          border: 0; border-left: 3px solid transparent; color: ${c.textDim};
+          font: inherit; font-size: 12.5px; padding: 7px 11px; border-radius: 0 7px 7px 0;
+          cursor: pointer; margin-bottom: 1px; transition: background .12s, color .12s, border-color .12s;
+        }
+        .ws-nav .ni:hover { background: ${c.cardAlt}; color: ${c.text}; border-left-color: ${c.accent}; }
+        .ws-nav .sep { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: ${c.textFaint};
+          text-transform: uppercase; margin: 14px 0 5px 11px; }
+        .ws-nav .sep:first-child { margin-top: 0; }
+        @media (max-width: 900px) {
+          .ws-grid { grid-template-columns: 1fr; }
+          .ws-nav { display: none; }
+          .ws-rail { position: static; }
+        }
+        @media print { .ws-grid { display: block; } .ws-nav, .ws-rail { display: none !important; } }
       `}</style>
 
       {/* === HEADER === */}
@@ -973,6 +1037,22 @@ export default function GSSIReportApp() {
         >🤖 Assistant {report.assistantOn ? 'On' : 'Off'}</button>
       </div>
 
+      <div className="ws-grid">
+        <nav className="ws-nav no-print">
+          <div className="sep">Report</div>
+          {[
+            ['sec-project', 'Project'], ['sec-slab', 'Slab context'], ['sec-targets', 'Targets'],
+            ['sec-rebar', 'Rebar mat'], ['sec-settings', 'Markings & photos'], ['sec-cores', 'Core verdicts'],
+            ['sec-equip', 'Equipment'], ['sec-signoff', 'Sign-off'],
+          ].map(([sid, label]) => (
+            <button key={sid} className="ni" type="button"
+              onClick={() => { const el = document.getElementById(sid); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="ws-main">
+
       {/* === TIER PICKER === */}
       <Card title="Report tier" dense>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
@@ -1002,7 +1082,7 @@ export default function GSSIReportApp() {
       <ExecutiveSummary report={report} />
 
       {/* === COVER === */}
-      <Card title="Project info">
+      <Card id="sec-project" title="Project info">
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
           <Field label="Project number">
             <Input value={report.projectNo} onChange={e => update({ projectNo: e.target.value })} placeholder="VAN-2026-0341" />
@@ -1039,7 +1119,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === SLAB CONTEXT === */}
-      <Card title="Slab context">
+      <Card id="sec-slab" title="Slab context">
         <Field label="Slab type" hint={
           report.slabType === 'PT'
             ? '⚠ PT slab — call out explicit no-core exclusion zones around tendon bands.'
@@ -1109,7 +1189,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === FINDINGS === */}
-      <Card title="Targets identified" badge={
+      <Card id="sec-targets" title="Targets identified" badge={
         <span style={{
           background: c.cardAlt, color: c.textDim, fontSize: 11,
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -1218,7 +1298,7 @@ export default function GSSIReportApp() {
         const rs = report.rebarSummary;
         const updRS = (patch) => update({ rebarSummary: { ...rs, ...patch } });
         return (
-          <Card title="Rebar mat summary" badge={
+          <Card id="sec-rebar" title="Rebar mat summary" badge={
             <span style={{
               background: c.cardAlt, color: c.textDim, fontSize: 11,
               padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -1273,11 +1353,48 @@ export default function GSSIReportApp() {
         );
       })()}
 
+      {/* === MARKING COLOURS & PHOTO SETTINGS === */}
+      <Card id="sec-settings" title="Marking colours & photo size">
+        <div style={{ fontSize: 11.5, color: c.textDim, marginBottom: 11, lineHeight: 1.5 }}>
+          Set these to match your chalk on the slab. The same colours flow into the site diagram and the report legend — one colour key, no confusion.
+        </div>
+        {(report.markings || []).map((m, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <input type="color" value={m.color} onChange={e => updateMarking(i, { color: e.target.value })}
+              style={{ width: 38, height: 34, border: `1px solid ${c.border}`, borderRadius: 6, background: c.cardAlt, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
+            <Input value={m.label} onChange={e => updateMarking(i, { label: e.target.value })} placeholder="Marking name (e.g. Conduit)" style={{ flex: 1 }} />
+            <Btn variant="ghost" onClick={() => removeMarking(i)} style={{ padding: '7px 10px', fontSize: 12 }}>✕</Btn>
+          </div>
+        ))}
+        <Btn onClick={addMarking} style={{ width: '100%', marginTop: 4 }}>+ Add marking colour</Btn>
+
+        <div style={{ marginTop: 13, paddingTop: 11, borderTop: `1px solid ${c.border}` }}>
+          <div style={{ fontSize: 10, color: c.textFaint, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, fontWeight: 600 }}>Legend preview · prints on the report</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px 16px' }}>
+            {(report.markings || []).map((m, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.text }}>
+                <span style={{ width: 18, height: 4, borderRadius: 2, background: m.color, flexShrink: 0 }} /> {m.label || '—'}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, paddingTop: 11, borderTop: `1px solid ${c.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 10.5, color: c.textDim, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, marginBottom: 9 }}>
+            <span>Scan photo size</span><span style={{ color: c.accent2, fontWeight: 800, fontSize: 13 }}>{report.photoScale}%</span>
+          </div>
+          <input type="range" min="60" max="180" step="5" value={report.photoScale}
+            onChange={e => update({ photoScale: Number(e.target.value) })}
+            style={{ width: '100%', accentColor: c.accent }} />
+          <div style={{ fontSize: 11, color: c.textFaint, marginTop: 5 }}>Bigger photos make on-image annotations easier to read.</div>
+        </div>
+      </Card>
+
       {/* === SITE DIAGRAM === */}
       <SiteDiagram report={report} update={update} setReport={setReport} />
 
       {/* === CORE VERDICTS === */}
-      <Card title="Drill / core verdicts" badge={
+      <Card id="sec-cores" title="Drill / core verdicts" badge={
         <span style={{
           background: c.cardAlt, color: c.textDim, fontSize: 11,
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -1289,11 +1406,31 @@ export default function GSSIReportApp() {
             caution: { color: c.amber, bg: c.amberBg, label: '⚠ Caution' },
             nogo:    { color: c.red,   bg: c.redBg,   label: '✕ Do not drill' },
           }[co.verdict];
+          const ps = (report.photoScale || 100) / 100;
+          const phW = Math.round(132 * ps), phH = Math.round(104 * ps);
           return (
             <div key={i} style={{
               borderLeft: `3px solid ${v.color}`, background: v.bg,
               padding: '9px 11px', borderRadius: '0 6px 6px 0', marginBottom: 7,
+              display: 'flex', gap: 10, alignItems: 'flex-start',
             }}>
+              {/* scan photo (left) */}
+              <div style={{ width: phW, flexShrink: 0 }}>
+                {co.photo ? (
+                  <div style={{ position: 'relative' }}>
+                    <img src={co.photo} alt="scan" style={{ width: '100%', height: phH, objectFit: 'cover', borderRadius: 6, display: 'block', border: `1px solid ${c.border}` }} />
+                    <button onClick={() => updateCore(i, { photo: null })} title="Remove photo"
+                      style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%', border: 'none', background: 'rgba(10,16,22,.72)', color: '#fff', fontSize: 11, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+                  </div>
+                ) : (
+                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, height: phH, border: `1px dashed ${c.borderStrong}`, borderRadius: 6, color: c.textDim, fontSize: 10.5, cursor: 'pointer', background: c.cardAlt, textAlign: 'center', padding: 4 }}>
+                    <span style={{ fontSize: 18 }}>📷</span> Add scan photo
+                    <input type="file" accept="image/*" capture="environment" onChange={e => readCorePhoto(i, e)} style={{ display: 'none' }} />
+                  </label>
+                )}
+              </div>
+              {/* details (right) */}
+              <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Input value={co.label} onChange={e => updateCore(i, { label: e.target.value })}
@@ -1323,6 +1460,7 @@ export default function GSSIReportApp() {
               <Input value={co.note} onChange={e => updateCore(i, { note: e.target.value })}
                 placeholder="Instructions for crew"
                 style={{ padding: '5px 9px', fontSize: 12 }} />
+              </div>{/* /details */}
             </div>
           );
         })}
@@ -1344,7 +1482,7 @@ export default function GSSIReportApp() {
 
       {/* === EQUIPMENT & CALIBRATION (standard + full) === */}
       {showCalibration && (
-        <Card title="Equipment & calibration">
+        <Card id="sec-equip" title="Equipment & calibration">
           {showFullEquipment && (
             <>
               <Field label="Scanner">
@@ -1420,7 +1558,7 @@ export default function GSSIReportApp() {
       )}
 
       {/* === SIGN-OFF === */}
-      <Card title="Authorship & review">
+      <Card id="sec-signoff" title="Authorship & review">
         <Field label="Prepared by">
           <Input value={report.preparedBy} onChange={e => update({ preparedBy: e.target.value })} placeholder="Technician name" />
         </Field>
@@ -1472,6 +1610,41 @@ export default function GSSIReportApp() {
           <Input type="date" value={report.signDate} onChange={e => update({ signDate: e.target.value })} />
         </Field>
       </Card>
+
+        </div>{/* ws-main */}
+        <aside className="ws-rail no-print">
+          {(() => {
+            const cc = report.cores.reduce((a, co) => { a[co.verdict] = (a[co.verdict] || 0) + 1; return a; }, {});
+            const rows = [
+              { label: 'Safe', n: cc.safe || 0, color: c.greenStrong },
+              { label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
+              { label: 'No-go', n: cc.nogo || 0, color: c.redStrong },
+            ];
+            return (
+              <Card title="At a glance" dense>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {rows.map(r => (
+                    <div key={r.label} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px',
+                    }}>
+                      <span style={{ fontSize: 12, color: c.textDim }}>{r.label}</span>
+                      <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
+                    </div>
+                  ))}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px',
+                  }}>
+                    <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
+                    <b style={{ fontSize: 15, color: c.text }}>{report.cores.length} · {report.targets.length}</b>
+                  </div>
+                </div>
+              </Card>
+            );
+          })()}
+        </aside>
+      </div>{/* ws-grid */}
 
       {/* === ACTIONS === */}
       <div className="no-print" style={{

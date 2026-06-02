@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AK ScanReport — brand accent options (red is now a marking colour)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:#d9dde2;color:#141414;padding:22px;-webkit-font-smoothing:antialiased}
+  h1{font-size:15px;letter-spacing:.02em;margin-bottom:4px}
+  .sub{font-size:12px;color:#555;margin-bottom:16px;max-width:1080px;line-height:1.5}
+  .sub b{color:#c0282d}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1100px}
+
+  /* marking colours (fixed across every option) */
+  :root{--t-top:#141414;--t-bot:#1f5fd0;--t-cond:#c0282d;--t-pt:#e8620c;}
+
+  .panel{background:#fff;border:1px solid #ccc;border-radius:8px;padding:0;overflow:hidden}
+  .tag{font-size:11px;font-weight:800;letter-spacing:.04em;padding:7px 12px;color:#fff;display:flex;justify-content:space-between;align-items:center}
+  .tag .note{font-weight:600;opacity:.85;font-size:9.5px}
+  .body{padding:14px 16px 16px}
+
+  /* mini letterhead */
+  .lh{display:flex;align-items:center;gap:11px;border-bottom:3px solid var(--acc);padding-bottom:9px}
+  .lh img{width:46px;height:46px}
+  .nm1{font-family:'Caveat',cursive;font-weight:700;font-size:20pt;line-height:.85;color:#141414}
+  .nm2{font-family:'Caveat',cursive;font-weight:700;font-size:13pt;line-height:.95;color:var(--acc)}
+  .sub2{font-size:6.5pt;color:#666;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-top:4px}
+
+  h2{font-size:10pt;font-weight:800;letter-spacing:.05em;color:#141414;border-left:4px solid var(--acc);
+     padding:2px 0 2px 8px;margin:14px 0 8px;text-transform:uppercase}
+
+  .card{border:1px solid #d6d6d6;border-left:4px solid var(--acc);border-radius:5px;margin:8px 0}
+  .card .hd{font-weight:800;font-size:9.5pt;padding:6px 10px 0;display:flex;justify-content:space-between;align-items:baseline}
+  .card .hd .r{font-weight:600;color:#888;font-size:8pt}
+  .card .bd{padding:4px 10px 9px}
+  .card .obs{font-size:8.5pt;line-height:1.45;color:#222}
+  .pill{display:inline-block;font-size:7pt;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:9px;color:#fff;background:#1d7a3a}
+
+  .mkey{display:flex;flex-wrap:wrap;gap:5px 13px;align-items:center;font-size:7.5pt;margin-top:11px;
+        border-top:1px solid #eee;padding-top:9px}
+  .mkey .kt{font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#666;font-size:7pt}
+  .mkey .k{display:flex;align-items:center;gap:5px;color:#222}
+  .mkey .sw{width:15px;height:0;border-top:3px solid;border-radius:2px}
+  .mkey .sw.dot{width:10px;height:10px;border-top:0;border-radius:50%}
+  .mkey .sw.top{border-color:var(--t-top);background:var(--t-top)}
+  .mkey .sw.bot{border-color:var(--t-bot);background:var(--t-bot)}
+  .mkey .sw.cond{border-color:var(--t-cond);background:var(--t-cond)}
+  .mkey .sw.pt{border-color:var(--t-pt);background:var(--t-pt)}
+
+  .verdict{font-size:9px;margin-top:9px;font-weight:600}
+  .verdict.good{color:#1d7a3a}
+  .verdict.bad{color:#b03}
+</style>
+</head>
+<body>
+  <h1>Brand accent — pick a direction</h1>
+  <div class="sub">Now that <b>red = conduit</b> (and black = top rebar, blue = bottom rebar), the report's accent colour should ideally stay clear of those so a marking never gets confused with page chrome. Each panel keeps the same marking key (bottom row) so you can judge how well <b>conduit-red</b> reads against the chrome.</div>
+
+  <div class="grid">
+
+    <!-- OPTION 1 -->
+    <div class="panel">
+      <div class="tag" style="background:#c0282d">Option 1 — Brand red (current)<span class="note">red does double duty</span></div>
+      <div class="body" style="--acc:#c0282d">
+        <div class="lh"><img src="logo-small.png" alt=""><div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="sub2">GPR Concrete Scanning</div></div></div>
+        <h2>Scan Locations</h2>
+        <div class="card"><div class="hd">Core A · Bay 1 mid-span <span class="r">80 mm Ø</span></div><div class="bd"><div class="obs">Clear cone at centre; no targets in scan window.</div><div style="margin-top:5px"><span class="pill">Safe</span></div></div></div>
+        <div class="mkey"><span class="kt">Marking</span><span class="k"><span class="sw top"></span>Top rebar</span><span class="k"><span class="sw bot"></span>Bottom rebar</span><span class="k"><span class="sw cond"></span>Conduit</span><span class="k"><span class="sw pt"></span>PT tendon</span></div>
+        <div class="verdict bad">✗ Chrome red and conduit red are the same — the marking loses its “this is a conduit” punch.</div>
+      </div>
+    </div>
+
+    <!-- OPTION 2 -->
+    <div class="panel">
+      <div class="tag" style="background:#1e2430">Option 2 — Graphite / near-black<span class="note">red reserved for conduit</span></div>
+      <div class="body" style="--acc:#1e2430">
+        <div class="lh"><img src="logo-small.png" alt=""><div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="sub2">GPR Concrete Scanning</div></div></div>
+        <h2>Scan Locations</h2>
+        <div class="card"><div class="hd">Core A · Bay 1 mid-span <span class="r">80 mm Ø</span></div><div class="bd"><div class="obs">Clear cone at centre; no targets in scan window.</div><div style="margin-top:5px"><span class="pill">Safe</span></div></div></div>
+        <div class="mkey"><span class="kt">Marking</span><span class="k"><span class="sw top"></span>Top rebar</span><span class="k"><span class="sw bot"></span>Bottom rebar</span><span class="k"><span class="sw cond"></span>Conduit</span><span class="k"><span class="sw pt"></span>PT tendon</span></div>
+        <div class="verdict good">✓ Neutral, lets the safety colours lead — but black is also the top-rebar marking, so a black heading bar lives near a black dot.</div>
+      </div>
+    </div>
+
+    <!-- OPTION 3 -->
+    <div class="panel">
+      <div class="tag" style="background:#9c4e52">Option 3 — Muted brick<span class="note">warmth kept, conduit pops</span></div>
+      <div class="body" style="--acc:#9c4e52">
+        <div class="lh"><img src="logo-small.png" alt=""><div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="sub2">GPR Concrete Scanning</div></div></div>
+        <h2>Scan Locations</h2>
+        <div class="card"><div class="hd">Core A · Bay 1 mid-span <span class="r">80 mm Ø</span></div><div class="bd"><div class="obs">Clear cone at centre; no targets in scan window.</div><div style="margin-top:5px"><span class="pill">Safe</span></div></div></div>
+        <div class="mkey"><span class="kt">Marking</span><span class="k"><span class="sw top"></span>Top rebar</span><span class="k"><span class="sw bot"></span>Bottom rebar</span><span class="k"><span class="sw cond"></span>Conduit</span><span class="k"><span class="sw pt"></span>PT tendon</span></div>
+        <div class="verdict good">✓ Keeps a red-family identity; the desaturated brick reads clearly apart from the saturated conduit red — but they’re still close.</div>
+      </div>
+    </div>
+
+    <!-- OPTION 4 -->
+    <div class="panel">
+      <div class="tag" style="background:#33414f">Option 4 — Steel slate (my pick)<span class="note">app-theme tie-in, no marking clash</span></div>
+      <div class="body" style="--acc:#33414f">
+        <div class="lh"><img src="logo-small.png" alt=""><div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="sub2">GPR Concrete Scanning</div></div></div>
+        <h2>Scan Locations</h2>
+        <div class="card"><div class="hd">Core A · Bay 1 mid-span <span class="r">80 mm Ø</span></div><div class="bd"><div class="obs">Clear cone at centre; no targets in scan window.</div><div style="margin-top:5px"><span class="pill">Safe</span></div></div></div>
+        <div class="mkey"><span class="kt">Marking</span><span class="k"><span class="sw top"></span>Top rebar</span><span class="k"><span class="sw bot"></span>Bottom rebar</span><span class="k"><span class="sw cond"></span>Conduit</span><span class="k"><span class="sw pt"></span>PT tendon</span></div>
+        <div class="verdict good">✓ Muted blue-grey ties to the app’s steel theme, stays well clear of the saturated marking blue, and reserves red/black/blue/orange purely for markings.</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AK ScanReport — gold treatments for the header company name</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#d9dde2;color:#141414;padding:22px;-webkit-font-smoothing:antialiased}
+  h1{font-size:15px;margin-bottom:3px}
+  .sub{font-size:12px;color:#555;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:1080px}
+  .panel{background:#fff;border:1px solid #cfd3d8;border-radius:8px;overflow:hidden}
+  .tag{font-size:11px;font-weight:800;letter-spacing:.03em;color:#fff;background:#33414f;padding:6px 12px;display:flex;justify-content:space-between;align-items:center}
+  .tag .d{font-weight:600;opacity:.8;font-size:9.5px}
+  .tag.pick{background:linear-gradient(90deg,#9c7c2c,#caa54e)}
+  .body{padding:16px 18px 18px;display:flex;align-items:center;gap:13px}
+  .body img{width:54px;height:54px;flex-shrink:0}
+  .nm1{font-family:'Caveat',cursive;font-weight:700;font-size:25pt;line-height:.82;--base:#141414;color:var(--base)}
+  .nm2{font-family:'Caveat',cursive;font-weight:700;font-size:16pt;line-height:.95;--base:#33414f;color:var(--base);margin-top:-1px}
+  .st{font-size:6.5pt;color:#666;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-top:5px}
+  .print-adjust{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* 1 — current: subtle gold shadow (letters keep colour) */
+  .o-shadow .nm1, .o-shadow .nm2 { text-shadow:0.5px 1px 0 rgba(166,130,40,.55), 0 0 3px rgba(212,172,66,.28); }
+
+  /* 2 — gilt edge: fine gold outline over the base fill */
+  .o-edge .nm1, .o-edge .nm2 { -webkit-text-stroke:0.5px #bf982f; text-shadow:0 0 2px rgba(212,172,66,.22); }
+
+  /* 3 — top sheen: gold fades into the base colour (overlay on upper part) */
+  .o-sheen .nm1, .o-sheen .nm2 {
+    background-image:linear-gradient(180deg,#ead07a 0%,#caa64a 32%, var(--base) 42%, var(--base) 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+
+  /* 4 — antique gold fill: muted metallic, deeper than bright */
+  .o-antique .nm1, .o-antique .nm2 {
+    background-image:linear-gradient(165deg,#6e5212 0%,#9c7c2c 42%,#c2a049 60%,#7a5c18 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    text-shadow:0 1px 1px rgba(120,90,20,.18);
+  }
+
+  /* 5 — bright metallic fill (the first version — for reference) */
+  .o-bright .nm1, .o-bright .nm2 {
+    background-image:linear-gradient(168deg,#6b4f12 0%,#b8902f 24%,#f6e6ad 45%,#d9b84a 56%,#9a7320 74%,#6b4f12 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+
+  /* 6 — MY PICK: gilded — base letters + fine gold edge + the subtle gold shadow */
+  .o-pick .nm1, .o-pick .nm2 {
+    -webkit-text-stroke:0.32px rgba(184,144,47,.92);
+    text-shadow:0.5px 1px 0 rgba(150,116,34,.5), 0 0 4px rgba(212,172,66,.30);
+  }
+</style>
+</head>
+<body>
+  <h1>Header company name — gold treatments</h1>
+  <div class="sub">Same wordmark, six ways. The subtitle stays slate in every one; gold is on the company name only.</div>
+
+  <div class="grid">
+
+    <div class="panel o-shadow">
+      <div class="tag">1 · Subtle gold shadow <span class="d">current</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+    <div class="panel o-edge">
+      <div class="tag">2 · Gilt edge <span class="d">gold outline</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+    <div class="panel o-sheen">
+      <div class="tag">3 · Top sheen <span class="d">gold fades into colour</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+    <div class="panel o-antique">
+      <div class="tag">4 · Antique gold fill <span class="d">muted metallic</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+    <div class="panel o-bright">
+      <div class="tag">5 · Bright metallic <span class="d">first version — too much</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+    <div class="panel o-pick">
+      <div class="tag pick">6 · Gilded ★ <span class="d">my pick — shadow + fine gold edge</span></div>
+      <div class="body print-adjust">
+        <img src="logo-small.png" alt="">
+        <div><div class="nm1">Aggarwal Kamikazes</div><div class="nm2">Cutting &amp; Coring Ltd.</div><div class="st">GPR Concrete Scanning</div></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

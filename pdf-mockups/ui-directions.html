@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Scan Report UI — direction options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#c9ced4;color:#141414;padding:20px}
+  h1{font-size:15px;margin-bottom:3px}
+  .sub{font-size:12px;color:#555;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:1120px}
+  .panel{background:#fff;border:1px solid #c2c7cd;border-radius:9px;overflow:hidden}
+  .ptag{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#2b3440;color:#fff;font-size:12px;font-weight:800}
+  .ptag.pick{background:linear-gradient(90deg,#33414f,#4a6076)}
+  .fr{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:10px}
+  .fr.low{background:#1d7a3a;color:#fff}.fr.med{background:#b8770a;color:#fff}.fr.high{background:#8a1f24;color:#fff}.fr.pick{background:#caa23a;color:#1a1408}
+  .stage{padding:14px;display:flex;justify-content:center}
+  .stage.dark,.stage.desk,.stage.mix{background:#0a0e13}
+  .stage.paper{background:#dfe3e8}
+  .cap{font-size:11px;color:#555;padding:9px 12px;border-top:1px solid #eee;line-height:1.45}
+
+  /* ---- shared editor slice ---- */
+  .ed{width:360px;border-radius:11px;overflow:hidden;font-size:12px;box-shadow:0 10px 26px rgba(0,0,0,.35)}
+  .ed.wide{width:660px}
+  .ed .top{display:flex;align-items:center;gap:9px;padding:9px 11px;font-weight:800;font-size:12.5px}
+  .ed .top img{width:22px;height:22px;border-radius:4px}
+  .ed .top .sp{flex:1}
+  .ed .pdf{font-size:9.5px;font-weight:700;padding:5px 10px;border-radius:7px}
+  .ed .sl{font-size:9px;font-weight:800;letter-spacing:.11em;padding:11px 12px 5px}
+  .ed .card{margin:0 12px 10px;border-radius:9px;padding:9px 11px;border-left:4px solid}
+  .ed .ch{display:flex;justify-content:space-between;align-items:baseline}
+  .ed .ct{font-weight:800;font-size:12px}.ed .cl{font-weight:500}
+  .ed .pill{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:9px;color:#fff;white-space:nowrap}
+  .ed .csub{font-size:10.5px;margin-top:4px}
+  .ed .fl{margin-top:9px;display:flex;flex-direction:column;gap:8px}
+  .ed .fr2{display:grid;grid-template-columns:1fr 64px;gap:8px}
+  .ed label{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:3px}
+  .ed .inp,.ed .ta{border-radius:6px;padding:6px 8px;font-size:10.5px}
+  .ed .ta{min-height:30px}
+  .ed .vs{display:flex;gap:6px}
+  .ed .vb{flex:1;text-align:center;padding:6px;border-radius:6px;font-size:9.5px;font-weight:700}
+  .ed .editpill{float:right;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:10px}
+  .pill.safe{background:#1d7a3a}.pill.caution{background:#b8770a}.pill.nogo{background:#8a1f24}
+  .card.safe{border-left-color:#3fb950}.card.caution{border-left-color:#d29922}.card.nogo{border-left-color:#f85149}
+
+  /* ===== DARK ===== */
+  .dark .ed{background:#0f1419}
+  .dark .top{background:linear-gradient(180deg,#1b2532,#141b24);color:#e6edf3;border-bottom:1px solid #232c38}
+  .dark .pdf{background:linear-gradient(180deg,#3f618a,#314c68);border:1px solid #5278a0;color:#fff}
+  .dark .sl{color:#5d6874}
+  .dark .card{background:#1a2530;border:1px solid #232c38}
+  .dark .card.foc{background:#1b2734;box-shadow:0 0 0 1.5px #7aa2c8,0 14px 26px -12px rgba(0,0,0,.6)}
+  .dark .ct{color:#e6edf3}.dark .cl{color:#8a96a3}.dark .csub{color:#9aa6b2}
+  .dark label{color:#8a96a3}
+  .dark .inp,.dark .ta{background:#0f1721;border:1px solid #2a3744;color:#e6edf3}
+  .dark .vb{background:#0f1721;border:1px solid #2a3744;color:#8a96a3}
+  .dark .vb.on{border-color:#f85149;color:#ff7b72;background:rgba(248,81,73,.14)}
+  .dark .editpill{color:#a9caea;background:rgba(122,162,200,.16);border:1px solid rgba(122,162,200,.4)}
+
+  /* ===== PAPER ===== */
+  .paper .ed{background:#eef1f4}
+  .paper .top{background:#fff;color:#141414;border-bottom:1px solid #e2e2e2}
+  .paper .pdf{background:#33414f;color:#fff}
+  .paper .sl{color:#8a8f96}
+  .paper .card{background:#fff;border:1px solid #e2e2e2}
+  .paper .card.foc{box-shadow:0 0 0 1.5px #33414f,0 12px 24px -12px rgba(0,0,0,.25)}
+  .paper .ct{color:#141414}.paper .cl{color:#666}.paper .csub{color:#444}
+  .paper label{color:#666}
+  .paper .inp,.paper .ta{background:#f6f7f9;border:1px solid #d6d6d6;color:#222}
+  .paper .vb{background:#f6f7f9;border:1px solid #d6d6d6;color:#666}
+  .paper .vb.on{border-color:#8a1f24;color:#8a1f24;background:#fbeded}
+  .paper .editpill{color:#33414f;background:#e8edf2;border:1px solid #ccd5dd}
+
+  /* ===== MIX (dark shell + paper cards) ===== */
+  .mix .ed{background:#10161d}
+  .mix .top{background:linear-gradient(180deg,#1b2532,#141b24);color:#e6edf3;border-bottom:1px solid #232c38}
+  .mix .pdf{background:linear-gradient(180deg,#3f618a,#314c68);border:1px solid #5278a0;color:#fff}
+  .mix .sl{color:#6b7b8c}
+  .mix .card{background:#fff;border:1px solid #d6dde4}
+  .mix .card.foc{box-shadow:0 0 0 1.5px #7aa2c8,0 14px 26px -12px rgba(0,0,0,.6)}
+  .mix .ct{color:#141414}.mix .cl{color:#666}.mix .csub{color:#444}
+  .mix label{color:#666}
+  .mix .inp,.mix .ta{background:#f6f7f9;border:1px solid #d6d6d6;color:#222}
+  .mix .vb{background:#f6f7f9;border:1px solid #d6d6d6;color:#666}
+  .mix .vb.on{border-color:#8a1f24;color:#8a1f24;background:#fbeded}
+  .mix .editpill{color:#33414f;background:#e8edf2;border:1px solid #ccd5dd}
+
+  /* ===== DESKTOP 3-col ===== */
+  .desk .ed{display:grid;grid-template-columns:108px 1fr 132px;background:#0f1419}
+  .desk .nav{background:linear-gradient(180deg,#141b24,#11171f);padding:11px 8px;font-size:10.5px}
+  .desk .nav .ni{padding:6px 8px;border-radius:7px;color:#8a96a3;margin-bottom:2px}
+  .desk .nav .ni.on{background:rgba(122,162,200,.18);color:#fff;border-left:3px solid #7aa2c8}
+  .desk .mn{padding:11px 6px}
+  .desk .top{grid-column:1/4;background:linear-gradient(180deg,#1b2532,#141b24);color:#e6edf3;border-bottom:1px solid #232c38}
+  .desk .pdf{background:linear-gradient(180deg,#3f618a,#314c68);border:1px solid #5278a0;color:#fff}
+  .desk .sl{color:#5d6874;padding:2px 6px 6px}
+  .desk .card{margin:0 0 9px;background:#1a2530;border:1px solid #232c38}
+  .desk .card.foc{background:#1b2734;box-shadow:0 0 0 1.5px #7aa2c8}
+  .desk .ct{color:#e6edf3}.desk .cl{color:#8a96a3}.desk .csub{color:#9aa6b2}
+  .desk label{color:#8a96a3}
+  .desk .inp,.desk .ta{background:#0f1721;border:1px solid #2a3744;color:#e6edf3}
+  .desk .vb{background:#0f1721;border:1px solid #2a3744;color:#8a96a3}
+  .desk .vb.on{border-color:#f85149;color:#ff7b72;background:rgba(248,81,73,.14)}
+  .desk .editpill{color:#a9caea;background:rgba(122,162,200,.16);border:1px solid rgba(122,162,200,.4)}
+  .desk .rail{background:linear-gradient(180deg,#141b24,#11171f);padding:11px 9px;font-size:9px}
+  .desk .rt{color:#5d6874;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px}
+  .desk .stat{display:flex;justify-content:space-between;background:#11171f;border:1px solid #232c38;border-radius:6px;padding:6px 8px;margin-bottom:5px}
+  .desk .stat b{font-size:13px}
+</style></head>
+<body>
+  <h1>Scan Report UI — pick a direction</h1>
+  <div class="sub">Same content (a focused/expanded core card + a collapsed one), four ways. All use the locked PDF's colours: steel slate accent, green/amber/red verdicts.</div>
+
+  <div class="grid">
+
+    <!-- 1 DARK -->
+    <div class="panel">
+      <div class="ptag">1 · Field-first dark editor <span class="fr low">Lowest friction</span></div>
+      <div class="stage dark">
+        <div class="ed">
+          <div class="top"><img src="logo-small.png"><span>AK ScanReport</span><span class="sp"></span><span class="pdf">⎙ Print</span></div>
+          <div class="sl">SCAN LOCATIONS</div>
+          <div class="card nogo foc">
+            <span class="editpill">● Editing</span>
+            <div class="ch"><div class="ct">Core E · <span class="cl">Bay 3 mid-span</span></div></div>
+            <div class="fl">
+              <div class="fr2"><div><label>Location</label><div class="inp">Bay 3 mid-span</div></div><div><label>Ø</label><div class="inp">100 mm</div></div></div>
+              <div><label>Observation</label><div class="ta">Two PT tendons run NE–SW through the proposed core; cannot be cleared.</div></div>
+              <div class="vs"><span class="vb">Safe</span><span class="vb">Caution</span><span class="vb on">No-go</span></div>
+            </div>
+          </div>
+          <div class="card safe"><div class="ch"><div class="ct">Core A · <span class="cl">Bay 1 mid-span</span></div><span class="pill safe">Safe</span></div><div class="csub">0.9 m × 0.9 m · clear cone at centre.</div></div>
+        </div>
+      </div>
+      <div class="cap">Dark tool, white PDF output. App is already dark + single-column → mostly a re-skin + the focus-expand. Best for on-site phone/tablet.</div>
+    </div>
+
+    <!-- 2 PAPER -->
+    <div class="panel">
+      <div class="ptag">2 · Paper-style light editor <span class="fr med">Medium</span></div>
+      <div class="stage paper">
+        <div class="ed">
+          <div class="top"><img src="logo-small.png"><span>AK ScanReport</span><span class="sp"></span><span class="pdf">⎙ Print</span></div>
+          <div class="sl">SCAN LOCATIONS</div>
+          <div class="card nogo foc">
+            <span class="editpill">● Editing</span>
+            <div class="ch"><div class="ct">Core E · <span class="cl">Bay 3 mid-span</span></div></div>
+            <div class="fl">
+              <div class="fr2"><div><label>Location</label><div class="inp">Bay 3 mid-span</div></div><div><label>Ø</label><div class="inp">100 mm</div></div></div>
+              <div><label>Observation</label><div class="ta">Two PT tendons run NE–SW through the proposed core; cannot be cleared.</div></div>
+              <div class="vs"><span class="vb">Safe</span><span class="vb">Caution</span><span class="vb on">No-go</span></div>
+            </div>
+          </div>
+          <div class="card safe"><div class="ch"><div class="ct">Core A · <span class="cl">Bay 1 mid-span</span></div><span class="pill safe">Safe</span></div><div class="csub">0.9 m × 0.9 m · clear cone at centre.</div></div>
+        </div>
+      </div>
+      <div class="cap">Editing looks like the printed page — white cards, slate accents. Tightest match to the locked PDF, but inverts today's dark theme.</div>
+    </div>
+
+    <!-- 4 MIX (pick) -->
+    <div class="panel">
+      <div class="ptag pick">★ Dark shell + paper cards <span class="fr pick">My pick</span></div>
+      <div class="stage mix">
+        <div class="ed">
+          <div class="top"><img src="logo-small.png"><span>AK ScanReport</span><span class="sp"></span><span class="pdf">⎙ Print</span></div>
+          <div class="sl">SCAN LOCATIONS</div>
+          <div class="card nogo foc">
+            <span class="editpill">● Editing</span>
+            <div class="ch"><div class="ct">Core E · <span class="cl">Bay 3 mid-span</span></div></div>
+            <div class="fl">
+              <div class="fr2"><div><label>Location</label><div class="inp">Bay 3 mid-span</div></div><div><label>Ø</label><div class="inp">100 mm</div></div></div>
+              <div><label>Observation</label><div class="ta">Two PT tendons run NE–SW through the proposed core; cannot be cleared.</div></div>
+              <div class="vs"><span class="vb">Safe</span><span class="vb">Caution</span><span class="vb on">No-go</span></div>
+            </div>
+          </div>
+          <div class="card safe"><div class="ch"><div class="ct">Core A · <span class="cl">Bay 1 mid-span</span></div><span class="pill safe">Safe</span></div><div class="csub">0.9 m × 0.9 m · clear cone at centre.</div></div>
+        </div>
+      </div>
+      <div class="cap">Dark field-friendly chrome (top bar/nav) but the cards are <b>white paper — exactly the PDF card</b> you're building. Best of both, still low friction.</div>
+    </div>
+
+    <!-- 3 DESKTOP -->
+    <div class="panel">
+      <div class="ptag">3 · Responsive desktop workspace <span class="fr high">Most friction</span></div>
+      <div class="stage desk">
+        <div class="ed wide">
+          <div class="top"><img src="logo-small.png"><span>AK ScanReport</span><span class="sp"></span><span class="pdf">⎙ Print</span></div>
+          <div class="nav">
+            <div class="ni">Cover</div><div class="ni">Equipment</div><div class="ni on">Locations</div><div class="ni">Targets</div><div class="ni">Rebar</div><div class="ni">Sign-off</div><div class="ni">Disclaimer</div>
+          </div>
+          <div class="mn">
+            <div class="sl">SCAN LOCATIONS</div>
+            <div class="card nogo foc">
+              <span class="editpill">● Editing</span>
+              <div class="ch"><div class="ct">Core E · <span class="cl">Bay 3 mid-span</span></div></div>
+              <div class="fl">
+                <div class="fr2"><div><label>Location</label><div class="inp">Bay 3 mid-span</div></div><div><label>Ø</label><div class="inp">100 mm</div></div></div>
+                <div><label>Observation</label><div class="ta">Two PT tendons run NE–SW through the proposed core.</div></div>
+                <div class="vs"><span class="vb">Safe</span><span class="vb">Caution</span><span class="vb on">No-go</span></div>
+              </div>
+            </div>
+            <div class="card safe"><div class="ch"><div class="ct">Core A · <span class="cl">Bay 1 mid-span</span></div><span class="pill safe">Safe</span></div><div class="csub">clear cone at centre.</div></div>
+          </div>
+          <div class="rail">
+            <div class="rt">At a glance</div>
+            <div class="stat" style="color:#56d364"><span>Safe</span><b>10</b></div>
+            <div class="stat" style="color:#e3b341"><span>Caution</span><b>4</b></div>
+            <div class="stat" style="color:#ff7b72"><span>No-go</span><b>2</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">The full mockup layout (nav · main · stats) on a laptop, collapsing to single-column on mobile. Most "designed", biggest structural change.</div>
+    </div>
+
+  </div>
+</body></html>

@@ -1,0 +1,3 @@
+# transient render/verify artifacts (regenerable from the HTML mockups)
+_*.png
+_*.txt
