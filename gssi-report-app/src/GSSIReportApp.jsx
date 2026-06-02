@@ -5550,9 +5550,12 @@ export default function GSSIReportApp() {
           border-bottom: 3px solid #141414; padding-bottom: 11px; margin-bottom: 14px;
         }
         .report-body > .ak-lh { order: -100; }
-        .ak-lh-logo { height: 78px; width: auto; }
+        .ak-lh-logo { height: 78px; width: auto; filter: drop-shadow(0 2px 3px rgba(176,138,30,.45)); }
         .ak-lh-nm1 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 34pt; line-height: .82; color: #141414; }
-        .ak-lh-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 22pt; line-height: .9; color: #c0282d; }
+        .ak-lh-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 22pt; line-height: .9; color: #6b7682; }
+        /* Red left-accent on section cards (focus) + faint gold lift — mirrors the locked PDF */
+        @media print { .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; } }
+        body.preview-mode .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; }
         .ak-lh-sub { font-size: 8pt; color: #555; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
         .ak-lh-addr { font-size: 7.5pt; color: #777; margin-top: 4px; line-height: 1.45; }
         .ak-lh-box { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
