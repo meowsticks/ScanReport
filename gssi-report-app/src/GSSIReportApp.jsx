@@ -6601,11 +6601,13 @@ export default function GSSIReportApp() {
                       <option>Pan decking</option>
                       <option>Unknown anomaly</option>
                     </Select>
+                    <span className="no-print" style={{ display: 'contents' }}>
                     <Btn variant="ghost" onClick={() => moveTarget(i, -1)} disabled={i === 0}
                       title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                     <Btn variant="ghost" onClick={() => moveTarget(i, 1)} disabled={i === report.targets.length - 1}
                       title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.targets.length - 1 ? 0.35 : 1 }}>▼</Btn>
                     <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                    </span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
                     <Input placeholder="Depth (mm)" value={t.depth}
@@ -6998,7 +7000,7 @@ export default function GSSIReportApp() {
                   <Input value={co.size} onChange={e => updateCore(i, { size: e.target.value })}
                     placeholder='4"' style={{ width: 56, padding: '4px 6px', fontSize: 12 }} />
                 </div>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div className="no-print" style={{ display: 'flex', gap: 4 }}>
                   <Btn variant="ghost" onClick={() => moveCore(i, -1)} disabled={i === 0}
                     title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                   <Btn variant="ghost" onClick={() => moveCore(i, 1)} disabled={i === report.cores.length - 1}
