@@ -1590,7 +1590,7 @@ function SiteDiagram({ report, update }) {
           <img src={diagramSrc(report)} alt="Site"
             style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
         ) : (
-          <div style={{
+          <div className="no-print" style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: c.textFaint, fontSize: 12, textAlign: 'center', padding: 20,
@@ -1628,6 +1628,10 @@ function SiteDiagram({ report, update }) {
           }}
         />
       </div>
+      {/* Editor chrome (toolbar, tools, sliders, undo/clear, legend) — wrapped
+          no-print so the saved PDF / preview shows only the diagram itself,
+          never the editing controls. */}
+      <div className="no-print">
       {/* Photo toolbar — sits OUTSIDE the canvas so the Remove button can't
           land on the sketch the user is working on. */}
       {diagramSrc(report) && (
@@ -1837,6 +1841,7 @@ function SiteDiagram({ report, update }) {
           ))}
         </div>
       </div>
+      </div>{/* end .no-print editor chrome */}
     </Card>
   );
 }
@@ -3125,12 +3130,12 @@ function ScanPhotos({ report, update }) {
         padding: '2px 8px', borderRadius: 4, fontWeight: 500,
       }}>{report.scanPhotos.length}</span>
     }>
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
         Add photos of the scanned area with markup, obstructions, or context shots.
         Each photo is grouped by confidence and embedded into the PDF.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
         <label style={{
           display: 'block', background: c.accent, border: `1px solid ${c.accent}`,
           borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
@@ -4295,7 +4300,7 @@ function ScanLocations({ report, update }) {
       })()}
 
       {report.scanLocations.length === 0 && (
-        <div style={{
+        <div className="no-print" style={{
           padding: '14px', textAlign: 'center', fontSize: 12,
           color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 8,
         }}>
@@ -4303,7 +4308,9 @@ function ScanLocations({ report, update }) {
         </div>
       )}
 
-      <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+      <div className="no-print">
+        <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+      </div>
 
       {/* Pending cross-section sync proposals */}
       {pendingSyncs.length > 0 && (
@@ -6421,11 +6428,13 @@ export default function GSSIReportApp() {
         )}
       </Card>
 
-      {/* === BRANDED LETTERHEAD (print/preview only, opt-in via brandFlourishes) ===
+      {/* === BRANDED LETTERHEAD (print/preview only) — PERMANENT STAPLE ===
            v1.0.15 facelift: the finalized Caveat two-tone wordmark from the
-           pdf-mockups, ported onto the full v1 report. Renders once at the top
-           (page 1), border-rule under it, project/operator/date meta box right. */}
-      {report.brandFlourishes && (
+           pdf-mockups, ported onto the full v1 report. Always renders once at
+           the top (page 1) to promote the company — decoupled from
+           brandFlourishes (which now gates only the optional footer signature).
+           Border-rule under it, project/operator/date meta box right. */}
+      {(
         <div className="ak-lh">
           <img src={LOGO_SRC} alt="" className="ak-lh-logo" />
           <div className="ak-lh-co">
@@ -6782,8 +6791,12 @@ export default function GSSIReportApp() {
         })()}
       </Card>
 
-      {/* === SITE DIAGRAM === */}
-      <div className={ph('diagram')}>
+      {/* === SITE DIAGRAM === (hidden in print/preview when there's no diagram
+          content, so an unused sketch pad never prints an empty box) */}
+      <div className={`${ph('diagram')}${
+        (report.diagramImage || report.diagramImageUrl ||
+         (report.diagramStrokes || []).length || (report.diagramPins || []).length ||
+         (report.diagramZones || []).length) ? '' : ' no-print'}`}>
         <SiteDiagram report={report} update={update} />
       </div>
 
@@ -7008,7 +7021,9 @@ export default function GSSIReportApp() {
             </div>
           );
         })}
-        <Btn onClick={addCore} style={{ width: '100%' }}>+ Add core location</Btn>
+        <div className="no-print">
+          <Btn onClick={addCore} style={{ width: '100%' }}>+ Add core location</Btn>
+        </div>
       </Card>
 
       {/* === UNCERTAINTY ZONES (standard + full only) === */}
