@@ -320,6 +320,10 @@ const DEFAULT_REPORT = {
   assistantOn: true,
   customReminders: [],  // [{ id, text, level: 'high'|'med'|'low' }]
 
+  // Report status — drives the DRAFT watermark on PDF/print exports.
+  // 'draft' (default) stamps a diagonal DRAFT watermark; 'issued' exports clean.
+  status: 'draft',       // 'draft' | 'issued'
+
   // Cover
   projectNo: '',
   jobNote: '',           // short description used to make saved file names recognizable
@@ -5531,6 +5535,43 @@ export default function GSSIReportApp() {
         body.preview-mode .brand-ribbon-title { color: #111 !important; }
         body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
         body.preview-mode .brand-signoff { color: #555 !important; border-top-color: #ccc !important; }
+        /* === BRANDED LETTERHEAD (v1.0.15 facelift) — Caveat two-tone wordmark.
+           Ported from the finalized pdf-mockup. Print + preview only; the
+           full v1 report (disclaimer + every section) renders beneath it. === */
+        @font-face{font-family:'Caveat';font-weight:700;font-display:swap;
+          src:url(${import.meta.env.BASE_URL}fonts/caveat-700.woff2) format('woff2');}
+        @font-face{font-family:'Caveat';font-weight:400;font-display:swap;
+          src:url(${import.meta.env.BASE_URL}fonts/caveat-400.woff2) format('woff2');}
+        .ak-lh { display: none; }
+        @media print { .ak-lh { display: grid !important; } }
+        body.preview-mode .ak-lh { display: grid !important; }
+        .ak-lh {
+          grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
+          border-bottom: 3px solid #141414; padding-bottom: 11px; margin-bottom: 14px;
+        }
+        .report-body > .ak-lh { order: -100; }
+        .ak-lh-logo { height: 78px; width: auto; filter: drop-shadow(0 2px 3px rgba(176,138,30,.45)); }
+        .ak-lh-nm1 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 34pt; line-height: .82; color: #141414; }
+        .ak-lh-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 22pt; line-height: .9; color: #6b7682; }
+        /* Red left-accent on section cards (focus) + faint gold lift — mirrors the locked PDF */
+        @media print { .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; } }
+        body.preview-mode .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; }
+        .ak-lh-sub { font-size: 8pt; color: #555; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
+        .ak-lh-addr { font-size: 7.5pt; color: #777; margin-top: 4px; line-height: 1.45; }
+        .ak-lh-box { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
+        .ak-lh-box b { display: block; color: #555; font-size: 6.8pt; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
+        .ak-lh-box .v { font-size: 10pt; font-weight: 700; margin-bottom: 5px; color: #141414; }
+        /* === DRAFT watermark (report.status === 'draft') ===
+           Additive diagonal overlay. Fixed so Chrome repeats it on every
+           printed page. Pure translucent grey — does NOT alter the locked-in
+           PDF palette (white paper, black text, brand-red headers). */
+        .draft-watermark {
+          position: fixed; inset: 0; z-index: 9000;
+          pointer-events: none; display: none;
+        }
+        .draft-watermark svg { width: 100%; height: 100%; }
+        @media print { .draft-watermark { display: block !important; } }
+        body.preview-mode .draft-watermark { display: block !important; }
         .scan-location-card.dragging,
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
@@ -5909,6 +5950,20 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
+            title={report.status === 'issued'
+              ? 'Issued — PDF exports are clean. Click to mark back to Draft.'
+              : 'Draft — PDF exports carry a DRAFT watermark. Click to mark as Issued.'}
+            aria-label="Toggle draft / issued status"
+            style={{
+              background: report.status === 'issued' ? c.greenBg : c.amberBg,
+              color: report.status === 'issued' ? c.green : c.amber,
+              border: `1px solid ${report.status === 'issued' ? c.green : c.amber}`,
+              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
+              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+            }}>
+            {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
+          </button>
           <SyncControl auth={auth} sync={sync} c={c} />
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
@@ -6262,6 +6317,18 @@ export default function GSSIReportApp() {
 
       {/* === REPORT BODY (flex column; section order set via CSS) === */}
       <div className="report-body">
+        {/* === DRAFT watermark — print/preview only, while status !== 'issued' === */}
+        {report.status !== 'issued' && (
+          <div className="draft-watermark" aria-hidden="true">
+            <svg viewBox="0 0 1000 1300" preserveAspectRatio="xMidYMid meet">
+              <text x="500" y="700" textAnchor="middle"
+                transform="rotate(-30 500 660)"
+                fontFamily="Helvetica, Arial, sans-serif"
+                fontSize="230" fontWeight="800" letterSpacing="14"
+                fill="#9ca3af" fillOpacity="0.18">DRAFT</text>
+            </svg>
+          </div>
+        )}
 
       {/* === SAME-DAY WORKFLOW STATUS === */}
       <Card title="Workflow status" dense className={ph('workflowStatus')}>
@@ -6313,13 +6380,23 @@ export default function GSSIReportApp() {
         )}
       </Card>
 
-      {/* === BRAND FLOURISH RIBBON (print/preview only, opt-in) === */}
+      {/* === BRANDED LETTERHEAD (print/preview only, opt-in via brandFlourishes) ===
+           v1.0.15 facelift: the finalized Caveat two-tone wordmark from the
+           pdf-mockups, ported onto the full v1 report. Renders once at the top
+           (page 1), border-rule under it, project/operator/date meta box right. */}
       {report.brandFlourishes && (
-        <div className="print-only brand-ribbon">
-          <img src={LOGO_SRC} alt="" className="brand-ribbon-mark" />
-          <div className="brand-ribbon-text">
-            <div className="brand-ribbon-title">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
-            <div className="brand-ribbon-tagline">{BRAND_TAGLINE}</div>
+        <div className="ak-lh">
+          <img src={LOGO_SRC} alt="" className="ak-lh-logo" />
+          <div className="ak-lh-co">
+            <div className="ak-lh-nm1">Aggarwal Kamikazes</div>
+            <div className="ak-lh-nm2">Cutting &amp; Coring Ltd.</div>
+            <div className="ak-lh-sub">GPR Concrete Scanning · Core Clearance Report</div>
+            <div className="ak-lh-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
+          </div>
+          <div className="ak-lh-box">
+            <b>Project</b><div className="v">{report.projectNo || '—'}</div>
+            <b>Operator</b><div className="v">{report.preparedBy || '—'}</div>
+            <b>Date</b><div className="v">{report.scanDate || '—'}</div>
           </div>
         </div>
       )}
