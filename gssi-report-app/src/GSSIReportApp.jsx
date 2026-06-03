@@ -5473,7 +5473,7 @@ export default function GSSIReportApp() {
     <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
       fontFamily: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
+      padding: '14px 12px 100px', margin: '0 auto',
     }}>
       <ThemeStyles />
       {previewMode && (
@@ -6097,9 +6097,12 @@ export default function GSSIReportApp() {
       </div>
       <style>{`
         /* Responsive shell — phone first, breathes on wider screens */
+        /* Fluid: fills the window/monitor, capped so a 30"+ wide screen never
+           over-stretches the forms and the report never side-scrolls. */
         .ak-shell { max-width: 720px; }
         @media (min-width: 900px)  { .ak-shell { max-width: 1180px; padding-left: 20px; padding-right: 20px; } }
-        @media (min-width: 1200px) { .ak-shell { max-width: 1280px; padding-left: 28px; padding-right: 28px; } }
+        @media (min-width: 1200px) { .ak-shell { max-width: 1600px; padding-left: 28px; padding-right: 28px; } }
+        @media (min-width: 1700px) { .ak-shell { max-width: 2000px; padding-left: 32px; padding-right: 32px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
           .ak-header .ak-logo { height: 110px !important; }
