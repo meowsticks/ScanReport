@@ -5874,24 +5874,27 @@ export default function GSSIReportApp() {
           }
           .cad-letterhead {
             display: grid;
-            grid-template-columns: 60px 1fr auto;
-            gap: 10px;
+            grid-template-columns: auto 1fr auto;
+            gap: 14px;
             align-items: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 6px;
-            margin-bottom: 8px;
+            border-bottom: 3px solid #141414;
+            padding-bottom: 9px;
+            margin-bottom: 10px;
           }
-          .cad-logo { width: 56px; height: auto; }
-          .cad-company { font-family: 'Caveat', cursive; font-weight: 700; font-size: 23pt; line-height: 0.84; letter-spacing: 0; }
-          /* !important to beat the .ak-sec dark-theme color-kill (the CAD page
-             sits inside an .ak-sec, unlike the page-1 letterhead). */
-          .cad-company .ink { color: #141414 !important; display: block; }
-          .cad-company .steel { color: #6b7682 !important; display: block; }
-          .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
-          .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
+          .cad-logo { height: 70px; width: auto; }
+          /* Mirror the page-1 letterhead wordmark (two-tone Caveat, nm1 > nm2).
+             !important on colors because the CAD page sits inside an .ak-sec,
+             whose dark-theme print color-kill would otherwise force black. */
+          .cad-nm1 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 32pt; line-height: 0.82; color: #141414 !important; }
+          .cad-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21pt; line-height: 0.9; color: #6b7682 !important; }
+          .cad-subtitle { font-size: 8pt; color: #555 !important; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
+          .cad-addr { font-size: 7.5pt; color: #777 !important; margin-top: 4px; line-height: 1.45; }
+          .cad-letterhead-meta { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
+          .cad-letterhead-meta b { display: block; color: #555 !important; font-size: 6.8pt; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
+          .cad-letterhead-meta .v { font-size: 10pt; font-weight: 700; margin-bottom: 5px; color: #141414 !important; }
           .cad-body {
             display: grid;
-            grid-template-columns: 1fr 240px;
+            grid-template-columns: 1fr 82mm;   /* right column ≥ title block (70mm) + its 8mm offset, so the absolute title block stays clear of the drawing box */
             gap: 10px;
             height: calc(100% - 92mm);
             min-height: 130mm;
@@ -7353,12 +7356,15 @@ export default function GSSIReportApp() {
           <div className="cad-letterhead">
             <img src={LOGO_SRC} alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
-              <div className="cad-company"><span className="ink">Aggarwal Kamikazes</span> <span className="steel">Cutting &amp; Coring Ltd.</span></div>
+              <div className="cad-nm1">Aggarwal Kamikazes</div>
+              <div className="cad-nm2">Cutting &amp; Coring Ltd.</div>
               <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>
+              <div className="cad-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
             </div>
             <div className="cad-letterhead-meta">
-              <div>Project: <strong>{report.projectNo || '—'}</strong></div>
-              <div>Date: <strong>{report.scanDate || '—'}</strong></div>
+              <b>Project</b><div className="v">{report.projectNo || '—'}</div>
+              <b>Operator</b><div className="v">{report.preparedBy || '—'}</div>
+              <b>Date</b><div className="v">{report.scanDate || '—'}</div>
             </div>
           </div>
           <div className="cad-body">
