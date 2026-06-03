@@ -5815,7 +5815,7 @@ export default function GSSIReportApp() {
           .ak-sec {
             background: #fff !important;
             color: #000 !important;
-            border-color: #999 !important;
+            border: 1.5px solid #5b6470 !important;
             box-shadow: none !important;
           }
           /* Cards have inline background: c.card on the structural wrappers
@@ -5844,12 +5844,12 @@ export default function GSSIReportApp() {
           /* Borders fade to grey so they read as lines, not blocks. */
           .ak-sec div[style*="border"],
           .ak-sec section[style*="border"] {
-            border-color: #bbb !important;
+            border-color: #8a9099 !important;
           }
           .ak-sec input, .ak-sec textarea, .ak-sec select {
             background: #fff !important;
             color: #000 !important;
-            border: 1px solid #ccc !important;
+            border: 1px solid #98a0aa !important;
             -webkit-text-fill-color: #000 !important;
           }
           /* Preserve intentionally-coloured elements (brand red, swatches,
@@ -5925,7 +5925,7 @@ export default function GSSIReportApp() {
              into the live editor. Closing brace moved to line ~5478 so every
              rule from here to .scan-location-card .loc-photo is print-only.) */
           input, select, textarea {
-            border: 1px solid #ddd !important;
+            border: 1px solid #98a0aa !important;
             background: white !important; color: black !important;
           }
           .legal-disclaimer-print {
