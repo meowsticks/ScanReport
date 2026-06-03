@@ -5882,7 +5882,11 @@ export default function GSSIReportApp() {
             margin-bottom: 8px;
           }
           .cad-logo { width: 56px; height: auto; }
-          .cad-company { font-size: 14pt; font-weight: 900; letter-spacing: 0.5px; }
+          .cad-company { font-family: 'Caveat', cursive; font-weight: 700; font-size: 23pt; line-height: 0.95; letter-spacing: 0; }
+          /* !important to beat the .ak-sec dark-theme color-kill (the CAD page
+             sits inside an .ak-sec, unlike the page-1 letterhead). */
+          .cad-company .ink { color: #141414 !important; }
+          .cad-company .steel { color: #6b7682 !important; }
           .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
           .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
           .cad-body {
@@ -7349,7 +7353,7 @@ export default function GSSIReportApp() {
           <div className="cad-letterhead">
             <img src={LOGO_SRC} alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
-              <div className="cad-company">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
+              <div className="cad-company"><span className="ink">Aggarwal Kamikazes</span> <span className="steel">Cutting &amp; Coring Ltd.</span></div>
               <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>
             </div>
             <div className="cad-letterhead-meta">
