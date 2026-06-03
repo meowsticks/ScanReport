@@ -2176,6 +2176,41 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
   const resetPresets = () => setPresets(DEFAULT_PRESETS);
 
+  // ---- Zoom & pan (desktop-tuned) ----------------------------------------
+  // Annotations are stored in 0..1 image coords, so the visual zoom is a pure
+  // CSS transform on the image+canvas stage — getFractionalCoords keeps working
+  // unchanged at any zoom, and the photo stays crisp (browser re-samples the
+  // <img>). Wheel zooms toward the cursor; 🖐 Pan or middle-drag moves.
+  const MIN_ZOOM = 1, MAX_ZOOM = 8;
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState(false);
+  const panDragRef = useRef(null);   // { x0, y0, panX, panY } while dragging
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  useEffect(() => {
+    const cont = containerRef.current;
+    if (!cont) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = cont.getBoundingClientRect();
+      const cx = e.clientX - rect.left - rect.width / 2;
+      const cy = e.clientY - rect.top - rect.height / 2;
+      setZoom(z => {
+        const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+        setPan(p => {
+          if (nz === z) return p;
+          if (nz === 1) return { x: 0, y: 0 };
+          const lx = (cx - p.x) / z, ly = (cy - p.y) / z;
+          return { x: cx - lx * nz, y: cy - ly * nz };
+        });
+        return nz;
+      });
+    };
+    cont.addEventListener('wheel', onWheel, { passive: false });
+    return () => cont.removeEventListener('wheel', onWheel);
+  }, []);
+
   const getFractionalCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -2194,15 +2229,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     const img = imgRef.current;
     const container = containerRef.current;
     if (!canvas || !img || !container) return;
-    const imgRect = img.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    if (imgRect.width === 0 || imgRect.height === 0) return;
-    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
-    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
-    canvas.style.width = imgRect.width + 'px';
-    canvas.style.height = imgRect.height + 'px';
-    canvas.width = imgRect.width;
-    canvas.height = imgRect.height;
+    // Canvas overlays the image exactly (absolute inset:0 inside the stage), so
+    // we only size its backing buffer to the displayed image — no positioning
+    // math. The CSS transform on the stage handles zoom/pan for image+canvas.
+    const w = img.clientWidth, h = img.clientHeight;
+    if (!w || !h) return;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -2274,6 +2307,12 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   }, [annotations, anchor, hover]);
 
   const handleStart = (e) => {
+    // Pan takes priority: 🖐 Pan tool (left-drag) or middle-mouse drag.
+    if (panMode || e.button === 1) {
+      e.preventDefault();
+      panDragRef.current = { x0: e.clientX, y0: e.clientY, panX: pan.x, panY: pan.y };
+      return;
+    }
     if (tool !== 'freehand') return;
     e.preventDefault();
     const pt = getFractionalCoords(e);
@@ -2282,6 +2321,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleEnd = (e) => {
+    if (panDragRef.current) { panDragRef.current = null; return; }
     if (tool !== 'freehand' || !drawingPath) return;
     e.preventDefault();
     if (drawingPath.length >= 2) {
@@ -2292,6 +2332,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleClick = (e) => {
+    if (panMode || panDragRef.current) return;
     if (tool === 'freehand') return;
     e.preventDefault();
     let pt = getFractionalCoords(e);
@@ -2360,6 +2401,11 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleMove = (e) => {
+    if (panDragRef.current) {
+      const d = panDragRef.current;
+      setPan({ x: d.panX + (e.clientX - d.x0), y: d.panY + (e.clientY - d.y0) });
+      return;
+    }
     if (tool === 'freehand') {
       if (!drawingPath) return;
       e.preventDefault();
@@ -2454,32 +2500,43 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         flex: 1, position: 'relative', overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8,
       }}>
-        <img
-          ref={imgRef}
-          src={photoSrc(photo)}
-          alt="scan"
-          onLoad={redraw}
-          style={{
-            maxWidth: '100%', maxHeight: '100%',
-            objectFit: 'contain', display: 'block', userSelect: 'none',
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute',
-            touchAction: 'none',
-            cursor: tool === 'text' ? 'text' : (tool === 'freehand' ? 'crosshair' : 'crosshair'),
-          }}
-          onClick={handleClick}
-          onMouseDown={handleStart}
-          onMouseMove={handleMove}
-          onMouseUp={handleEnd}
-          onMouseLeave={handleEnd}
-          onTouchStart={tool === 'freehand' ? handleStart : handleClick}
-          onTouchMove={handleMove}
-          onTouchEnd={handleEnd}
-        />
+        <div style={{
+          position: 'relative', display: 'inline-block',
+          maxWidth: '100%', maxHeight: '100%',
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: panDragRef.current ? 'none' : 'transform .08s ease-out',
+          willChange: 'transform',
+        }}>
+          <img
+            ref={imgRef}
+            src={photoSrc(photo)}
+            alt="scan"
+            onLoad={redraw}
+            draggable={false}
+            style={{
+              maxWidth: '100%', maxHeight: '100%',
+              objectFit: 'contain', display: 'block', userSelect: 'none',
+            }}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              touchAction: 'none',
+              cursor: panMode ? (panDragRef.current ? 'grabbing' : 'grab')
+                : (tool === 'text' ? 'text' : 'crosshair'),
+            }}
+            onClick={handleClick}
+            onMouseDown={handleStart}
+            onMouseMove={handleMove}
+            onMouseUp={handleEnd}
+            onMouseLeave={handleEnd}
+            onTouchStart={tool === 'freehand' ? handleStart : handleClick}
+            onTouchMove={handleMove}
+            onTouchEnd={handleEnd}
+          />
+        </div>
         {/* Inline text-annotation input — opens at the tap point in text mode.
             Replaces window.prompt(), which Electron disables. */}
         {pendingText && (() => {
@@ -2696,6 +2753,28 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               }}>{opt.label}</button>
           ))}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setPanMode(m => !m)}
+            title="Pan / move the photo (or hold middle-mouse and drag). Scroll to zoom."
+            style={{
+              background: panMode ? c.accentDim : c.cardAlt,
+              border: `1px solid ${panMode ? c.accent : c.border}`,
+              borderRadius: 6, padding: '7px 11px',
+              color: panMode ? c.onAccentDim : c.text,
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>🖐 Pan</button>
+          <span style={{ flex: 1 }} />
+          <Btn variant="ghost" onClick={() => setZoom(z => Math.max(MIN_ZOOM, +(z / 1.25).toFixed(2)))}
+            title="Zoom out" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom <= MIN_ZOOM}>−</Btn>
+          <span style={{ fontSize: 12, color: c.textDim, minWidth: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <Btn variant="ghost" onClick={() => setZoom(z => Math.min(MAX_ZOOM, +(z * 1.25).toFixed(2)))}
+            title="Zoom in" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom >= MAX_ZOOM}>+</Btn>
+          <Btn variant="ghost" onClick={resetView}
+            title="Reset zoom & position" style={{ fontSize: 12 }}
+            disabled={zoom === 1 && pan.x === 0 && pan.y === 0}>Reset view</Btn>
+        </div>
         <label style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textDim,
         }}>
@@ -2757,6 +2836,9 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               : anchor
                 ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
                 : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
+        </div>
+        <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', opacity: 0.85 }}>
+          Scroll to zoom toward the cursor · 🖐 Pan (or middle-mouse drag) to move
         </div>
       </div>
     </div>
