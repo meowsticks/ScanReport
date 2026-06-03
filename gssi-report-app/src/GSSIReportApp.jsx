@@ -567,7 +567,7 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
         borderBottom: `1px solid ${c.border}`,
       }}>
         <h2 style={{
-          margin: 0, fontSize: 11, fontWeight: 700,
+          margin: 0, fontSize: 13, fontWeight: 700,
           color: accent ? c.accent : c.textDim,
           letterSpacing: 1.2, textTransform: 'uppercase',
         }}>{title}</h2>
@@ -581,11 +581,11 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
 const Field = ({ label, children, hint }) => (
   <div style={{ marginBottom: 10 }}>
     <div style={{
-      fontSize: 10.5, color: c.textDim, marginBottom: 3,
+      fontSize: 12, color: c.textDim, marginBottom: 4,
       textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
     }}>{label}</div>
     {children}
-    {hint && <div style={{ fontSize: 11, color: c.textFaint, marginTop: 3 }}>{hint}</div>}
+    {hint && <div style={{ fontSize: 12.5, color: c.textFaint, marginTop: 4 }}>{hint}</div>}
   </div>
 );
 
@@ -643,7 +643,7 @@ const Input = ({ value, onChange, onBlur, ...rest }) => {
     <input {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '9px 11px', color: c.text, fontSize: 14,
+      padding: '10px 12px', color: c.text, fontSize: 16,
       fontFamily: 'inherit', boxSizing: 'border-box',
       ...rest.style,
     }} />
@@ -656,7 +656,7 @@ const Textarea = ({ value, onChange, onBlur, ...rest }) => {
     <textarea {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '9px 11px', color: c.text, fontSize: 14,
+      padding: '10px 12px', color: c.text, fontSize: 16,
       fontFamily: 'inherit', boxSizing: 'border-box',
       resize: 'vertical', minHeight: 64,
       ...rest.style,
@@ -688,7 +688,7 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
       style={{
         width: '100%', background: c.cardAlt,
         border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '10px 12px', color: c.text, fontSize: 13, lineHeight: 1.55,
+        padding: '11px 13px', color: c.text, fontSize: 15, lineHeight: 1.55,
         fontFamily: 'inherit', boxSizing: 'border-box',
         resize: 'none', overflow: 'hidden',
         ...style,
@@ -701,7 +701,7 @@ const Select = ({ children, ...props }) => (
   <select {...props} style={{
     width: '100%', background: c.cardAlt,
     border: `1px solid ${c.border}`, borderRadius: 6,
-    padding: '9px 11px', color: c.text, fontSize: 14,
+    padding: '10px 12px', color: c.text, fontSize: 16,
     fontFamily: 'inherit', boxSizing: 'border-box',
     ...props.style,
   }}>{children}</select>
@@ -717,8 +717,8 @@ const Btn = ({ children, variant = 'default', ...props }) => {
   return (
     <button {...props} style={{
       background: v.bg, border: `1px solid ${v.bd}`,
-      borderRadius: 6, padding: '9px 12px', color: v.fg,
-      fontSize: 13, fontWeight: 500, cursor: 'pointer',
+      borderRadius: 6, padding: '10px 14px', color: v.fg,
+      fontSize: 15, fontWeight: 500, cursor: 'pointer',
       fontFamily: 'inherit',
       ...props.style,
     }}>{children}</button>
@@ -3024,7 +3024,7 @@ function CaptionField({ value, onCommit, style, ...rest }) {
       style={{
         width: '100%', background: c.cardAlt,
         border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '9px 11px', color: c.text, fontSize: 14,
+        padding: '10px 12px', color: c.text, fontSize: 16,
         fontFamily: 'inherit', boxSizing: 'border-box',
         resize: 'vertical', minHeight: 64,
         ...style,
@@ -5621,7 +5621,7 @@ export default function GSSIReportApp() {
         .ws-nav .ni {
           display: block; width: 100%; text-align: left; cursor: pointer;
           background: transparent; border: 0; border-left: 2px solid transparent;
-          color: ${c.textDim}; font: inherit; font-size: 12px; line-height: 1.3;
+          color: ${c.textDim}; font: inherit; font-size: 13.5px; line-height: 1.35;
           padding: 6px 11px; border-radius: 0 7px 7px 0; margin-bottom: 1px;
           transition: background .12s, color .12s, border-color .12s;
         }
