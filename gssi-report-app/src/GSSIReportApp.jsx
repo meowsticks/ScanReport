@@ -5882,11 +5882,11 @@ export default function GSSIReportApp() {
             margin-bottom: 8px;
           }
           .cad-logo { width: 56px; height: auto; }
-          .cad-company { font-family: 'Caveat', cursive; font-weight: 700; font-size: 23pt; line-height: 0.95; letter-spacing: 0; }
+          .cad-company { font-family: 'Caveat', cursive; font-weight: 700; font-size: 23pt; line-height: 0.84; letter-spacing: 0; }
           /* !important to beat the .ak-sec dark-theme color-kill (the CAD page
              sits inside an .ak-sec, unlike the page-1 letterhead). */
-          .cad-company .ink { color: #141414 !important; }
-          .cad-company .steel { color: #6b7682 !important; }
+          .cad-company .ink { color: #141414 !important; display: block; }
+          .cad-company .steel { color: #6b7682 !important; display: block; }
           .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
           .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
           .cad-body {
