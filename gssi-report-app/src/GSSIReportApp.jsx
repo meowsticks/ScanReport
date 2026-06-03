@@ -5876,7 +5876,7 @@ export default function GSSIReportApp() {
             margin-bottom: 8px;
           }
           .cad-logo { width: 56px; height: auto; }
-          .cad-company { font-size: 14pt; font-weight: 900; letter-spacing: 0.5px; }
+          .cad-company { font-size: 13pt; font-weight: 600; letter-spacing: 0.2px; }
           .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
           .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
           .cad-body {
