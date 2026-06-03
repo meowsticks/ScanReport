@@ -322,7 +322,7 @@ const DEFAULT_REPORT = {
 
   // Report status — drives the DRAFT watermark on PDF/print exports.
   // 'draft' (default) stamps a diagonal DRAFT watermark; 'issued' exports clean.
-  status: 'draft',       // 'draft' | 'issued'
+  status: 'draft',       // 'draft' | 'issued' | 'approved' (approved = locked & archived)
 
   // Cover
   projectNo: '',
@@ -408,6 +408,12 @@ const DEFAULT_REPORT = {
   egbcEnabled: false,   // Off by default — most scan reports aren't P.Eng stamped
   permitNo: '',
   signDate: new Date().toISOString().slice(0, 10),
+
+  // Engineer approval (F3). Set when the engineer approves by email; status
+  // moves to 'approved' and the report is flagged archived in the reports list.
+  approvedBy: '',
+  approvedDate: '',
+  showWatermark: true,   // DRAFT / FOR REVIEW watermark on the PDF (off = clean)
 
   // ----- Xradar-style togglable features -----
   enableZones: false,         // hatched fill regions on the site diagram
@@ -4749,7 +4755,7 @@ export default function GSSIReportApp() {
     saveReport(id, r);
     setSavedAt(Date.now());
     setReportsIndex((idx) => {
-      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now() } : e);
+      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now(), status: r.status || 'draft' } : e);
       saveIndex(next);
       return next;
     });
@@ -5945,6 +5951,17 @@ export default function GSSIReportApp() {
             height: auto !important;
             object-fit: contain !important;
           }
+          .ak-sec .approval-audit-print {
+            display: block;
+            margin-top: 12px; padding: 8px 11px;
+            border: 1.5px solid #1a7f37 !important;
+            border-radius: 5px;
+            background: #eafaf0 !important;
+            color: #0b3d1c !important;
+            font-size: 10pt; font-weight: 700;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            page-break-inside: avoid; break-inside: avoid;
+          }
           .legal-disclaimer-print {
             page-break-inside: avoid;
             break-inside: avoid;
@@ -6083,10 +6100,18 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {report.status === 'approved' ? (
+            <span title="Approved & archived — manage in Authorship & review"
+              style={{
+                background: c.greenBg, color: c.green, border: `1px solid ${c.green}`,
+                borderRadius: 6, padding: '7px 10px',
+                fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+              }}>✓ APPROVED</span>
+          ) : (
           <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
             title={report.status === 'issued'
-              ? 'Issued — PDF exports are clean. Click to mark back to Draft.'
-              : 'Draft — PDF exports carry a DRAFT watermark. Click to mark as Issued.'}
+              ? 'Issued — sent to the engineer for review (FOR REVIEW watermark). Click to revert to Draft.'
+              : 'Draft — PDF carries a DRAFT watermark. Click to mark Issued (sent for review).'}
             aria-label="Toggle draft / issued status"
             style={{
               background: report.status === 'issued' ? c.greenBg : c.amberBg,
@@ -6097,6 +6122,7 @@ export default function GSSIReportApp() {
             }}>
             {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
           </button>
+          )}
           <SyncControl auth={auth} sync={sync} c={c} />
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
@@ -6468,14 +6494,14 @@ export default function GSSIReportApp() {
       </nav>
       <div className="report-body ws-main">
         {/* === DRAFT watermark — print/preview only, while status !== 'issued' === */}
-        {report.status !== 'issued' && (
+        {report.showWatermark !== false && report.status !== 'approved' && (
           <div className="draft-watermark" aria-hidden="true">
             <svg viewBox="0 0 1000 1300" preserveAspectRatio="xMidYMid meet">
               <text x="500" y="700" textAnchor="middle"
                 transform="rotate(-30 500 660)"
                 fontFamily="Helvetica, Arial, sans-serif"
-                fontSize="230" fontWeight="800" letterSpacing="14"
-                fill="#9ca3af" fillOpacity="0.18">DRAFT</text>
+                fontSize={report.status === 'draft' ? '230' : '150'} fontWeight="800" letterSpacing="14"
+                fill="#9ca3af" fillOpacity="0.18">{report.status === 'draft' ? 'DRAFT' : 'FOR REVIEW'}</text>
             </svg>
           </div>
         )}
@@ -7446,6 +7472,58 @@ export default function GSSIReportApp() {
         <Field label="Signature date">
           <Input type="date" value={report.signDate} onChange={e => update({ signDate: e.target.value })} />
         </Field>
+
+        {/* === ENGINEER APPROVAL (F3) — the engineer reviews & approves by email;
+             recording it marks the report Approved and archives it. No lock. === */}
+        <div className="no-print" style={{
+          marginTop: 12, padding: 11, borderRadius: 8,
+          background: report.status === 'approved' ? c.greenBg : c.cardAlt,
+          border: `1px solid ${report.status === 'approved' ? c.green : c.borderStrong}`,
+        }}>
+          {report.status === 'approved' ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 800, color: c.green, marginBottom: 4 }}>✓ Approved &amp; archived</div>
+              <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>
+                Approved by <strong>{report.approvedBy || '—'}</strong>
+                {report.approvedDate ? ` on ${report.approvedDate}` : ''} · via email.
+              </div>
+              <Btn variant="ghost"
+                onClick={() => { if (confirm('Revert to Issued? This un-approves the report so you can revise it.')) update({ status: 'issued', approvedBy: '', approvedDate: '' }); }}
+                style={{ marginTop: 8, fontSize: 12 }}>↩ Revert to Issued</Btn>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: c.textDim, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Engineer approval</div>
+              <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+                The engineer reviews &amp; approves by email — they don't type into this report. Record their name and the date, then approve.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 8, marginBottom: 8 }}>
+                <Input value={report.approvedBy} onChange={e => update({ approvedBy: e.target.value })} placeholder={report.reviewedBy || 'Engineer name'} />
+                <Input type="date" value={report.approvedDate || ''} onChange={e => update({ approvedDate: e.target.value })} />
+              </div>
+              <Btn variant="primary"
+                onClick={() => {
+                  const by = (report.approvedBy || report.reviewedBy || '').trim();
+                  if (!by) { alert('Enter the approving engineer’s name first (or fill “Reviewed by”).'); return; }
+                  if (!confirm(`Mark this report APPROVED by ${by} and archive it?`)) return;
+                  update({ status: 'approved', approvedBy: by, approvedDate: report.approvedDate || new Date().toISOString().slice(0, 10) });
+                }}
+                style={{ width: '100%' }}>✓ Mark approved &amp; archive</Btn>
+            </>
+          )}
+        </div>
+
+        <label className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 12, color: c.textDim, lineHeight: 1.4 }}>
+          <input type="checkbox" checked={report.showWatermark !== false}
+            onChange={e => update({ showWatermark: e.target.checked })} style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <span>Show <strong>DRAFT / FOR REVIEW</strong> watermark on the PDF until approved <span style={{ color: c.textFaint }}>(recommended)</span></span>
+        </label>
+
+        {report.status === 'approved' && report.approvedBy && (
+          <div className="print-only approval-audit-print">
+            ✓ Approved by {report.approvedBy}{report.approvedDate ? ` on ${report.approvedDate}` : ''} · via email
+          </div>
+        )}
       </Card>
 
       {/* === BRAND FLOURISH FOOTER SIGNATURE (print/preview only, opt-in) === */}
@@ -7687,8 +7765,14 @@ export default function GSSIReportApp() {
                     <Input value={e.name}
                       onChange={ev => renameReport(e.id, ev.target.value)}
                       style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7 }}>
-                      {isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}
+                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {e.status === 'approved' && (
+                        <span style={{ background: c.greenBg, color: c.green, border: `1px solid ${c.green}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>✓ APPROVED · ARCHIVED</span>
+                      )}
+                      {e.status === 'issued' && (
+                        <span style={{ background: c.amberBg, color: c.amber, border: `1px solid ${c.amber}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>FOR REVIEW</span>
+                      )}
+                      <span>{isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
                       <Btn variant="primary" onClick={() => switchReport(e.id)} disabled={isOpen}
