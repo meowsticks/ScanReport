@@ -561,7 +561,7 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
     ...style,
   }}>
     {title && (
-      <div style={{
+      <div className="ak-card-head" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 10, paddingBottom: 8,
         borderBottom: `1px solid ${c.border}`,
@@ -5927,6 +5927,23 @@ export default function GSSIReportApp() {
           input, select, textarea {
             border: 1px solid #98a0aa !important;
             background: white !important; color: black !important;
+          }
+          /* Keep a section header glued to its content — never orphan a title at
+             the bottom of a page (e.g. a "Site diagram" header alone with the
+             photo on the next page). */
+          .ak-card-head, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4 {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+            break-inside: avoid !important;
+          }
+          /* Cap large media to one page so a tall diagram/photo can't overflow a
+             page or land header-less on its own — keeps it WITH its header. */
+          .ak-sec-diagram canvas, .ak-sec-diagram img,
+          .scan-photo-row img, .gpr-scan-figure img,
+          .scan-location-card .loc-photo img {
+            max-height: 21cm !important;
+            height: auto !important;
+            object-fit: contain !important;
           }
           .legal-disclaimer-print {
             page-break-inside: avoid;
