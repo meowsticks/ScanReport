@@ -684,22 +684,38 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
   }, []);
+  // If the caller already renders its own print output (it marks the textarea
+  // 'no-print' and prints a sibling, e.g. the legal disclaimer), don't add a
+  // second mirror — that would duplicate the text in the PDF.
+  const ownsPrint = (className || '').includes('no-print');
   return (
-    <textarea
-      ref={ref}
-      className={className}
-      value={value}
-      onChange={onChange}
-      onInput={fit}
-      style={{
-        width: '100%', background: c.cardAlt,
-        border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '11px 13px', color: c.text, fontSize: 15, lineHeight: 1.55,
-        fontFamily: 'inherit', boxSizing: 'border-box',
-        resize: 'none', overflow: 'hidden',
-        ...style,
-      }}
-    />
+    <>
+      <textarea
+        ref={ref}
+        className={`${className || ''} no-print`.trim()}
+        value={value}
+        onChange={onChange}
+        onInput={fit}
+        style={{
+          width: '100%', background: c.cardAlt,
+          border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: '11px 13px', color: c.text, fontSize: 15, lineHeight: 1.55,
+          fontFamily: 'inherit', boxSizing: 'border-box',
+          resize: 'none', overflow: 'hidden',
+          ...style,
+        }}
+      />
+      {/* Print mirror: a real flowing <div> so long text paginates across page
+          breaks instead of being clipped by the unbreakable <textarea> box
+          (the classic "info lost between pages"). Screen shows the textarea. */}
+      {!ownsPrint && (
+        <div className="print-only ak-ta-print" style={{
+          width: '100%', border: '1px solid #98a0aa', borderRadius: 6,
+          padding: '11px 13px', fontSize: 15, lineHeight: 1.55,
+          whiteSpace: 'pre-wrap', boxSizing: 'border-box', ...style,
+        }}>{value}</div>
+      )}
+    </>
   );
 }
 
