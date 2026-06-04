@@ -6171,6 +6171,7 @@ export default function GSSIReportApp() {
           .ak-sec .approval-audit-print {
             display: block;
             margin-top: 12px; padding: 8px 11px;
+            box-sizing: border-box;
             border: 1.5px solid #1a7f37 !important;
             border-radius: 5px;
             background: #eafaf0 !important;
@@ -6200,6 +6201,16 @@ export default function GSSIReportApp() {
             padding: 4px 7px;
             text-align: left;
             vertical-align: top;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+          }
+          /* Free-text fields the engineer fills in: wrap long unbroken
+             tokens (URLs, ref codes) instead of forcing the page wider. */
+          .methods-print, .std-notes-print, .legal-disclaimer-print,
+          .workflow-status-print, .loc-print-only, .ak-ta-print,
+          .proposed-cores-print {
+            overflow-wrap: break-word;
+            word-break: break-word;
           }
           .findings-table th, .cover-summary-print th {
             background: #eee !important;
