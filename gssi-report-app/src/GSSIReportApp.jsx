@@ -6259,7 +6259,7 @@ export default function GSSIReportApp() {
         <img
           src={LOGO_SRC}
           alt="Aggarwal Kamikaze's Cutting & Coring Ltd"
-          className="ak-logo"
+          className="ak-logo no-print"
           style={{
             display: 'block',
             height: 140,
