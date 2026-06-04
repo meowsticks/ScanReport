@@ -671,7 +671,7 @@ const Textarea = ({ value, onChange, onBlur, ...rest }) => {
 };
 
 // Textarea that auto-resizes to fit its content (no internal scrollbar)
-function AutoGrowTextarea({ value, onChange, className, style }) {
+function AutoGrowTextarea({ value, onChange, className, style, placeholder }) {
   const ref = useRef(null);
   const fit = () => {
     const el = ref.current;
@@ -695,6 +695,7 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
         className={`${className || ''} no-print`.trim()}
         value={value}
         onChange={onChange}
+        placeholder={placeholder}
         onInput={fit}
         style={{
           width: '100%', background: c.cardAlt,
@@ -7465,7 +7466,7 @@ export default function GSSIReportApp() {
       {showUncertainty && (
         <Card title="Areas of uncertainty" className={ph('uncertainty')}>
           <Field label="Daylighting recommended in" hint="Per Terraprobe-style practice — call out zones where GPR resolution is insufficient for definitive interpretation.">
-            <Textarea
+            <AutoGrowTextarea
               value={report.uncertaintyZones}
               onChange={e => update({ uncertaintyZones: e.target.value })}
               placeholder="e.g. NE corner: dense rebar mat creates shadowing. Recommend daylighting before drilling within 600 mm of column line C-4."
