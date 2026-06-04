@@ -322,7 +322,7 @@ const DEFAULT_REPORT = {
 
   // Report status — drives the DRAFT watermark on PDF/print exports.
   // 'draft' (default) stamps a diagonal DRAFT watermark; 'issued' exports clean.
-  status: 'draft',       // 'draft' | 'issued'
+  status: 'draft',       // 'draft' | 'issued' | 'approved' (approved = locked & archived)
 
   // Cover
   projectNo: '',
@@ -376,7 +376,7 @@ const DEFAULT_REPORT = {
   // Legal disclaimer (printed at the end of every report)
   legalDisclaimer:
     'This report is a non-destructive subsurface investigation prepared by ' +
-    'Aggarwal Kamikazes Cutting & Coring Ltd (the "Company") for the named client only. ' +
+    'Aggarwal Kamikaze\'s Cutting & Coring Ltd (the "Company") for the named client only. ' +
     'Ground Penetrating Radar is an interpretive method; subsurface conditions may differ ' +
     'from those depicted, and the Company makes no warranty, express or implied, regarding ' +
     'the absence of utilities, conduits, post-tensioning cables, reinforcing steel, voids, ' +
@@ -408,6 +408,12 @@ const DEFAULT_REPORT = {
   egbcEnabled: false,   // Off by default — most scan reports aren't P.Eng stamped
   permitNo: '',
   signDate: new Date().toISOString().slice(0, 10),
+
+  // Engineer approval (F3). Set when the engineer approves by email; status
+  // moves to 'approved' and the report is flagged archived in the reports list.
+  approvedBy: '',
+  approvedDate: '',
+  showWatermark: true,   // DRAFT / FOR REVIEW watermark on the PDF (off = clean)
 
   // ----- Xradar-style togglable features -----
   enableZones: false,         // hatched fill regions on the site diagram
@@ -462,7 +468,7 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — Aggarwal Kamikazes palette (light + dark)
+// Design tokens — Aggarwal Kamikaze's palette (light + dark)
 // Token values are CSS variables so theme switches without a
 // React re-render. See <ThemeStyles /> for the palette definitions
 // and the data-theme="light" overrides for outdoor readability.
@@ -561,13 +567,13 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
     ...style,
   }}>
     {title && (
-      <div style={{
+      <div className="ak-card-head" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 10, paddingBottom: 8,
         borderBottom: `1px solid ${c.border}`,
       }}>
         <h2 style={{
-          margin: 0, fontSize: 11, fontWeight: 700,
+          margin: 0, fontSize: 13, fontWeight: 700,
           color: accent ? c.accent : c.textDim,
           letterSpacing: 1.2, textTransform: 'uppercase',
         }}>{title}</h2>
@@ -581,11 +587,11 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
 const Field = ({ label, children, hint }) => (
   <div style={{ marginBottom: 10 }}>
     <div style={{
-      fontSize: 10.5, color: c.textDim, marginBottom: 3,
+      fontSize: 12, color: c.textDim, marginBottom: 4,
       textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
     }}>{label}</div>
     {children}
-    {hint && <div style={{ fontSize: 11, color: c.textFaint, marginTop: 3 }}>{hint}</div>}
+    {hint && <div style={{ fontSize: 12.5, color: c.textFaint, marginTop: 4 }}>{hint}</div>}
   </div>
 );
 
@@ -643,7 +649,7 @@ const Input = ({ value, onChange, onBlur, ...rest }) => {
     <input {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '9px 11px', color: c.text, fontSize: 14,
+      padding: '10px 12px', color: c.text, fontSize: 16,
       fontFamily: 'inherit', boxSizing: 'border-box',
       ...rest.style,
     }} />
@@ -656,7 +662,7 @@ const Textarea = ({ value, onChange, onBlur, ...rest }) => {
     <textarea {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '9px 11px', color: c.text, fontSize: 14,
+      padding: '10px 12px', color: c.text, fontSize: 16,
       fontFamily: 'inherit', boxSizing: 'border-box',
       resize: 'vertical', minHeight: 64,
       ...rest.style,
@@ -678,22 +684,38 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
   }, []);
+  // If the caller already renders its own print output (it marks the textarea
+  // 'no-print' and prints a sibling, e.g. the legal disclaimer), don't add a
+  // second mirror — that would duplicate the text in the PDF.
+  const ownsPrint = (className || '').includes('no-print');
   return (
-    <textarea
-      ref={ref}
-      className={className}
-      value={value}
-      onChange={onChange}
-      onInput={fit}
-      style={{
-        width: '100%', background: c.cardAlt,
-        border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '10px 12px', color: c.text, fontSize: 13, lineHeight: 1.55,
-        fontFamily: 'inherit', boxSizing: 'border-box',
-        resize: 'none', overflow: 'hidden',
-        ...style,
-      }}
-    />
+    <>
+      <textarea
+        ref={ref}
+        className={`${className || ''} no-print`.trim()}
+        value={value}
+        onChange={onChange}
+        onInput={fit}
+        style={{
+          width: '100%', background: c.cardAlt,
+          border: `1px solid ${c.border}`, borderRadius: 6,
+          padding: '11px 13px', color: c.text, fontSize: 15, lineHeight: 1.55,
+          fontFamily: 'inherit', boxSizing: 'border-box',
+          resize: 'none', overflow: 'hidden',
+          ...style,
+        }}
+      />
+      {/* Print mirror: a real flowing <div> so long text paginates across page
+          breaks instead of being clipped by the unbreakable <textarea> box
+          (the classic "info lost between pages"). Screen shows the textarea. */}
+      {!ownsPrint && (
+        <div className="print-only ak-ta-print" style={{
+          width: '100%', border: '1px solid #98a0aa', borderRadius: 6,
+          padding: '11px 13px', fontSize: 15, lineHeight: 1.55,
+          whiteSpace: 'pre-wrap', boxSizing: 'border-box', ...style,
+        }}>{value}</div>
+      )}
+    </>
   );
 }
 
@@ -701,7 +723,7 @@ const Select = ({ children, ...props }) => (
   <select {...props} style={{
     width: '100%', background: c.cardAlt,
     border: `1px solid ${c.border}`, borderRadius: 6,
-    padding: '9px 11px', color: c.text, fontSize: 14,
+    padding: '10px 12px', color: c.text, fontSize: 16,
     fontFamily: 'inherit', boxSizing: 'border-box',
     ...props.style,
   }}>{children}</select>
@@ -717,8 +739,8 @@ const Btn = ({ children, variant = 'default', ...props }) => {
   return (
     <button {...props} style={{
       background: v.bg, border: `1px solid ${v.bd}`,
-      borderRadius: 6, padding: '9px 12px', color: v.fg,
-      fontSize: 13, fontWeight: 500, cursor: 'pointer',
+      borderRadius: 6, padding: '10px 14px', color: v.fg,
+      fontSize: 15, fontWeight: 500, cursor: 'pointer',
       fontFamily: 'inherit',
       ...props.style,
     }}>{children}</button>
@@ -1590,7 +1612,7 @@ function SiteDiagram({ report, update }) {
           <img src={diagramSrc(report)} alt="Site"
             style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
         ) : (
-          <div style={{
+          <div className="no-print" style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: c.textFaint, fontSize: 12, textAlign: 'center', padding: 20,
@@ -1628,6 +1650,10 @@ function SiteDiagram({ report, update }) {
           }}
         />
       </div>
+      {/* Editor chrome (toolbar, tools, sliders, undo/clear, legend) — wrapped
+          no-print so the saved PDF / preview shows only the diagram itself,
+          never the editing controls. */}
+      <div className="no-print">
       {/* Photo toolbar — sits OUTSIDE the canvas so the Remove button can't
           land on the sketch the user is working on. */}
       {diagramSrc(report) && (
@@ -1837,6 +1863,7 @@ function SiteDiagram({ report, update }) {
           ))}
         </div>
       </div>
+      </div>{/* end .no-print editor chrome */}
     </Card>
   );
 }
@@ -2171,6 +2198,41 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
   const resetPresets = () => setPresets(DEFAULT_PRESETS);
 
+  // ---- Zoom & pan (desktop-tuned) ----------------------------------------
+  // Annotations are stored in 0..1 image coords, so the visual zoom is a pure
+  // CSS transform on the image+canvas stage — getFractionalCoords keeps working
+  // unchanged at any zoom, and the photo stays crisp (browser re-samples the
+  // <img>). Wheel zooms toward the cursor; 🖐 Pan or middle-drag moves.
+  const MIN_ZOOM = 1, MAX_ZOOM = 8;
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState(false);
+  const panDragRef = useRef(null);   // { x0, y0, panX, panY } while dragging
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  useEffect(() => {
+    const cont = containerRef.current;
+    if (!cont) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = cont.getBoundingClientRect();
+      const cx = e.clientX - rect.left - rect.width / 2;
+      const cy = e.clientY - rect.top - rect.height / 2;
+      setZoom(z => {
+        const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+        setPan(p => {
+          if (nz === z) return p;
+          if (nz === 1) return { x: 0, y: 0 };
+          const lx = (cx - p.x) / z, ly = (cy - p.y) / z;
+          return { x: cx - lx * nz, y: cy - ly * nz };
+        });
+        return nz;
+      });
+    };
+    cont.addEventListener('wheel', onWheel, { passive: false });
+    return () => cont.removeEventListener('wheel', onWheel);
+  }, []);
+
   const getFractionalCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -2189,15 +2251,13 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     const img = imgRef.current;
     const container = containerRef.current;
     if (!canvas || !img || !container) return;
-    const imgRect = img.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    if (imgRect.width === 0 || imgRect.height === 0) return;
-    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
-    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
-    canvas.style.width = imgRect.width + 'px';
-    canvas.style.height = imgRect.height + 'px';
-    canvas.width = imgRect.width;
-    canvas.height = imgRect.height;
+    // Canvas overlays the image exactly (absolute inset:0 inside the stage), so
+    // we only size its backing buffer to the displayed image — no positioning
+    // math. The CSS transform on the stage handles zoom/pan for image+canvas.
+    const w = img.clientWidth, h = img.clientHeight;
+    if (!w || !h) return;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -2269,6 +2329,12 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   }, [annotations, anchor, hover]);
 
   const handleStart = (e) => {
+    // Pan takes priority: 🖐 Pan tool (left-drag) or middle-mouse drag.
+    if (panMode || e.button === 1) {
+      e.preventDefault();
+      panDragRef.current = { x0: e.clientX, y0: e.clientY, panX: pan.x, panY: pan.y };
+      return;
+    }
     if (tool !== 'freehand') return;
     e.preventDefault();
     const pt = getFractionalCoords(e);
@@ -2277,6 +2343,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleEnd = (e) => {
+    if (panDragRef.current) { panDragRef.current = null; return; }
     if (tool !== 'freehand' || !drawingPath) return;
     e.preventDefault();
     if (drawingPath.length >= 2) {
@@ -2287,6 +2354,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleClick = (e) => {
+    if (panMode || panDragRef.current) return;
     if (tool === 'freehand') return;
     e.preventDefault();
     let pt = getFractionalCoords(e);
@@ -2355,6 +2423,11 @@ function AnnotationEditor({ photo, onSave, onClose }) {
   };
 
   const handleMove = (e) => {
+    if (panDragRef.current) {
+      const d = panDragRef.current;
+      setPan({ x: d.panX + (e.clientX - d.x0), y: d.panY + (e.clientY - d.y0) });
+      return;
+    }
     if (tool === 'freehand') {
       if (!drawingPath) return;
       e.preventDefault();
@@ -2449,32 +2522,43 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         flex: 1, position: 'relative', overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8,
       }}>
-        <img
-          ref={imgRef}
-          src={photoSrc(photo)}
-          alt="scan"
-          onLoad={redraw}
-          style={{
-            maxWidth: '100%', maxHeight: '100%',
-            objectFit: 'contain', display: 'block', userSelect: 'none',
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute',
-            touchAction: 'none',
-            cursor: tool === 'text' ? 'text' : (tool === 'freehand' ? 'crosshair' : 'crosshair'),
-          }}
-          onClick={handleClick}
-          onMouseDown={handleStart}
-          onMouseMove={handleMove}
-          onMouseUp={handleEnd}
-          onMouseLeave={handleEnd}
-          onTouchStart={tool === 'freehand' ? handleStart : handleClick}
-          onTouchMove={handleMove}
-          onTouchEnd={handleEnd}
-        />
+        <div style={{
+          position: 'relative', display: 'inline-block',
+          maxWidth: '100%', maxHeight: '100%',
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: panDragRef.current ? 'none' : 'transform .08s ease-out',
+          willChange: 'transform',
+        }}>
+          <img
+            ref={imgRef}
+            src={photoSrc(photo)}
+            alt="scan"
+            onLoad={redraw}
+            draggable={false}
+            style={{
+              maxWidth: '100%', maxHeight: '100%',
+              objectFit: 'contain', display: 'block', userSelect: 'none',
+            }}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              touchAction: 'none',
+              cursor: panMode ? (panDragRef.current ? 'grabbing' : 'grab')
+                : (tool === 'text' ? 'text' : 'crosshair'),
+            }}
+            onClick={handleClick}
+            onMouseDown={handleStart}
+            onMouseMove={handleMove}
+            onMouseUp={handleEnd}
+            onMouseLeave={handleEnd}
+            onTouchStart={tool === 'freehand' ? handleStart : handleClick}
+            onTouchMove={handleMove}
+            onTouchEnd={handleEnd}
+          />
+        </div>
         {/* Inline text-annotation input — opens at the tap point in text mode.
             Replaces window.prompt(), which Electron disables. */}
         {pendingText && (() => {
@@ -2691,6 +2775,28 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               }}>{opt.label}</button>
           ))}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setPanMode(m => !m)}
+            title="Pan / move the photo (or hold middle-mouse and drag). Scroll to zoom."
+            style={{
+              background: panMode ? c.accentDim : c.cardAlt,
+              border: `1px solid ${panMode ? c.accent : c.border}`,
+              borderRadius: 6, padding: '7px 11px',
+              color: panMode ? c.onAccentDim : c.text,
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>🖐 Pan</button>
+          <span style={{ flex: 1 }} />
+          <Btn variant="ghost" onClick={() => setZoom(z => Math.max(MIN_ZOOM, +(z / 1.25).toFixed(2)))}
+            title="Zoom out" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom <= MIN_ZOOM}>−</Btn>
+          <span style={{ fontSize: 12, color: c.textDim, minWidth: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <Btn variant="ghost" onClick={() => setZoom(z => Math.min(MAX_ZOOM, +(z * 1.25).toFixed(2)))}
+            title="Zoom in" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom >= MAX_ZOOM}>+</Btn>
+          <Btn variant="ghost" onClick={resetView}
+            title="Reset zoom & position" style={{ fontSize: 12 }}
+            disabled={zoom === 1 && pan.x === 0 && pan.y === 0}>Reset view</Btn>
+        </div>
         <label style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textDim,
         }}>
@@ -2752,6 +2858,9 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               : anchor
                 ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
                 : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
+        </div>
+        <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', opacity: 0.85 }}>
+          Scroll to zoom toward the cursor · 🖐 Pan (or middle-mouse drag) to move
         </div>
       </div>
     </div>
@@ -2823,6 +2932,82 @@ function SectionsQuickNav({ sections }) {
           display: 'flex', alignItems: 'center', gap: 5,
         }}>
         {open ? '✕' : '📑'} Sections
+      </button>
+    </div>
+  );
+}
+
+// Floating, toggleable on-screen shortcuts cheat-sheet (bottom-left). Never
+// prints. Remembers open/closed. Covers the mouse/keyboard moves that aren't
+// obvious from buttons (zoom, pan, angle-snap, reorder).
+function ShortcutsPanel() {
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem('ak_shortcuts_open') === '1'; } catch { return false; }
+  });
+  const toggle = () => setOpen(o => {
+    const n = !o;
+    try { localStorage.setItem('ak_shortcuts_open', n ? '1' : '0'); } catch {}
+    return n;
+  });
+  const groups = [
+    { title: 'Scan-photo annotator', items: [
+      ['Scroll wheel', 'Zoom in / out (toward the cursor)'],
+      ['🖐 Pan / middle-drag', 'Move around when zoomed in'],
+      ['Shift + drag', 'Snap a line/arrow to 15°'],
+      ['Enter / Esc', 'Save / cancel a text label'],
+    ] },
+    { title: 'Report editor', items: [
+      ['👁 Preview', 'See the exact PDF page'],
+      ['Drag a card (in Preview)', 'Reorder sections'],
+      ['⚙ Setup → Print setup', 'Drag rows to reorder'],
+      ['Esc', 'Cancel the current action'],
+    ] },
+  ];
+  return (
+    <div className="no-print" style={{
+      position: 'fixed', left: 14, bottom: 70, zIndex: 90,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+    }}>
+      {open && (
+        <div style={{
+          background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+          borderRadius: 8, padding: '8px 10px',
+          maxHeight: '62vh', overflowY: 'auto',
+          minWidth: 256, maxWidth: 310,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+        }}>
+          {groups.map(g => (
+            <div key={g.title} style={{ marginBottom: 9 }}>
+              <div style={{
+                fontSize: 10, color: c.textFaint, fontWeight: 700,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '2px 2px 6px',
+              }}>{g.title}</div>
+              {g.items.map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', gap: 8, padding: '3px 2px', fontSize: 12, lineHeight: 1.4 }}>
+                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: c.text, minWidth: 110 }}>{k}</span>
+                  <span style={{ color: c.textDim }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{
+            fontSize: 10, color: c.textFaint, paddingTop: 5,
+            borderTop: `1px solid ${c.border}`, marginTop: 1,
+          }}>On-screen only — never prints.</div>
+        </div>
+      )}
+      <button onClick={toggle}
+        title="Keyboard & mouse shortcuts"
+        aria-label="Shortcuts"
+        style={{
+          background: c.cardAlt, color: c.text,
+          border: `1px solid ${c.borderStrong}`, borderRadius: 22,
+          padding: '9px 12px', fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', fontFamily: 'inherit',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+        {open ? '✕' : '⌨'} Shortcuts
       </button>
     </div>
   );
@@ -3019,7 +3204,7 @@ function CaptionField({ value, onCommit, style, ...rest }) {
       style={{
         width: '100%', background: c.cardAlt,
         border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '9px 11px', color: c.text, fontSize: 14,
+        padding: '10px 12px', color: c.text, fontSize: 16,
         fontFamily: 'inherit', boxSizing: 'border-box',
         resize: 'vertical', minHeight: 64,
         ...style,
@@ -3125,12 +3310,12 @@ function ScanPhotos({ report, update }) {
         padding: '2px 8px', borderRadius: 4, fontWeight: 500,
       }}>{report.scanPhotos.length}</span>
     }>
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
         Add photos of the scanned area with markup, obstructions, or context shots.
         Each photo is grouped by confidence and embedded into the PDF.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
         <label style={{
           display: 'block', background: c.accent, border: `1px solid ${c.accent}`,
           borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
@@ -3178,13 +3363,19 @@ function ScanPhotos({ report, update }) {
               </span>
             </div>
 
-            {group.photos.map(photo => {
+            {group.photos.map((photo, idxInGroup) => {
               const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
               const annotationCount = (photo.annotations || []).length;
+              // Trailing odd photo in a group has no 2-up partner, so it would
+              // otherwise sit half-width with blank space beside it. Flip it to a
+              // full-width side-by-side figure (image + info panel) instead.
+              const isSoloFigure =
+                idxInGroup === group.photos.length - 1 && group.photos.length % 2 === 1;
               return (
                 <div key={photo.id}
                   className={
                     'scan-photo-row' +
+                    (isSoloFigure ? ' scan-photo-row--solo' : '') +
                     (dragPhotoId === photo.id ? ' dragging' : '') +
                     (overPhotoId === photo.id && dragPhotoId && dragPhotoId !== photo.id ? ' drop-target' : '')
                   }
@@ -3213,6 +3404,7 @@ function ScanPhotos({ report, update }) {
                     padding: 9, marginBottom: 7, background: c.cardAlt,
                     cursor: 'grab',
                   }}>
+                  <div className="no-print">
                   <div style={{
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
@@ -3309,6 +3501,7 @@ function ScanPhotos({ report, update }) {
                       { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                     ].map(opt => (
                       <button key={opt.id}
+                        className={`ak-conf ${photo.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                         onClick={() => updatePhoto(photo.id, { confidence: opt.id })}
                         style={{
                           flex: 1,
@@ -3360,6 +3553,26 @@ function ScanPhotos({ report, update }) {
                       disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
                     <Btn variant="danger" onClick={() => removePhoto(photo.id)}
                       style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕</Btn>
+                  </div>
+                  </div>{/* /no-print editor */}
+                  {/* Print-only clean figure: large photo + caption + confidence */}
+                  <div className="print-only photo-print">
+                    <AnnotatedImage
+                      src={photoSrc(photo)}
+                      annotations={photo.annotations || []}
+                      alt={photo.caption || 'Scan photo'}
+                      style={{ width: '100%', background: '#000', borderRadius: 4, display: 'block' }}
+                    />
+                    <div className="photo-print-meta">
+                      <span className="photo-print-tags">
+                        {photo.locationRef && <strong className="photo-print-loc">{photo.locationRef}</strong>}
+                        <span className={`ak-conf-badge ak-conf-${photo.confidence || 'high'} photo-print-conf`}>
+                          {(photo.confidence || 'high') === 'high' ? 'HIGH' : photo.confidence === 'med' ? 'MED' : 'LOW'} CONF
+                        </span>
+                      </span>
+                      {photo.scaleInfo && <div className="photo-print-scale">{photo.scaleInfo}</div>}
+                      {photo.caption && <div className="photo-print-cap">{photo.caption}</div>}
+                    </div>
                   </div>
                 </div>
               );
@@ -4057,6 +4270,7 @@ function ScanLocations({ report, update }) {
                         { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                       ].map(opt => (
                         <button key={opt.id}
+                          className={`ak-conf ${loc.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                           onClick={() => updateLoc(loc.id, { confidence: opt.id })}
                           style={{
                             flex: 1,
@@ -4295,7 +4509,7 @@ function ScanLocations({ report, update }) {
       })()}
 
       {report.scanLocations.length === 0 && (
-        <div style={{
+        <div className="no-print" style={{
           padding: '14px', textAlign: 'center', fontSize: 12,
           color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 8,
         }}>
@@ -4303,7 +4517,9 @@ function ScanLocations({ report, update }) {
         </div>
       )}
 
-      <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+      <div className="no-print">
+        <Btn onClick={addLocation} style={{ width: '100%' }}>+ Add scan location</Btn>
+      </div>
 
       {/* Pending cross-section sync proposals */}
       {pendingSyncs.length > 0 && (
@@ -4660,7 +4876,7 @@ export default function GSSIReportApp() {
     saveReport(id, r);
     setSavedAt(Date.now());
     setReportsIndex((idx) => {
-      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now() } : e);
+      const next = idx.map((e) => e.id === id ? { ...e, name: deriveReportName(r), updatedAt: Date.now(), status: r.status || 'draft' } : e);
       saveIndex(next);
       return next;
     });
@@ -4947,7 +5163,7 @@ export default function GSSIReportApp() {
       '',
       '(Attach the saved PDF before sending — the report does not auto-attach from the browser.)',
       '',
-      '— Aggarwal Kamikazes Cutting & Coring Ltd',
+      '— Aggarwal Kamikaze\'s Cutting & Coring Ltd',
     ].filter(l => l !== null).join('\n');
     return { subject, body };
   };
@@ -5466,7 +5682,7 @@ export default function GSSIReportApp() {
     <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
       fontFamily: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      padding: '14px 12px 100px', maxWidth: 720, margin: '0 auto',
+      padding: '14px 12px 100px', margin: '0 auto',
     }}>
       <ThemeStyles />
       {previewMode && (
@@ -5554,8 +5770,8 @@ export default function GSSIReportApp() {
         .ak-lh-nm1 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 34pt; line-height: .82; color: #141414; }
         .ak-lh-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 22pt; line-height: .9; color: #6b7682; }
         /* Red left-accent on section cards (focus) + faint gold lift — mirrors the locked PDF */
-        @media print { .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; } }
-        body.preview-mode .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 1px 5px rgba(201,162,39,.25) !important; }
+        @media print { .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 4px 7px -2px rgba(0,0,0,.13) !important; } }
+        body.preview-mode .ak-shell .ak-sec { border-left: 3px solid #c0282d !important; box-shadow: 0 4px 7px -2px rgba(0,0,0,.13) !important; }
         .ak-lh-sub { font-size: 8pt; color: #555; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
         .ak-lh-addr { font-size: 7.5pt; color: #777; margin-top: 4px; line-height: 1.45; }
         .ak-lh-box { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
@@ -5596,6 +5812,39 @@ export default function GSSIReportApp() {
         .report-body { display: flex; flex-direction: column; }
         .report-body > .brand-ribbon  { order: -100; }
         .report-body > .brand-signoff { order: 100000; }
+        /* === v2: 3-column responsive workspace shell (screen only) === */
+        .ws-grid { display: block; }
+        .ws-nav, .ws-rail { display: none; }
+        @media (min-width: 900px) {
+          .ws-grid {
+            display: grid;
+            grid-template-columns: 172px minmax(0, 1fr) 208px;
+            gap: 18px; align-items: start;
+          }
+          .ws-nav, .ws-rail { display: block; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; }
+        }
+        .ws-nav .sep {
+          font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+          color: ${c.textFaint}; margin: 0 0 6px 11px;
+        }
+        .ws-nav .ni {
+          display: block; width: 100%; text-align: left; cursor: pointer;
+          background: transparent; border: 0; border-left: 2px solid transparent;
+          color: ${c.textDim}; font: inherit; font-size: 13.5px; line-height: 1.35;
+          padding: 6px 11px; border-radius: 0 7px 7px 0; margin-bottom: 1px;
+          transition: background .12s, color .12s, border-color .12s;
+        }
+        .ws-nav .ni:hover { background: ${c.cardAlt}; color: ${c.text}; border-left-color: ${c.accent}; }
+        @media print {
+          .ws-grid { display: block !important; }
+          .ws-nav, .ws-rail { display: none !important; }
+        }
+        /* Preview mode must mirror print: collapse the 3-column editor grid so
+           the report fills the full page width. Otherwise the hidden nav/rail
+           columns (172px + 208px) stay reserved and squish the report into the
+           middle ~400px — a "mobile width" preview even on a maximized window. */
+        body.preview-mode .ws-grid { display: block !important; }
+        body.preview-mode .ws-nav, body.preview-mode .ws-rail { display: none !important; }
         /* CAD-page on-screen container (matches the print landscape look loosely) */
         .cad-page {
           background: #fff; color: #000;
@@ -5632,6 +5881,43 @@ export default function GSSIReportApp() {
           border-color: #ccc !important;
           background: #fff !important;
           color: #000 !important;
+        }
+        /* Preview matches print: deeper brand-red location header (not neon),
+           rounded to follow the card corner. */
+        body.preview-mode .ak-shell .scan-location-card { border: 1.5px solid #5b6470 !important; }
+        body.preview-mode .ak-shell .scan-location-card .loc-header {
+          background: #c0282d !important; color: #fff !important;
+          border-radius: 7px 7px 0 0;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        /* Preview matches print: scan photos as a clean 2-up figure grid. */
+        body.preview-mode .ak-shell .scan-photo-row {
+          display: inline-block !important; width: 48% !important;
+          margin: 0 1% 10px !important; vertical-align: top; box-sizing: border-box;
+          background: transparent !important; border: 1px solid #c2c6cc !important;
+          border-radius: 6px !important; padding: 7px !important; cursor: default !important;
+        }
+        body.preview-mode .ak-shell .photo-print img,
+        body.preview-mode .ak-shell .photo-print canvas {
+          width: 100% !important; height: auto !important; max-height: 9cm;
+          object-fit: contain;
+        }
+        body.preview-mode .ak-shell .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
+        body.preview-mode .ak-shell .photo-print-loc { font-size: 10pt; margin-right: 8px; }
+        body.preview-mode .ak-shell .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
+        body.preview-mode .ak-shell .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
+        /* Lone/trailing odd photo: full-width side-by-side figure so the freed
+           half carries the caption/meta instead of sitting blank. */
+        body.preview-mode .ak-shell .scan-photo-row--solo { width: 98% !important; }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print {
+          display: flex !important; gap: 16px; align-items: flex-start;
+        }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print > :first-child {
+          flex: 0 0 58%; max-width: 58%;
+        }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print-meta {
+          flex: 1; margin-top: 0 !important; align-self: stretch;
+          border-left: 2px solid #e1e4e8; padding-left: 16px;
         }
         /* Mirror the dark-theme kill from @media print so Preview matches
            the saved PDF exactly — engineer sees what will actually print. */
@@ -5699,7 +5985,7 @@ export default function GSSIReportApp() {
           .ak-sec {
             background: #fff !important;
             color: #000 !important;
-            border-color: #999 !important;
+            border: 1.5px solid #5b6470 !important;
             box-shadow: none !important;
           }
           /* Cards have inline background: c.card on the structural wrappers
@@ -5728,13 +6014,32 @@ export default function GSSIReportApp() {
           /* Borders fade to grey so they read as lines, not blocks. */
           .ak-sec div[style*="border"],
           .ak-sec section[style*="border"] {
-            border-color: #bbb !important;
+            border-color: #8a9099 !important;
           }
           .ak-sec input, .ak-sec textarea, .ak-sec select {
             background: #fff !important;
             color: #000 !important;
-            border: 1px solid #ccc !important;
+            border: 1px solid #98a0aa !important;
             -webkit-text-fill-color: #000 !important;
+          }
+          /* Confidence toggles as light chips on white paper: unselected = white/
+             grey, selected = a light tint of its colour. (Dark-theme button bgs
+             are preserved by the print kill, so they'd otherwise print navy.) */
+          .ak-conf, .ak-conf-on, .ak-conf-off, .ak-conf-badge {
+            -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+            -webkit-text-fill-color: currentColor !important;
+          }
+          .ak-conf-badge { border: 1px solid; }
+          .ak-conf-off { background: #fff !important; color: #555 !important; border-color: #b9bdc4 !important; }
+          /* Selected confidence chips + the matching T-0X badge share one (less
+             bleached) colour so they read as a set. */
+          .ak-conf-on.ak-conf-high, .ak-conf-badge.ak-conf-high { background: #c9ead4 !important; color: #14713a !important; border-color: #1a7f37 !important; }
+          .ak-conf-on.ak-conf-med,  .ak-conf-badge.ak-conf-med  { background: #fbe3b8 !important; color: #8a5300 !important; border-color: #b8810a !important; }
+          .ak-conf-on.ak-conf-low,  .ak-conf-badge.ak-conf-low  { background: #f7cfcf !important; color: #b21f24 !important; border-color: #c0282d !important; }
+          /* B4: a hair of letter-spacing so tight pairs (e.g. "Hi") don't kiss. */
+          .ak-sec p, .ak-sec li, .ak-sec span, .ak-sec strong, .ak-sec label,
+          .ak-sec td, .ak-sec th, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4 {
+            letter-spacing: 0.01em;
           }
           /* Preserve intentionally-coloured elements (brand red, swatches,
              scan annotations, photo content, etc.) — !important rules that
@@ -5752,20 +6057,27 @@ export default function GSSIReportApp() {
           }
           .cad-letterhead {
             display: grid;
-            grid-template-columns: 60px 1fr auto;
-            gap: 10px;
+            grid-template-columns: auto 1fr auto;
+            gap: 14px;
             align-items: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 6px;
-            margin-bottom: 8px;
+            border-bottom: 3px solid #141414;
+            padding-bottom: 9px;
+            margin-bottom: 10px;
           }
-          .cad-logo { width: 56px; height: auto; }
-          .cad-company { font-size: 14pt; font-weight: 900; letter-spacing: 0.5px; }
-          .cad-subtitle { font-size: 9pt; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
-          .cad-letterhead-meta { font-size: 9pt; text-align: right; line-height: 1.3; color: #222; }
+          .cad-logo { height: 70px; width: auto; }
+          /* Mirror the page-1 letterhead wordmark (two-tone Caveat, nm1 > nm2).
+             !important on colors because the CAD page sits inside an .ak-sec,
+             whose dark-theme print color-kill would otherwise force black. */
+          .cad-nm1 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 32pt; line-height: 0.82; color: #141414 !important; }
+          .cad-nm2 { font-family: 'Caveat', cursive; font-weight: 700; font-size: 21pt; line-height: 0.9; color: #6b7682 !important; }
+          .cad-subtitle { font-size: 8pt; color: #555 !important; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
+          .cad-addr { font-size: 7.5pt; color: #777 !important; margin-top: 4px; line-height: 1.45; }
+          .cad-letterhead-meta { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
+          .cad-letterhead-meta b { display: block; color: #555 !important; font-size: 6.8pt; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
+          .cad-letterhead-meta .v { font-size: 10pt; font-weight: 700; margin-bottom: 5px; color: #141414 !important; }
           .cad-body {
             display: grid;
-            grid-template-columns: 1fr 240px;
+            grid-template-columns: 1fr 82mm;   /* right column ≥ title block (70mm) + its 8mm offset, so the absolute title block stays clear of the drawing box */
             gap: 10px;
             height: calc(100% - 92mm);
             min-height: 130mm;
@@ -5809,8 +6121,36 @@ export default function GSSIReportApp() {
              into the live editor. Closing brace moved to line ~5478 so every
              rule from here to .scan-location-card .loc-photo is print-only.) */
           input, select, textarea {
-            border: 1px solid #ddd !important;
+            border: 1px solid #98a0aa !important;
             background: white !important; color: black !important;
+          }
+          /* Keep a section header glued to its content — never orphan a title at
+             the bottom of a page (e.g. a "Site diagram" header alone with the
+             photo on the next page). */
+          .ak-card-head, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4 {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+            break-inside: avoid !important;
+          }
+          /* Cap large media to one page so a tall diagram/photo can't overflow a
+             page or land header-less on its own — keeps it WITH its header. */
+          .ak-sec-diagram canvas, .ak-sec-diagram img,
+          .scan-photo-row img, .gpr-scan-figure img,
+          .scan-location-card .loc-photo img {
+            max-height: 21cm !important;
+            height: auto !important;
+            object-fit: contain !important;
+          }
+          .ak-sec .approval-audit-print {
+            display: block;
+            margin-top: 12px; padding: 8px 11px;
+            border: 1.5px solid #1a7f37 !important;
+            border-radius: 5px;
+            background: #eafaf0 !important;
+            color: #0b3d1c !important;
+            font-size: 10pt; font-weight: 700;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            page-break-inside: avoid; break-inside: avoid;
           }
           .legal-disclaimer-print {
             page-break-inside: avoid;
@@ -5852,8 +6192,41 @@ export default function GSSIReportApp() {
           .scan-photo-row {
             page-break-inside: avoid;
             break-inside: avoid;
+            display: inline-block !important;
+            width: 48% !important;
+            margin: 0 1% 10px !important;
+            vertical-align: top;
+            box-sizing: border-box;
+            background: transparent !important;
+            border: 1px solid #c2c6cc !important;
+            border-radius: 6px !important;
+            padding: 7px !important;
+            cursor: default !important;
           }
           .scan-photo-row img { max-width: 100% !important; height: auto !important; }
+          .photo-print img, .photo-print canvas {
+            width: 100% !important; height: auto !important; max-height: 9cm;
+            object-fit: contain;
+            -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+          }
+          .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
+          .photo-print-tags { margin-bottom: 2px; }
+          .photo-print-loc { font-size: 10pt; margin-right: 8px; }
+          .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
+          .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
+          /* Lone/trailing odd photo: full-width side-by-side figure so the freed
+             half carries the caption/meta instead of sitting blank. */
+          .scan-photo-row--solo { width: 98% !important; }
+          .scan-photo-row--solo .photo-print {
+            display: flex !important; gap: 16px; align-items: flex-start;
+          }
+          .scan-photo-row--solo .photo-print > :first-child {
+            flex: 0 0 58%; max-width: 58%;
+          }
+          .scan-photo-row--solo .photo-print-meta {
+            flex: 1; margin-top: 0 !important; align-self: stretch;
+            border-left: 2px solid #e1e4e8; padding-left: 16px;
+          }
 
           .gpr-scan-figure {
             page-break-inside: avoid;
@@ -5875,14 +6248,15 @@ export default function GSSIReportApp() {
           .scan-location-card {
             page-break-inside: avoid;
             break-inside: avoid;
-            border: 1px solid #999 !important;
-            border-radius: 0 !important;
+            border: 1.5px solid #5b6470 !important;
+            border-radius: 8px !important;
             margin-bottom: 14px;
           }
           .scan-location-card .loc-header {
-            background: #e02020 !important;
+            background: #c0282d !important;
             color: #fff !important;
-            border-bottom: 1px solid #999;
+            border-bottom: 1px solid #8a2025;
+            border-radius: 7px 7px 0 0;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
@@ -5950,10 +6324,18 @@ export default function GSSIReportApp() {
               : 'Auto-save on'}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {report.status === 'approved' ? (
+            <span title="Approved & archived — manage in Authorship & review"
+              style={{
+                background: c.greenBg, color: c.green, border: `1px solid ${c.green}`,
+                borderRadius: 6, padding: '7px 10px',
+                fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+              }}>✓ APPROVED</span>
+          ) : (
           <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
             title={report.status === 'issued'
-              ? 'Issued — PDF exports are clean. Click to mark back to Draft.'
-              : 'Draft — PDF exports carry a DRAFT watermark. Click to mark as Issued.'}
+              ? 'Issued — sent to the engineer for review (FOR REVIEW watermark). Click to revert to Draft.'
+              : 'Draft — PDF carries a DRAFT watermark. Click to mark Issued (sent for review).'}
             aria-label="Toggle draft / issued status"
             style={{
               background: report.status === 'issued' ? c.greenBg : c.amberBg,
@@ -5964,6 +6346,7 @@ export default function GSSIReportApp() {
             }}>
             {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
           </button>
+          )}
           <SyncControl auth={auth} sync={sync} c={c} />
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
@@ -6049,8 +6432,8 @@ export default function GSSIReportApp() {
         {/* Logo centered as its own hero element (now carries the brand on its own) */}
         <img
           src={LOGO_SRC}
-          alt="Aggarwal Kamikazes Cutting & Coring Ltd"
-          className="ak-logo"
+          alt="Aggarwal Kamikaze's Cutting & Coring Ltd"
+          className="ak-logo no-print"
           style={{
             display: 'block',
             height: 140,
@@ -6063,9 +6446,12 @@ export default function GSSIReportApp() {
       </div>
       <style>{`
         /* Responsive shell — phone first, breathes on wider screens */
+        /* Fluid: fills the window/monitor, capped so a 30"+ wide screen never
+           over-stretches the forms and the report never side-scrolls. */
         .ak-shell { max-width: 720px; }
-        @media (min-width: 900px)  { .ak-shell { max-width: 820px; padding-left: 20px; padding-right: 20px; } }
-        @media (min-width: 1200px) { .ak-shell { max-width: 920px; padding-left: 28px; padding-right: 28px; } }
+        @media (min-width: 900px)  { .ak-shell { max-width: 1180px; padding-left: 20px; padding-right: 20px; } }
+        @media (min-width: 1200px) { .ak-shell { max-width: 1600px; padding-left: 28px; padding-right: 28px; } }
+        @media (min-width: 1700px) { .ak-shell { max-width: 2000px; padding-left: 32px; padding-right: 32px; } }
         @media (max-width: 480px)  {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
           .ak-header .ak-logo { height: 110px !important; }
@@ -6168,7 +6554,7 @@ export default function GSSIReportApp() {
           { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
           { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
           { id: 'enableQR',            label: 'QR code on report',          hint: 'Stamps a scannable QR code on the report linking to the live report tool (or any URL you set below). Off by default.' },
-          { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
+          { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikaze\'s ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
             display: 'flex', alignItems: 'flex-start', gap: 9,
@@ -6316,16 +6702,30 @@ export default function GSSIReportApp() {
       }</style>
 
       {/* === REPORT BODY (flex column; section order set via CSS) === */}
-      <div className="report-body">
+      <div className="ws-grid">
+      {/* LEFT: jump-nav — scrolls via existing .ak-sec-<id> classes. Screen only. */}
+      <nav className="ws-nav no-print" aria-label="Report sections">
+        <div className="sep">Report</div>
+        {effectiveOrder.filter(id => vis(id)).map(id => {
+          const L = { workflowStatus: 'Workflow', summary: 'Summary', cover: 'Project', slab: 'Slab', targets: 'Targets', findings: 'Findings', coverSummary: 'Cover depths', diagram: 'Diagram', drawingNotes: 'Drawing notes', scanPhotos: 'Photos', zones: 'Zones', locations: 'Scan locations', proposedCores: 'Proposed cores', gprScans: 'GPR scans', cores: 'Core verdicts', uncertainty: 'Uncertainty', equipment: 'Equipment', methods: 'Methods', limitations: 'Limitations', standardNotes: 'Std notes', cadPage: 'CAD page', disclaimer: 'Disclaimer', signoff: 'Sign-off' };
+          return (
+            <button key={id} type="button" className="ni"
+              onClick={() => { const el = document.querySelector('.ak-sec-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              {L[id] || id}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="report-body ws-main">
         {/* === DRAFT watermark — print/preview only, while status !== 'issued' === */}
-        {report.status !== 'issued' && (
+        {report.showWatermark !== false && report.status !== 'approved' && (
           <div className="draft-watermark" aria-hidden="true">
             <svg viewBox="0 0 1000 1300" preserveAspectRatio="xMidYMid meet">
               <text x="500" y="700" textAnchor="middle"
                 transform="rotate(-30 500 660)"
                 fontFamily="Helvetica, Arial, sans-serif"
-                fontSize="230" fontWeight="800" letterSpacing="14"
-                fill="#9ca3af" fillOpacity="0.18">DRAFT</text>
+                fontSize={report.status === 'draft' ? '230' : '150'} fontWeight="800" letterSpacing="14"
+                fill="#9ca3af" fillOpacity="0.18">{report.status === 'draft' ? 'DRAFT' : 'FOR REVIEW'}</text>
             </svg>
           </div>
         )}
@@ -6380,15 +6780,17 @@ export default function GSSIReportApp() {
         )}
       </Card>
 
-      {/* === BRANDED LETTERHEAD (print/preview only, opt-in via brandFlourishes) ===
+      {/* === BRANDED LETTERHEAD (print/preview only) — PERMANENT STAPLE ===
            v1.0.15 facelift: the finalized Caveat two-tone wordmark from the
-           pdf-mockups, ported onto the full v1 report. Renders once at the top
-           (page 1), border-rule under it, project/operator/date meta box right. */}
-      {report.brandFlourishes && (
+           pdf-mockups, ported onto the full v1 report. Always renders once at
+           the top (page 1) to promote the company — decoupled from
+           brandFlourishes (which now gates only the optional footer signature).
+           Border-rule under it, project/operator/date meta box right. */}
+      {(
         <div className="ak-lh">
           <img src={LOGO_SRC} alt="" className="ak-lh-logo" />
           <div className="ak-lh-co">
-            <div className="ak-lh-nm1">Aggarwal Kamikazes</div>
+            <div className="ak-lh-nm1">Aggarwal Kamikaze's</div>
             <div className="ak-lh-nm2">Cutting &amp; Coring Ltd.</div>
             <div className="ak-lh-sub">GPR Concrete Scanning · Core Clearance Report</div>
             <div className="ak-lh-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
@@ -6536,9 +6938,10 @@ export default function GSSIReportApp() {
                   padding: 9, marginBottom: 7,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
-                    <span style={{
-                      background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
-                      fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
+                    <span className={`ak-conf-badge ak-conf-${level}`} style={{
+                      background: meta.bg, padding: '2px 7px', borderRadius: 4,
+                      fontSize: 11, fontWeight: 700, color: meta.color,
+                      border: `1px solid ${meta.color}`, minWidth: 38, textAlign: 'center',
                     }}>{t.id}</span>
                     <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
                       style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
@@ -6551,11 +6954,13 @@ export default function GSSIReportApp() {
                       <option>Pan decking</option>
                       <option>Unknown anomaly</option>
                     </Select>
+                    <span className="no-print" style={{ display: 'contents' }}>
                     <Btn variant="ghost" onClick={() => moveTarget(i, -1)} disabled={i === 0}
                       title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                     <Btn variant="ghost" onClick={() => moveTarget(i, 1)} disabled={i === report.targets.length - 1}
                       title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.targets.length - 1 ? 0.35 : 1 }}>▼</Btn>
                     <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                    </span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
                     <Input placeholder="Depth (mm)" value={t.depth}
@@ -6576,6 +6981,7 @@ export default function GSSIReportApp() {
                       { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                     ].map(opt => (
                       <button key={opt.id}
+                        className={`ak-conf ${t.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                         onClick={() => updateTarget(i, { confidence: opt.id })}
                         style={{
                           flex: 1,
@@ -6741,8 +7147,12 @@ export default function GSSIReportApp() {
         })()}
       </Card>
 
-      {/* === SITE DIAGRAM === */}
-      <div className={ph('diagram')}>
+      {/* === SITE DIAGRAM === (hidden in print/preview when there's no diagram
+          content, so an unused sketch pad never prints an empty box) */}
+      <div className={`${ph('diagram')}${
+        (report.diagramImage || report.diagramImageUrl ||
+         (report.diagramStrokes || []).length || (report.diagramPins || []).length ||
+         (report.diagramZones || []).length) ? '' : ' no-print'}`}>
         <SiteDiagram report={report} update={update} />
       </div>
 
@@ -6944,7 +7354,7 @@ export default function GSSIReportApp() {
                   <Input value={co.size} onChange={e => updateCore(i, { size: e.target.value })}
                     placeholder='4"' style={{ width: 56, padding: '4px 6px', fontSize: 12 }} />
                 </div>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div className="no-print" style={{ display: 'flex', gap: 4 }}>
                   <Btn variant="ghost" onClick={() => moveCore(i, -1)} disabled={i === 0}
                     title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                   <Btn variant="ghost" onClick={() => moveCore(i, 1)} disabled={i === report.cores.length - 1}
@@ -6967,7 +7377,9 @@ export default function GSSIReportApp() {
             </div>
           );
         })}
-        <Btn onClick={addCore} style={{ width: '100%' }}>+ Add core location</Btn>
+        <div className="no-print">
+          <Btn onClick={addCore} style={{ width: '100%' }}>+ Add core location</Btn>
+        </div>
       </Card>
 
       {/* === UNCERTAINTY ZONES (standard + full only) === */}
@@ -7163,12 +7575,15 @@ export default function GSSIReportApp() {
           <div className="cad-letterhead">
             <img src={LOGO_SRC} alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
-              <div className="cad-company">Aggarwal Kamikazes Cutting &amp; Coring Ltd</div>
+              <div className="cad-nm1">Aggarwal Kamikaze's</div>
+              <div className="cad-nm2">Cutting &amp; Coring Ltd.</div>
               <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>
+              <div className="cad-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
             </div>
             <div className="cad-letterhead-meta">
-              <div>Project: <strong>{report.projectNo || '—'}</strong></div>
-              <div>Date: <strong>{report.scanDate || '—'}</strong></div>
+              <b>Project</b><div className="v">{report.projectNo || '—'}</div>
+              <b>Operator</b><div className="v">{report.preparedBy || '—'}</div>
+              <b>Date</b><div className="v">{report.scanDate || '—'}</div>
             </div>
           </div>
           <div className="cad-body">
@@ -7286,6 +7701,58 @@ export default function GSSIReportApp() {
         <Field label="Signature date">
           <Input type="date" value={report.signDate} onChange={e => update({ signDate: e.target.value })} />
         </Field>
+
+        {/* === ENGINEER APPROVAL (F3) — the engineer reviews & approves by email;
+             recording it marks the report Approved and archives it. No lock. === */}
+        <div className="no-print" style={{
+          marginTop: 12, padding: 11, borderRadius: 8,
+          background: report.status === 'approved' ? c.greenBg : c.cardAlt,
+          border: `1px solid ${report.status === 'approved' ? c.green : c.borderStrong}`,
+        }}>
+          {report.status === 'approved' ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 800, color: c.green, marginBottom: 4 }}>✓ Approved &amp; archived</div>
+              <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>
+                Approved by <strong>{report.approvedBy || '—'}</strong>
+                {report.approvedDate ? ` on ${report.approvedDate}` : ''} · via email.
+              </div>
+              <Btn variant="ghost"
+                onClick={() => { if (confirm('Revert to Issued? This un-approves the report so you can revise it.')) update({ status: 'issued', approvedBy: '', approvedDate: '' }); }}
+                style={{ marginTop: 8, fontSize: 12 }}>↩ Revert to Issued</Btn>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: c.textDim, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Engineer approval</div>
+              <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+                The engineer reviews &amp; approves by email — they don't type into this report. Record their name and the date, then approve.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 8, marginBottom: 8 }}>
+                <Input value={report.approvedBy} onChange={e => update({ approvedBy: e.target.value })} placeholder={report.reviewedBy || 'Engineer name'} />
+                <Input type="date" value={report.approvedDate || ''} onChange={e => update({ approvedDate: e.target.value })} />
+              </div>
+              <Btn variant="primary"
+                onClick={() => {
+                  const by = (report.approvedBy || report.reviewedBy || '').trim();
+                  if (!by) { alert('Enter the approving engineer’s name first (or fill “Reviewed by”).'); return; }
+                  if (!confirm(`Mark this report APPROVED by ${by} and archive it?`)) return;
+                  update({ status: 'approved', approvedBy: by, approvedDate: report.approvedDate || new Date().toISOString().slice(0, 10) });
+                }}
+                style={{ width: '100%' }}>✓ Mark approved &amp; archive</Btn>
+            </>
+          )}
+        </div>
+
+        <label className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 12, color: c.textDim, lineHeight: 1.4 }}>
+          <input type="checkbox" checked={report.showWatermark !== false}
+            onChange={e => update({ showWatermark: e.target.checked })} style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <span>Show <strong>DRAFT / FOR REVIEW</strong> watermark on the PDF until approved <span style={{ color: c.textFaint }}>(recommended)</span></span>
+        </label>
+
+        {report.status === 'approved' && report.approvedBy && (
+          <div className="print-only approval-audit-print">
+            ✓ Approved by {report.approvedBy}{report.approvedDate ? ` on ${report.approvedDate}` : ''} · via email
+          </div>
+        )}
       </Card>
 
       {/* === BRAND FLOURISH FOOTER SIGNATURE (print/preview only, opt-in) === */}
@@ -7296,6 +7763,35 @@ export default function GSSIReportApp() {
       )}
 
       </div>{/* === END REPORT BODY === */}
+      {/* RIGHT: At-a-glance rail — live core verdict tallies. Screen only. */}
+      <aside className="ws-rail no-print" aria-label="At a glance">
+        <Card title="At a glance" dense>
+          {(() => {
+            const cc = report.cores.reduce((a, co) => { a[co.verdict] = (a[co.verdict] || 0) + 1; return a; }, {});
+            const rows = [
+              { label: 'Safe',    n: cc.safe || 0,    color: c.greenStrong },
+              { label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
+              { label: 'No-go',   n: cc.nogo || 0,    color: c.redStrong },
+            ];
+            const cell = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px' };
+            return (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {rows.map(r => (
+                  <div key={r.label} style={cell}>
+                    <span style={{ fontSize: 12, color: c.textDim }}>{r.label}</span>
+                    <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
+                  </div>
+                ))}
+                <div style={cell}>
+                  <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
+                  <b style={{ fontSize: 14, color: c.text }}>{report.cores.length} · {report.targets.length}</b>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      </aside>
+      </div>{/* === END WS-GRID === */}
 
       {/* === ACTIONS === */}
       <div className="no-print" style={{
@@ -7313,7 +7809,7 @@ export default function GSSIReportApp() {
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
-        Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/>
+        <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/></span>
         GSSI StructureScan Mini XT · British Columbia engineering edition
       </div>
 
@@ -7326,6 +7822,7 @@ export default function GSSIReportApp() {
           .map(id => SECTION_IDS.find(s => s.id === id))
           .filter(s => s && vis(s.id))}
       />
+      <ShortcutsPanel />
 
       {emailDialogOpen && (
         <div className="no-print" style={{
@@ -7498,8 +7995,14 @@ export default function GSSIReportApp() {
                     <Input value={e.name}
                       onChange={ev => renameReport(e.id, ev.target.value)}
                       style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7 }}>
-                      {isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}
+                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {e.status === 'approved' && (
+                        <span style={{ background: c.greenBg, color: c.green, border: `1px solid ${c.green}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>✓ APPROVED · ARCHIVED</span>
+                      )}
+                      {e.status === 'issued' && (
+                        <span style={{ background: c.amberBg, color: c.amber, border: `1px solid ${c.amber}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>FOR REVIEW</span>
+                      )}
+                      <span>{isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
                       <Btn variant="primary" onClick={() => switchReport(e.id)} disabled={isOpen}
