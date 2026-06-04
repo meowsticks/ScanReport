@@ -6494,6 +6494,46 @@ export default function GSSIReportApp() {
           .ak-shell { padding-left: 10px; padding-right: 10px; }
           .ak-header .ak-logo { height: 110px !important; }
         }
+        /* === Responsive safety net — screen only; the printed PDF is locked
+           A4 and untouched by everything below. Desktop is the primary
+           surface; this just keeps phones/tablets from ever forcing a
+           horizontal scroll, and lets a client read a shared report on a
+           small screen. === */
+        /* Below 900px the sticky side nav/rail are already display:none, so
+           clamping body overflow-x here cannot break sticky positioning, and
+           position:fixed elements ignore ancestor overflow entirely. */
+        @media (max-width: 899px) {
+          html, body { overflow-x: hidden; }
+        }
+        /* Media + long text inside the report can never push the page wider. */
+        .ak-shell img, .ak-shell canvas, .ak-shell svg { max-width: 100%; }
+        .ak-shell .findings-table, .ak-shell .cover-summary-print table { max-width: 100%; }
+        .ak-shell .findings-table td, .ak-shell .findings-table th,
+        .ak-shell .methods-print, .ak-shell .std-notes-print,
+        .ak-shell .legal-disclaimer-print, .ak-shell .workflow-status-print,
+        .ak-shell .loc-print-only, .ak-shell .ak-ta-print,
+        .ak-shell .proposed-cores-print {
+          overflow-wrap: break-word; word-break: break-word;
+        }
+        /* Client opening a SHARED report on a phone: stack the 2-up scan
+           photos to full width so figures stay readable rather than squeezed
+           into 48% columns. Preview-mode + narrow screens only. */
+        @media (max-width: 600px) {
+          body.preview-mode .ak-shell .scan-photo-row,
+          body.preview-mode .ak-shell .scan-photo-row--solo {
+            display: block !important; width: 100% !important;
+            margin: 0 0 12px !important;
+          }
+          body.preview-mode .ak-shell .scan-photo-row--solo .photo-print {
+            display: block !important;
+          }
+          body.preview-mode .ak-shell .scan-photo-row--solo .photo-print > :first-child {
+            max-width: 100% !important;
+          }
+          body.preview-mode .ak-shell .scan-photo-row--solo .photo-print-meta {
+            border-left: 0 !important; padding-left: 0 !important; margin-top: 8px !important;
+          }
+        }
         @media print {
           .ak-shell { max-width: none !important; padding: 0 !important; }
         }
