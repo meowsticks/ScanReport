@@ -5779,6 +5779,14 @@ export default function GSSIReportApp() {
           background: #fff !important;
           color: #000 !important;
         }
+        /* Preview matches print: deeper brand-red location header (not neon),
+           rounded to follow the card corner. */
+        body.preview-mode .ak-shell .scan-location-card { border: 1.5px solid #5b6470 !important; }
+        body.preview-mode .ak-shell .scan-location-card .loc-header {
+          background: #c0282d !important; color: #fff !important;
+          border-radius: 7px 7px 0 0;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
         /* Mirror the dark-theme kill from @media print so Preview matches
            the saved PDF exactly — engineer sees what will actually print. */
         body.preview-mode .ak-sec {
@@ -6075,14 +6083,15 @@ export default function GSSIReportApp() {
           .scan-location-card {
             page-break-inside: avoid;
             break-inside: avoid;
-            border: 1px solid #999 !important;
-            border-radius: 0 !important;
+            border: 1.5px solid #5b6470 !important;
+            border-radius: 8px !important;
             margin-bottom: 14px;
           }
           .scan-location-card .loc-header {
-            background: #e02020 !important;
+            background: #c0282d !important;
             color: #fff !important;
-            border-bottom: 1px solid #999;
+            border-bottom: 1px solid #8a2025;
+            border-radius: 7px 7px 0 0;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
