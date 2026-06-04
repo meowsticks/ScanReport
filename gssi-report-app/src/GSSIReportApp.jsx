@@ -5942,6 +5942,10 @@ export default function GSSIReportApp() {
           color: #000 !important;
           border-color: #999 !important;
           box-shadow: none !important;
+          /* Plain-div sections (scanPhotos/summary/locations/gprScans) lack the
+             Card primitive's inline borderRadius:10, so the red border-left
+             accent rendered as a square bar. Round every .ak-sec uniformly. */
+          border-radius: 10px !important;
         }
         body.preview-mode .ak-sec div,
         body.preview-mode .ak-sec section,
@@ -6003,6 +6007,9 @@ export default function GSSIReportApp() {
             color: #000 !important;
             border: 1.5px solid #5b6470 !important;
             box-shadow: none !important;
+            /* Match preview: round plain-div sections so the red border-left
+               accent follows the corner instead of rendering as a square bar. */
+            border-radius: 10px !important;
           }
           /* Cards have inline background: c.card on the structural wrappers
              (div). Clear those, plus any nested dark sub-cards. Spans and
