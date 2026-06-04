@@ -3398,6 +3398,7 @@ function ScanPhotos({ report, update }) {
                     padding: 9, marginBottom: 7, background: c.cardAlt,
                     cursor: 'grab',
                   }}>
+                  <div className="no-print">
                   <div style={{
                     display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
                   }}>
@@ -3546,6 +3547,26 @@ function ScanPhotos({ report, update }) {
                       disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
                     <Btn variant="danger" onClick={() => removePhoto(photo.id)}
                       style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕</Btn>
+                  </div>
+                  </div>{/* /no-print editor */}
+                  {/* Print-only clean figure: large photo + caption + confidence */}
+                  <div className="print-only photo-print">
+                    <AnnotatedImage
+                      src={photoSrc(photo)}
+                      annotations={photo.annotations || []}
+                      alt={photo.caption || 'Scan photo'}
+                      style={{ width: '100%', background: '#000', borderRadius: 4, display: 'block' }}
+                    />
+                    <div className="photo-print-meta">
+                      <span className="photo-print-tags">
+                        {photo.locationRef && <strong className="photo-print-loc">{photo.locationRef}</strong>}
+                        <span className={`ak-conf-badge ak-conf-${photo.confidence || 'high'} photo-print-conf`}>
+                          {(photo.confidence || 'high') === 'high' ? 'HIGH' : photo.confidence === 'med' ? 'MED' : 'LOW'} CONF
+                        </span>
+                      </span>
+                      {photo.scaleInfo && <div className="photo-print-scale">{photo.scaleInfo}</div>}
+                      {photo.caption && <div className="photo-print-cap">{photo.caption}</div>}
+                    </div>
                   </div>
                 </div>
               );
@@ -5863,6 +5884,21 @@ export default function GSSIReportApp() {
           border-radius: 7px 7px 0 0;
           -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
+        /* Preview matches print: scan photos as a clean 2-up figure grid. */
+        body.preview-mode .ak-shell .scan-photo-row {
+          display: inline-block !important; width: 48% !important;
+          margin: 0 1% 10px !important; vertical-align: top; box-sizing: border-box;
+          background: transparent !important; border: 1px solid #c2c6cc !important;
+          border-radius: 6px !important; padding: 7px !important; cursor: default !important;
+        }
+        body.preview-mode .ak-shell .photo-print img,
+        body.preview-mode .ak-shell .photo-print canvas {
+          width: 100% !important; height: auto !important; max-height: 12cm;
+        }
+        body.preview-mode .ak-shell .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
+        body.preview-mode .ak-shell .photo-print-loc { font-size: 10pt; margin-right: 8px; }
+        body.preview-mode .ak-shell .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
+        body.preview-mode .ak-shell .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
         /* Mirror the dark-theme kill from @media print so Preview matches
            the saved PDF exactly — engineer sees what will actually print. */
         body.preview-mode .ak-sec {
@@ -6136,8 +6172,27 @@ export default function GSSIReportApp() {
           .scan-photo-row {
             page-break-inside: avoid;
             break-inside: avoid;
+            display: inline-block !important;
+            width: 48% !important;
+            margin: 0 1% 10px !important;
+            vertical-align: top;
+            box-sizing: border-box;
+            background: transparent !important;
+            border: 1px solid #c2c6cc !important;
+            border-radius: 6px !important;
+            padding: 7px !important;
+            cursor: default !important;
           }
           .scan-photo-row img { max-width: 100% !important; height: auto !important; }
+          .photo-print img, .photo-print canvas {
+            width: 100% !important; height: auto !important; max-height: 12cm;
+            -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+          }
+          .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
+          .photo-print-tags { margin-bottom: 2px; }
+          .photo-print-loc { font-size: 10pt; margin-right: 8px; }
+          .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
+          .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
 
           .gpr-scan-figure {
             page-break-inside: avoid;
