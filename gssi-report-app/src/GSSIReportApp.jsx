@@ -3363,13 +3363,19 @@ function ScanPhotos({ report, update }) {
               </span>
             </div>
 
-            {group.photos.map(photo => {
+            {group.photos.map((photo, idxInGroup) => {
               const globalIdx = report.scanPhotos.findIndex(p => p.id === photo.id);
               const annotationCount = (photo.annotations || []).length;
+              // Trailing odd photo in a group has no 2-up partner, so it would
+              // otherwise sit half-width with blank space beside it. Flip it to a
+              // full-width side-by-side figure (image + info panel) instead.
+              const isSoloFigure =
+                idxInGroup === group.photos.length - 1 && group.photos.length % 2 === 1;
               return (
                 <div key={photo.id}
                   className={
                     'scan-photo-row' +
+                    (isSoloFigure ? ' scan-photo-row--solo' : '') +
                     (dragPhotoId === photo.id ? ' dragging' : '') +
                     (overPhotoId === photo.id && dragPhotoId && dragPhotoId !== photo.id ? ' drop-target' : '')
                   }
@@ -5899,6 +5905,19 @@ export default function GSSIReportApp() {
         body.preview-mode .ak-shell .photo-print-loc { font-size: 10pt; margin-right: 8px; }
         body.preview-mode .ak-shell .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
         body.preview-mode .ak-shell .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
+        /* Lone/trailing odd photo: full-width side-by-side figure so the freed
+           half carries the caption/meta instead of sitting blank. */
+        body.preview-mode .ak-shell .scan-photo-row--solo { width: 98% !important; }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print {
+          display: flex !important; gap: 16px; align-items: flex-start;
+        }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print > :first-child {
+          flex: 0 0 58%; max-width: 58%;
+        }
+        body.preview-mode .ak-shell .scan-photo-row--solo .photo-print-meta {
+          flex: 1; margin-top: 0 !important; align-self: stretch;
+          border-left: 2px solid #e1e4e8; padding-left: 16px;
+        }
         /* Mirror the dark-theme kill from @media print so Preview matches
            the saved PDF exactly — engineer sees what will actually print. */
         body.preview-mode .ak-sec {
@@ -6193,6 +6212,19 @@ export default function GSSIReportApp() {
           .photo-print-loc { font-size: 10pt; margin-right: 8px; }
           .photo-print-conf { font-size: 7.5pt; padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; }
           .photo-print-scale { color: #555 !important; font-size: 8.5pt; }
+          /* Lone/trailing odd photo: full-width side-by-side figure so the freed
+             half carries the caption/meta instead of sitting blank. */
+          .scan-photo-row--solo { width: 98% !important; }
+          .scan-photo-row--solo .photo-print {
+            display: flex !important; gap: 16px; align-items: flex-start;
+          }
+          .scan-photo-row--solo .photo-print > :first-child {
+            flex: 0 0 58%; max-width: 58%;
+          }
+          .scan-photo-row--solo .photo-print-meta {
+            flex: 1; margin-top: 0 !important; align-self: stretch;
+            border-left: 2px solid #e1e4e8; padding-left: 16px;
+          }
 
           .gpr-scan-figure {
             page-break-inside: avoid;
