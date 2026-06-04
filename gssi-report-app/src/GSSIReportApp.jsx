@@ -2937,6 +2937,82 @@ function SectionsQuickNav({ sections }) {
   );
 }
 
+// Floating, toggleable on-screen shortcuts cheat-sheet (bottom-left). Never
+// prints. Remembers open/closed. Covers the mouse/keyboard moves that aren't
+// obvious from buttons (zoom, pan, angle-snap, reorder).
+function ShortcutsPanel() {
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem('ak_shortcuts_open') === '1'; } catch { return false; }
+  });
+  const toggle = () => setOpen(o => {
+    const n = !o;
+    try { localStorage.setItem('ak_shortcuts_open', n ? '1' : '0'); } catch {}
+    return n;
+  });
+  const groups = [
+    { title: 'Scan-photo annotator', items: [
+      ['Scroll wheel', 'Zoom in / out (toward the cursor)'],
+      ['🖐 Pan / middle-drag', 'Move around when zoomed in'],
+      ['Shift + drag', 'Snap a line/arrow to 15°'],
+      ['Enter / Esc', 'Save / cancel a text label'],
+    ] },
+    { title: 'Report editor', items: [
+      ['👁 Preview', 'See the exact PDF page'],
+      ['Drag a card (in Preview)', 'Reorder sections'],
+      ['⚙ Setup → Print setup', 'Drag rows to reorder'],
+      ['Esc', 'Cancel the current action'],
+    ] },
+  ];
+  return (
+    <div className="no-print" style={{
+      position: 'fixed', left: 14, bottom: 70, zIndex: 90,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+    }}>
+      {open && (
+        <div style={{
+          background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
+          borderRadius: 8, padding: '8px 10px',
+          maxHeight: '62vh', overflowY: 'auto',
+          minWidth: 256, maxWidth: 310,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+        }}>
+          {groups.map(g => (
+            <div key={g.title} style={{ marginBottom: 9 }}>
+              <div style={{
+                fontSize: 10, color: c.textFaint, fontWeight: 700,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '2px 2px 6px',
+              }}>{g.title}</div>
+              {g.items.map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', gap: 8, padding: '3px 2px', fontSize: 12, lineHeight: 1.4 }}>
+                  <span style={{ flex: '0 0 auto', fontWeight: 700, color: c.text, minWidth: 110 }}>{k}</span>
+                  <span style={{ color: c.textDim }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{
+            fontSize: 10, color: c.textFaint, paddingTop: 5,
+            borderTop: `1px solid ${c.border}`, marginTop: 1,
+          }}>On-screen only — never prints.</div>
+        </div>
+      )}
+      <button onClick={toggle}
+        title="Keyboard & mouse shortcuts"
+        aria-label="Shortcuts"
+        style={{
+          background: c.cardAlt, color: c.text,
+          border: `1px solid ${c.borderStrong}`, borderRadius: 22,
+          padding: '9px 12px', fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', fontFamily: 'inherit',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+        {open ? '✕' : '⌨'} Shortcuts
+      </button>
+    </div>
+  );
+}
+
 // they immediately see what changed. Each item can scroll the user to the
 // section it touches via "Take me there".
 function WhatsNewModal({ entries, onClose }) {
@@ -7657,6 +7733,7 @@ export default function GSSIReportApp() {
           .map(id => SECTION_IDS.find(s => s.id === id))
           .filter(s => s && vis(s.id))}
       />
+      <ShortcutsPanel />
 
       {emailDialogOpen && (
         <div className="no-print" style={{
