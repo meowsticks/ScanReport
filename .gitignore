@@ -10,3 +10,7 @@ Thumbs.db
 npm-debug.log*
 .vite/
 .cache/
+
+# Regenerable STEEL generator scratch output (canonical is AK-ScanReport-STEEL.pdf)
+pdf-mockups/ScanReport-midjob.*
+pdf-mockups/ScanReport-midjob-p*.png
