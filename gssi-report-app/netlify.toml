@@ -1,0 +1,17 @@
+# Netlify deploy config for the ScanReport web app.
+# This repo is a monorepo; the Netlify project's base directory is this
+# folder (gssi-report-app), so command/publish below are relative to it.
+# Committing this makes production builds reproducible instead of relying
+# on dashboard-only settings (which is why the production root was 404ing).
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback: serve the built index.html for any path that isn't a real
+# file. Netlify checks the filesystem first, so hashed assets in /assets
+# still serve directly; only unmatched routes fall through to the app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
