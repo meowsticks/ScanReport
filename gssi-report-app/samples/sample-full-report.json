@@ -1,0 +1,273 @@
+{
+  "tier": "standard",
+  "status": "draft",
+  "projectNo": "AKCC-SAMPLE-001",
+  "jobNote": "SAMPLE — full report for review/approve",
+  "scanDate": "2026-06-01",
+  "client": "Stuart Olson Construction",
+  "siteAddress": "1200 W Georgia St, Vancouver, BC",
+  "scanArea": "Level 2 suspended slab — Grid B–E / 2–5",
+  "weather": "Indoor, ~18°C",
+  "surface": "Dry",
+  "slabThickness": "200 mm",
+  "slabAge": ">30 days cured",
+  "scanCoverage": "100%",
+  "dielectric": "6.5",
+  "scanDensity": "3 scans/cm",
+  "depthRange": "0 – 600 mm",
+  "serialNo": "MXT-0098",
+  "targets": [
+    {
+      "id": "T-01",
+      "type": "Rebar (top mat)",
+      "depth": "45",
+      "cover": "45",
+      "confidence": "high",
+      "note": "#4 @ 200 mm o/c, both directions"
+    },
+    {
+      "id": "T-02",
+      "type": "Rebar (bottom mat)",
+      "depth": "175",
+      "cover": "25",
+      "confidence": "high",
+      "note": "#5 @ 250 mm o/c"
+    },
+    {
+      "id": "T-03",
+      "type": "Post-tension cable",
+      "depth": "95",
+      "cover": "",
+      "confidence": "high",
+      "note": "Band A — E-W draped, ~600 mm spacing"
+    },
+    {
+      "id": "T-04",
+      "type": "Post-tension cable",
+      "depth": "140",
+      "cover": "",
+      "confidence": "high",
+      "note": "Band B — N-S draped near column line C"
+    },
+    {
+      "id": "T-05",
+      "type": "Conduit / unknown",
+      "depth": "60",
+      "cover": "",
+      "confidence": "med",
+      "note": "32 mm EMT, N-S in east bay"
+    },
+    {
+      "id": "T-06",
+      "type": "Conduit / unknown",
+      "depth": "110",
+      "cover": "",
+      "confidence": "low",
+      "note": "~25 mm dia, isolated return near Grid D-4"
+    }
+  ],
+  "cores": [
+    {
+      "label": "A",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "65 mm",
+      "note": "Clear of all targets"
+    },
+    {
+      "label": "B",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "58 mm",
+      "note": "Nearest rebar 58 mm W"
+    },
+    {
+      "label": "C",
+      "size": "6\"",
+      "verdict": "caution",
+      "clearance": "22 mm",
+      "note": "PT band A within 22 mm — shift 100 mm N"
+    },
+    {
+      "label": "D",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "70 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "E",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "61 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "F",
+      "size": "6\"",
+      "verdict": "nogo",
+      "clearance": "0",
+      "note": "Directly over PT cable — relocate or redesign"
+    },
+    {
+      "label": "G",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "55 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "H",
+      "size": "4\"",
+      "verdict": "caution",
+      "clearance": "30 mm",
+      "note": "Conduit 30 mm E — reduce dia or shift 80 mm"
+    },
+    {
+      "label": "I",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "64 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "J",
+      "size": "5\"",
+      "verdict": "safe",
+      "clearance": "52 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "K",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "68 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "L",
+      "size": "6\"",
+      "verdict": "caution",
+      "clearance": "24 mm",
+      "note": "Bottom-mat congestion — verify with engineer"
+    },
+    {
+      "label": "M",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "60 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "N",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "57 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "O",
+      "size": "4\"",
+      "verdict": "nogo",
+      "clearance": "0",
+      "note": "Over conduit feeding panel — do not core"
+    },
+    {
+      "label": "P",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "63 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "Q",
+      "size": "5\"",
+      "verdict": "safe",
+      "clearance": "50 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "R",
+      "size": "4\"",
+      "verdict": "caution",
+      "clearance": "28 mm",
+      "note": "PT anchor zone near edge — keep 150 mm off slab edge"
+    },
+    {
+      "label": "S",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "66 mm",
+      "note": "Clear"
+    },
+    {
+      "label": "T",
+      "size": "4\"",
+      "verdict": "safe",
+      "clearance": "59 mm",
+      "note": "Clear"
+    }
+  ],
+  "preparedBy": "T. Aggarwal",
+  "preparedRole": "Certified GPR Technician",
+  "reviewedBy": "",
+  "reviewedRole": "Engineer of Record",
+  "brandFlourishes": true,
+  "enableColorLegend": true,
+  "enableConfidenceBand": true,
+  "scanLocations": [
+    {
+      "id": "loc-sample-1",
+      "label": "L1",
+      "photo": null,
+      "northRotation": 0,
+      "coreSize": "4\"",
+      "overCut": "25 mm",
+      "coreCount": "4",
+      "notes": "All four cores clear of marked targets. Proceed — keep 25 mm standoff.",
+      "depthCallouts": [],
+      "slabContents": [],
+      "verdict": "safe",
+      "instruction": "Use proposed core location ONLY when coring.",
+      "confidence": "high",
+      "zoneId": null,
+      "photoAnnotations": []
+    },
+    {
+      "id": "loc-sample-2",
+      "label": "L2",
+      "photo": null,
+      "northRotation": 0,
+      "coreSize": "6\"",
+      "overCut": "0",
+      "coreCount": "2",
+      "notes": "PT band crosses the NE corner of this bay. Keep cores 100 mm clear of the marked cable; daylight before drilling.",
+      "depthCallouts": [],
+      "slabContents": [],
+      "verdict": "caution",
+      "instruction": "Use proposed core location ONLY when coring.",
+      "confidence": "med",
+      "zoneId": null,
+      "photoAnnotations": []
+    },
+    {
+      "id": "loc-sample-3",
+      "label": "L3",
+      "photo": null,
+      "northRotation": 0,
+      "coreSize": "4\"",
+      "overCut": "0",
+      "coreCount": "1",
+      "notes": "Conduit bundle (~25 mm) runs N-S directly under proposed core C3. Redesign / relocate required before any coring.",
+      "depthCallouts": [],
+      "slabContents": [],
+      "verdict": "nogo",
+      "instruction": "Use proposed core location ONLY when coring.",
+      "confidence": "low",
+      "zoneId": null,
+      "photoAnnotations": []
+    }
+  ],
+  "diagramNotes": "Scan performed on Level 2 suspended slab, Grid B-E / 2-5.\n\nTop mat #4 @ 200 mm o/c both directions at ~45 mm cover. Bottom mat #5 @ 250 mm o/c.\n\nTwo post-tension bands run E-W through the central bay (L2) - treat as live until physically confirmed inactive. Keep all cores 100 mm clear of marked PT.\n\nConduit bundle (~25 mm) runs N-S near the east edge under proposed core C3 (L3) - relocate or redesign.\n\nDaylight and hand-verify each location before coring.",
+  "enableCadPage": true
+}
