@@ -5899,7 +5899,8 @@ export default function GSSIReportApp() {
         }
         body.preview-mode .ak-shell .photo-print img,
         body.preview-mode .ak-shell .photo-print canvas {
-          width: 100% !important; height: auto !important; max-height: 12cm;
+          width: 100% !important; height: auto !important; max-height: 9cm;
+          object-fit: contain;
         }
         body.preview-mode .ak-shell .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
         body.preview-mode .ak-shell .photo-print-loc { font-size: 10pt; margin-right: 8px; }
@@ -6204,7 +6205,8 @@ export default function GSSIReportApp() {
           }
           .scan-photo-row img { max-width: 100% !important; height: auto !important; }
           .photo-print img, .photo-print canvas {
-            width: 100% !important; height: auto !important; max-height: 12cm;
+            width: 100% !important; height: auto !important; max-height: 9cm;
+            object-fit: contain;
             -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
           }
           .photo-print-meta { font-size: 9pt; line-height: 1.45; margin-top: 6px; color: #000; }
