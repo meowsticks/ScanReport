@@ -3402,6 +3402,7 @@ function ScanPhotos({ report, update }) {
                       { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                     ].map(opt => (
                       <button key={opt.id}
+                        className={`ak-conf ${photo.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                         onClick={() => updatePhoto(photo.id, { confidence: opt.id })}
                         style={{
                           flex: 1,
@@ -4150,6 +4151,7 @@ function ScanLocations({ report, update }) {
                         { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                       ].map(opt => (
                         <button key={opt.id}
+                          className={`ak-conf ${loc.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                           onClick={() => updateLoc(loc.id, { confidence: opt.id })}
                           style={{
                             flex: 1,
@@ -5858,6 +5860,22 @@ export default function GSSIReportApp() {
             border: 1px solid #98a0aa !important;
             -webkit-text-fill-color: #000 !important;
           }
+          /* Confidence toggles as light chips on white paper: unselected = white/
+             grey, selected = a light tint of its colour. (Dark-theme button bgs
+             are preserved by the print kill, so they'd otherwise print navy.) */
+          .ak-conf, .ak-conf-on, .ak-conf-off {
+            -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+            -webkit-text-fill-color: currentColor !important;
+          }
+          .ak-conf-off { background: #fff !important; color: #555 !important; border-color: #b9bdc4 !important; }
+          .ak-conf-on.ak-conf-high { background: #eafaf0 !important; color: #15803d !important; border-color: #1a7f37 !important; }
+          .ak-conf-on.ak-conf-med  { background: #fff6e6 !important; color: #9a5b00 !important; border-color: #c98a00 !important; }
+          .ak-conf-on.ak-conf-low  { background: #fdecec !important; color: #c0282d !important; border-color: #c0282d !important; }
+          /* B4: a hair of letter-spacing so tight pairs (e.g. "Hi") don't kiss. */
+          .ak-sec p, .ak-sec li, .ak-sec span, .ak-sec strong, .ak-sec label,
+          .ak-sec td, .ak-sec th, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4 {
+            letter-spacing: 0.01em;
+          }
           /* Preserve intentionally-coloured elements (brand red, swatches,
              scan annotations, photo content, etc.) — !important rules that
              follow these in the file will win because cascade is source-order
@@ -6763,6 +6781,7 @@ export default function GSSIReportApp() {
                       { id: 'low',  label: 'Low',  color: c.red,   bg: c.redBg },
                     ].map(opt => (
                       <button key={opt.id}
+                        className={`ak-conf ${t.confidence === opt.id ? `ak-conf-on ak-conf-${opt.id}` : 'ak-conf-off'}`}
                         onClick={() => updateTarget(i, { confidence: opt.id })}
                         style={{
                           flex: 1,
@@ -7590,7 +7609,7 @@ export default function GSSIReportApp() {
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
-        Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/>
+        <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/></span>
         GSSI StructureScan Mini XT · British Columbia engineering edition
       </div>
 
