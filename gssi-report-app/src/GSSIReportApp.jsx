@@ -376,7 +376,7 @@ const DEFAULT_REPORT = {
   // Legal disclaimer (printed at the end of every report)
   legalDisclaimer:
     'This report is a non-destructive subsurface investigation prepared by ' +
-    'Aggarwal Kamikazes Cutting & Coring Ltd (the "Company") for the named client only. ' +
+    'Aggarwal Kamikaze\'s Cutting & Coring Ltd (the "Company") for the named client only. ' +
     'Ground Penetrating Radar is an interpretive method; subsurface conditions may differ ' +
     'from those depicted, and the Company makes no warranty, express or implied, regarding ' +
     'the absence of utilities, conduits, post-tensioning cables, reinforcing steel, voids, ' +
@@ -468,7 +468,7 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — Aggarwal Kamikazes palette (light + dark)
+// Design tokens — Aggarwal Kamikaze's palette (light + dark)
 // Token values are CSS variables so theme switches without a
 // React re-render. See <ThemeStyles /> for the palette definitions
 // and the data-theme="light" overrides for outdoor readability.
@@ -5060,7 +5060,7 @@ export default function GSSIReportApp() {
       '',
       '(Attach the saved PDF before sending — the report does not auto-attach from the browser.)',
       '',
-      '— Aggarwal Kamikazes Cutting & Coring Ltd',
+      '— Aggarwal Kamikaze\'s Cutting & Coring Ltd',
     ].filter(l => l !== null).join('\n');
     return { subject, body };
   };
@@ -6258,7 +6258,7 @@ export default function GSSIReportApp() {
         {/* Logo centered as its own hero element (now carries the brand on its own) */}
         <img
           src={LOGO_SRC}
-          alt="Aggarwal Kamikazes Cutting & Coring Ltd"
+          alt="Aggarwal Kamikaze's Cutting & Coring Ltd"
           className="ak-logo"
           style={{
             display: 'block',
@@ -6380,7 +6380,7 @@ export default function GSSIReportApp() {
           { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
           { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
           { id: 'enableQR',            label: 'QR code on report',          hint: 'Stamps a scannable QR code on the report linking to the live report tool (or any URL you set below). Off by default.' },
-          { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikazes ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
+          { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikaze\'s ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
             display: 'flex', alignItems: 'flex-start', gap: 9,
@@ -6616,7 +6616,7 @@ export default function GSSIReportApp() {
         <div className="ak-lh">
           <img src={LOGO_SRC} alt="" className="ak-lh-logo" />
           <div className="ak-lh-co">
-            <div className="ak-lh-nm1">Aggarwal Kamikazes</div>
+            <div className="ak-lh-nm1">Aggarwal Kamikaze's</div>
             <div className="ak-lh-nm2">Cutting &amp; Coring Ltd.</div>
             <div className="ak-lh-sub">GPR Concrete Scanning · Core Clearance Report</div>
             <div className="ak-lh-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
@@ -7401,7 +7401,7 @@ export default function GSSIReportApp() {
           <div className="cad-letterhead">
             <img src={LOGO_SRC} alt="" className="cad-logo" />
             <div className="cad-letterhead-text">
-              <div className="cad-nm1">Aggarwal Kamikazes</div>
+              <div className="cad-nm1">Aggarwal Kamikaze's</div>
               <div className="cad-nm2">Cutting &amp; Coring Ltd.</div>
               <div className="cad-subtitle">GPR Concrete Scan — Drawing</div>
               <div className="cad-addr">123 Industrial Way, Burnaby BC V5A 1A1 · (604) 555-0199 · scans@aggarwalkamikazes.ca</div>
