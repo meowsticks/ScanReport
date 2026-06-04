@@ -5718,7 +5718,7 @@ export default function GSSIReportApp() {
             grid-template-columns: 172px minmax(0, 1fr) 208px;
             gap: 18px; align-items: start;
           }
-          .ws-nav, .ws-rail { display: block; position: sticky; top: 12px; align-self: start; }
+          .ws-nav, .ws-rail { display: block; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; }
         }
         .ws-nav .sep {
           font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
