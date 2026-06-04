@@ -6785,6 +6785,7 @@ export default function GSSIReportApp() {
             display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10,
             border: '1px solid #888', padding: '8px 10px', marginTop: 4,
             fontSize: '9pt', color: '#000',
+            width: '100%', boxSizing: 'border-box',
           }}>
             {[
               { id: 'scanComplete',      label: 'SCAN COMPLETE' },
