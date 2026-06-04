@@ -5736,6 +5736,12 @@ export default function GSSIReportApp() {
           .ws-grid { display: block !important; }
           .ws-nav, .ws-rail { display: none !important; }
         }
+        /* Preview mode must mirror print: collapse the 3-column editor grid so
+           the report fills the full page width. Otherwise the hidden nav/rail
+           columns (172px + 208px) stay reserved and squish the report into the
+           middle ~400px — a "mobile width" preview even on a maximized window. */
+        body.preview-mode .ws-grid { display: block !important; }
+        body.preview-mode .ws-nav, body.preview-mode .ws-rail { display: none !important; }
         /* CAD-page on-screen container (matches the print landscape look loosely) */
         .cad-page {
           background: #fff; color: #000;
