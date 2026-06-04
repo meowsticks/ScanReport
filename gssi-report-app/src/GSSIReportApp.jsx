@@ -5885,14 +5885,17 @@ export default function GSSIReportApp() {
           /* Confidence toggles as light chips on white paper: unselected = white/
              grey, selected = a light tint of its colour. (Dark-theme button bgs
              are preserved by the print kill, so they'd otherwise print navy.) */
-          .ak-conf, .ak-conf-on, .ak-conf-off {
+          .ak-conf, .ak-conf-on, .ak-conf-off, .ak-conf-badge {
             -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
             -webkit-text-fill-color: currentColor !important;
           }
+          .ak-conf-badge { border: 1px solid; }
           .ak-conf-off { background: #fff !important; color: #555 !important; border-color: #b9bdc4 !important; }
-          .ak-conf-on.ak-conf-high { background: #eafaf0 !important; color: #15803d !important; border-color: #1a7f37 !important; }
-          .ak-conf-on.ak-conf-med  { background: #fff6e6 !important; color: #9a5b00 !important; border-color: #c98a00 !important; }
-          .ak-conf-on.ak-conf-low  { background: #fdecec !important; color: #c0282d !important; border-color: #c0282d !important; }
+          /* Selected confidence chips + the matching T-0X badge share one (less
+             bleached) colour so they read as a set. */
+          .ak-conf-on.ak-conf-high, .ak-conf-badge.ak-conf-high { background: #c9ead4 !important; color: #14713a !important; border-color: #1a7f37 !important; }
+          .ak-conf-on.ak-conf-med,  .ak-conf-badge.ak-conf-med  { background: #fbe3b8 !important; color: #8a5300 !important; border-color: #b8810a !important; }
+          .ak-conf-on.ak-conf-low,  .ak-conf-badge.ak-conf-low  { background: #f7cfcf !important; color: #b21f24 !important; border-color: #c0282d !important; }
           /* B4: a hair of letter-spacing so tight pairs (e.g. "Hi") don't kiss. */
           .ak-sec p, .ak-sec li, .ak-sec span, .ak-sec strong, .ak-sec label,
           .ak-sec td, .ak-sec th, .ak-sec h1, .ak-sec h2, .ak-sec h3, .ak-sec h4 {
@@ -6761,9 +6764,10 @@ export default function GSSIReportApp() {
                   padding: 9, marginBottom: 7,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
-                    <span style={{
-                      background: c.cardAlt, padding: '2px 7px', borderRadius: 4,
-                      fontSize: 11, fontWeight: 600, color: c.text, minWidth: 38, textAlign: 'center',
+                    <span className={`ak-conf-badge ak-conf-${level}`} style={{
+                      background: meta.bg, padding: '2px 7px', borderRadius: 4,
+                      fontSize: 11, fontWeight: 700, color: meta.color,
+                      border: `1px solid ${meta.color}`, minWidth: 38, textAlign: 'center',
                     }}>{t.id}</span>
                     <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
                       style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
