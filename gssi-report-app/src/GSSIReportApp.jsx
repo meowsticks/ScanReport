@@ -4932,11 +4932,15 @@ export default function GSSIReportApp() {
 
   // ---------- Cloud sync (opt-in: only active once signed in) ----------
   // The app stays fully local until a user signs in via the header ☁ button.
+  // BENCHED: cloud sync only handles a single report today, and we're storing
+  // locally for now. Flip SYNC_ENABLED back to true (and the code below + the
+  // header button revive untouched) once multi-report sync is worth it.
+  const SYNC_ENABLED = false;
   const auth = useAuth();
   const applyRemote = useCallback((data) => {
     setReport({ ...DEFAULT_REPORT, ...data });
   }, []);
-  const sync = useCloudSync({ session: auth.session, report, applyRemote });
+  const sync = useCloudSync({ session: SYNC_ENABLED ? auth.session : null, report, applyRemote });
 
   // ---------- Auto-fill: build a fresh report carrying sticky fields forward ----------
   const freshReport = () => {
@@ -6370,7 +6374,7 @@ export default function GSSIReportApp() {
             {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
           </button>
           )}
-          <SyncControl auth={auth} sync={sync} c={c} />
+          {SYNC_ENABLED && <SyncControl auth={auth} sync={sync} c={c} />}
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
           <button onClick={toggleTheme}
