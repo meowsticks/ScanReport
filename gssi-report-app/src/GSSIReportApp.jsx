@@ -5872,6 +5872,22 @@ export default function GSSIReportApp() {
           border: 1px solid #aaa;
           min-height: 11in;
         }
+        /* On a phone the 8.5in "paper on a desk" page renders as a small
+           card boxed in grey margins. Drop that chrome so the preview fills
+           the screen edge-to-edge and the text is readable without pinch-zoom.
+           Screen-only: the saved PDF uses window.print() + @media print, so
+           the real page geometry (8.5in + 0.7in margins) is unaffected. */
+        @media (max-width: 700px) {
+          body.preview-mode { background: #fff !important; }
+          body.preview-mode .ak-shell {
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 16px !important;
+            box-shadow: none !important;
+            border: none !important;
+            min-height: 0 !important;
+          }
+        }
         body.preview-mode .ak-shell .scan-photo-row,
         body.preview-mode .ak-shell .gpr-scan-figure,
         body.preview-mode .ak-shell .scan-location-card,
