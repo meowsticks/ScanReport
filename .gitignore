@@ -14,3 +14,7 @@ npm-debug.log*
 # Regenerable STEEL generator scratch output (canonical is AK-ScanReport-STEEL.pdf)
 pdf-mockups/ScanReport-midjob.*
 pdf-mockups/ScanReport-midjob-p*.png
+
+# Scratch output of the app full-report review harness (regenerable)
+pdf-mockups/app-fullreport*
+pdf-mockups/appfr-p-*.png
