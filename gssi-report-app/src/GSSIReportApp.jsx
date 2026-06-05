@@ -591,7 +591,7 @@ const Field = ({ label, children, hint, className }) => (
       textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
     }}>{label}</div>
     {children}
-    {hint && <div style={{ fontSize: 12.5, color: c.textFaint, marginTop: 4 }}>{hint}</div>}
+    {hint && <div className="no-print" style={{ fontSize: 12.5, color: c.textFaint, marginTop: 4 }}>{hint}</div>}
   </div>
 );
 
@@ -3628,7 +3628,7 @@ function GPRScans({ report }) {
 
   return (
     <Card title="GPR scans · full size">
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
         Full-size render of every scan (B-scan, C-scan, Focus, marked-up slab) grouped by
         type. Multi-panel figures (a/b/c) display side-by-side. Annotations are baked in.
       </div>
@@ -5900,6 +5900,20 @@ export default function GSSIReportApp() {
             min-height: 0 !important;
           }
         }
+        /* If the user prints (or the review harness captures) while Preview mode
+           is on, strip the "paper on a desk" chrome so the grey desk background
+           and the shell's screen margins/shadow never bleed into the saved PDF. */
+        @media print {
+          body.preview-mode { background: #fff !important; }
+          body.preview-mode .ak-shell {
+            margin: 0 !important;
+            padding: 0 !important;
+            max-width: none !important;
+            min-height: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        }
         body.preview-mode .ak-shell .scan-photo-row,
         body.preview-mode .ak-shell .gpr-scan-figure,
         body.preview-mode .ak-shell .scan-location-card,
@@ -7221,9 +7235,6 @@ export default function GSSIReportApp() {
 
               {/* Print summary block */}
               <div className="print-only cover-summary-print" style={{ marginTop: 10 }}>
-                <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
-                  COVER THICKNESS SUMMARY
-                </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000' }}>
                   <thead>
                     <tr>
@@ -7277,10 +7288,10 @@ export default function GSSIReportApp() {
 
       {/* === DRAWING NOTES (CAD page) === */}
       {report.enableCadPage && (
-        <Card title="Drawing notes (CAD page)" className={ph('drawingNotes')}>
+        <Card title="Drawing notes (CAD page)" className={`${ph('drawingNotes')} no-print`}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
-            Project-specific notes that print in the right-side column of the landscape
-            CAD page. Use one paragraph per zone or finding.
+            Project-specific notes that print in the notes columns of the CAD
+            drawing page. Use one paragraph per zone or finding.
           </div>
           <Field label="Notes">
             <AutoGrowTextarea
@@ -7410,9 +7421,6 @@ export default function GSSIReportApp() {
             Scan Location. Useful for engineer sign-off and the coring crew's day-of checklist.
           </div>
           <div className="print-only proposed-cores-print" style={{ marginTop: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
-              PROPOSED CORE SCHEDULE
-            </div>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: '10pt', lineHeight: 1.5, color: '#000' }}>
               {report.scanLocations.map(loc => {
                 const verdictLabel = {
