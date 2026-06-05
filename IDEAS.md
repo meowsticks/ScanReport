@@ -62,3 +62,22 @@ plus an optional "recolor existing annotations" step when the palette changes.
   client acknowledgment block with override capture + no-signature deemed-acceptance.
 - Draft wording lives in chat; boss + counsel to approve, then drop into the
   editable disclaimer field. Build once approved.
+
+## 5. Field / tablet use — offline PWA  ⟵ raised 2026-06-05 (future / v3)
+
+For outdoor use on a Samsung (Android) tablet, the `.exe` doesn't apply
+(Windows-only). The web build (scan-report.vercel.app) already runs in the
+tablet's Chrome, so reports can be built/annotated on-site **when there's
+signal**.
+
+**Gap:** no internet on many job sites. To make it dependable outdoors:
+- Turn the web app into an installable **PWA** (add to home screen, full-screen,
+  app icon).
+- **Offline support** — service worker caches the app shell + assets so it loads
+  with no signal; report data stays in localStorage (already the case); queue
+  photo/cloud sync to flush when a connection returns.
+- Nice-to-have: a clear online/offline indicator and "X changes waiting to sync".
+
+**Note:** live screen-share with Claude isn't a thing; in the field, pasting a
+screenshot/photo into the Claude app (or claude.ai) on the tablet is the way to
+get help on a scan or report.
