@@ -6983,7 +6983,7 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === FINDINGS === */}
-      <Card title="Targets identified" className={ph('targets')} badge={
+      <Card title="Targets identified" className={`${ph('targets')} no-print`} badge={
         <span style={{
           background: c.cardAlt, color: c.textDim, fontSize: 11,
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
@@ -7416,6 +7416,7 @@ export default function GSSIReportApp() {
           padding: '2px 8px', borderRadius: 4, fontWeight: 500,
         }}>{report.cores.length}</span>
       }>
+        <div className="no-print">
         {report.cores.map((co, i) => {
           const v = {
             safe:    { color: c.green, bg: c.greenBg, label: '✓ Safe to drill' },
@@ -7457,6 +7458,38 @@ export default function GSSIReportApp() {
             </div>
           );
         })}
+        </div>
+        {/* Clean read-only verdict table for the report. The editor cards above
+            are no-print; their inputs would otherwise clip in the PDF. */}
+        {report.cores.length > 0 && (
+          <table className="print-only findings-table" style={{
+            width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000', marginTop: 4,
+          }}>
+            <thead>
+              <tr>
+                <th>Core</th>
+                <th>Size</th>
+                <th>Verdict</th>
+                <th>Clearance</th>
+                <th>Instructions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.cores.map((co, i) => {
+                const vlabel = { safe: '✓ Safe to drill', caution: '⚠ Caution', nogo: '✕ Do not drill' }[co.verdict] || co.verdict;
+                return (
+                  <tr key={i}>
+                    <td><strong>{co.label || '—'}</strong></td>
+                    <td>{co.size || '—'}</td>
+                    <td>{vlabel}</td>
+                    <td>{co.clearance || '—'}</td>
+                    <td>{co.note || ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
         <div className="no-print">
           <Btn onClick={addCore} style={{ width: '100%' }}>+ Add core location</Btn>
         </div>
