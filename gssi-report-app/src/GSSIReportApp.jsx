@@ -3958,7 +3958,7 @@ function ScanLocations({ report, update }) {
         padding: '2px 8px', borderRadius: 4, fontWeight: 500,
       }}>{report.scanLocations.length}</span>
     }>
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
         Each location (L1, L2…) prints as a side-by-side card: notes + core spec on
         the left, annotated photo with north arrow on the right. This is the industry-
         standard "Concrete Scanning Data" format.
@@ -7829,7 +7829,7 @@ export default function GSSIReportApp() {
           <Input value={report.reviewedRole} onChange={e => update({ reviewedRole: e.target.value })} />
         </Field>
 
-        <div style={{
+        <div className="no-print" style={{
           marginTop: 6, padding: 9,
           background: c.cardAlt, borderRadius: 6,
         }}>
