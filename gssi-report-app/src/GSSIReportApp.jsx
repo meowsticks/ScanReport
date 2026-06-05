@@ -7549,6 +7549,7 @@ export default function GSSIReportApp() {
             </div>
             <Field label="Override (leave blank to use auto-generated)">
               <Textarea value={report.methodsOverride || ''}
+                className="no-print"
                 onChange={e => update({ methodsOverride: e.target.value })}
                 style={{ minHeight: 80 }}
                 placeholder={auto} />
