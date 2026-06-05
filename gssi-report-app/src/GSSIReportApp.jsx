@@ -5251,7 +5251,7 @@ export default function GSSIReportApp() {
     { id: 'methods',        label: 'Methods narrative' },
     { id: 'limitations',    label: 'Limitations & assumptions' },
     { id: 'standardNotes',  label: 'Standard notes' },
-    { id: 'cadPage',        label: 'CAD-style drawing page (landscape)' },
+    { id: 'cadPage',        label: 'CAD-style drawing page' },
     { id: 'disclaimer',     label: 'Legal disclaimer' },
     { id: 'signoff',        label: 'Authorship & review' },
   ];
@@ -5995,7 +5995,6 @@ export default function GSSIReportApp() {
         @media print { .preview-bar { display: none !important; } }
         @media print {
           @page { size: A4; margin: 1.5cm; }
-          @page cad { size: A4 landscape; margin: 1.0cm; }
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
@@ -6082,11 +6081,9 @@ export default function GSSIReportApp() {
              at equal specificity. */
 
           .cad-page {
-            page: cad;
             page-break-before: always;
             page-break-after: always;
-            position: relative;
-            padding: 6mm 8mm;
+            padding: 4mm 2mm;
             border: none;
             font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           }
@@ -6110,17 +6107,20 @@ export default function GSSIReportApp() {
           .cad-letterhead-meta { font-size: 8pt; text-align: right; line-height: 1.5; border-left: 1px solid #cfcfcf; padding-left: 13px; }
           .cad-letterhead-meta b { display: block; color: #555 !important; font-size: 6.8pt; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
           .cad-letterhead-meta .v { font-size: 10pt; font-weight: 700; margin-bottom: 5px; color: #141414 !important; }
-          .cad-body {
-            display: grid;
-            grid-template-columns: 1fr 82mm;   /* right column ≥ title block (70mm) + its 8mm offset, so the absolute title block stays clear of the drawing box */
-            gap: 10px;
-            height: calc(100% - 92mm);
-            min-height: 130mm;
+          /* Portrait sheet: drawing full-width on top, then the notes (two
+             balanced columns, full width) and finally the title block, all in
+             normal flow so the sheet fills one page in the common case. */
+          .cad-diagram { border: 1px solid #555; padding: 4px; margin-top: 4mm; }
+          .cad-diagram canvas { width: 100% !important; height: auto !important; max-height: 76mm !important; object-fit: contain !important; }
+          .cad-lower { margin-top: 5mm; }
+          .cad-notes {
+            font-size: 8pt; line-height: 1.35;
+            columns: 3; column-gap: 7mm;
           }
-          .cad-diagram { border: 1px solid #555; padding: 4px; }
-          .cad-diagram canvas { width: 100% !important; height: auto !important; }
-          .cad-notes { font-size: 8.5pt; line-height: 1.4; }
-          .cad-notes-block { margin-bottom: 8px; }
+          /* Heading stays with its first lines; the list itself may flow across
+             the two columns so they balance and leave room for the title block. */
+          .cad-notes-block { margin-bottom: 7px; }
+          .cad-notes-heading { break-after: avoid; }
           .cad-notes-heading {
             font-size: 8pt; font-weight: 900; letter-spacing: 1.2px;
             border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 4px;
@@ -6137,11 +6137,12 @@ export default function GSSIReportApp() {
             print-color-adjust: exact;
           }
           .cad-titleblock {
-            position: absolute;
-            bottom: 6mm; right: 8mm;
-            width: 70mm;
+            margin-top: 4mm;
+            margin-left: auto;
+            width: 90mm;
             border: 1.5px solid #000;
             font-size: 8pt;
+            break-inside: avoid;
           }
           .cad-tb-row {
             display: grid;
@@ -6649,7 +6650,7 @@ export default function GSSIReportApp() {
           { id: 'enableStandardNotes', label: 'Standard notes column',     hint: 'Numbered general-notes block printed with the report.' },
           { id: 'enableNamedZones',    label: 'Named zones',                hint: 'Group scan locations under zones like "Back of House".' },
           { id: 'enableZones',         label: 'Hatched zones on diagram',   hint: 'Red / yellow / amber fill areas marking unsuitable, caution, or boundary regions on the site diagram.' },
-          { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Landscape engineered-drawing page with letterhead, notes column, and title block.' },
+          { id: 'enableCadPage',       label: 'CAD-style drawing page',     hint: 'Engineered drawing page with letterhead, drawing, notes, and title block.' },
           { id: 'enableColorLegend',   label: 'Markup color key',           hint: 'Prints an APWA-aligned legend explaining what each annotation color means (rebar, PT cable, conduit, water, proposed core).' },
           { id: 'enableConfidenceBand', label: 'Overall confidence band',   hint: 'Adds a rolled-up confidence rating (the lowest per-core confidence governs) to the executive summary.' },
           { id: 'enableQR',            label: 'QR code on report',          hint: 'Stamps a scannable QR code on the report linking to the live report tool (or any URL you set below). Off by default.' },
@@ -7746,10 +7747,10 @@ export default function GSSIReportApp() {
               <b>Date</b><div className="v">{report.scanDate || '—'}</div>
             </div>
           </div>
-          <div className="cad-body">
-            <div className="cad-diagram">
-              <DiagramSnapshot report={report} width={1100} height={750} />
-            </div>
+          <div className="cad-diagram">
+            <DiagramSnapshot report={report} width={1100} height={750} />
+          </div>
+          <div className="cad-lower">
             <div className="cad-notes">
               {report.diagramNotes && (
                 <div className="cad-notes-block">
@@ -7781,14 +7782,14 @@ export default function GSSIReportApp() {
                 </div>
               )}
             </div>
-          </div>
-          <div className="cad-titleblock">
-            <div className="cad-tb-row"><span>Client</span><strong>{report.client || '—'}</strong></div>
-            <div className="cad-tb-row"><span>Site</span><strong>{report.siteAddress || '—'}</strong></div>
-            <div className="cad-tb-row"><span>Project no</span><strong>{report.projectNo || '—'}</strong></div>
-            <div className="cad-tb-row"><span>Date</span><strong>{report.scanDate || '—'}</strong></div>
-            <div className="cad-tb-row"><span>Scale</span><strong>{report.drawingScale || 'NTS'}</strong></div>
-            <div className="cad-tb-row"><span>Drawing no</span><strong>{report.drawingNo || `${report.projectNo || 'PROJ'}-D01`}</strong></div>
+            <div className="cad-titleblock">
+              <div className="cad-tb-row"><span>Client</span><strong>{report.client || '—'}</strong></div>
+              <div className="cad-tb-row"><span>Site</span><strong>{report.siteAddress || '—'}</strong></div>
+              <div className="cad-tb-row"><span>Project no</span><strong>{report.projectNo || '—'}</strong></div>
+              <div className="cad-tb-row"><span>Date</span><strong>{report.scanDate || '—'}</strong></div>
+              <div className="cad-tb-row"><span>Scale</span><strong>{report.drawingScale || 'NTS'}</strong></div>
+              <div className="cad-tb-row"><span>Drawing no</span><strong>{report.drawingNo || `${report.projectNo || 'PROJ'}-D01`}</strong></div>
+            </div>
           </div>
         </div>
       )}
