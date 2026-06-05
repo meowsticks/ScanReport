@@ -23,6 +23,34 @@ A small QR panel inside the **desktop app** the boss uses.
 dependency needed. Form already exists at `public/boss-intake.html`
 (QR → `https://scan-report.vercel.app/boss-intake.html`).
 
+## 4. Link the Markup Color Key to the drawing-tool colors  ⟵ requested 2026-06-05 (defer to v3)
+
+Today the editable **Markup Color Key** (`report.colorLegend`) only changes the
+**printed legend**. The colors you actually *draw* with are separate:
+- `ANNOTATION_COLORS` — 5 hardcoded swatches in the annotation editor.
+- `DEFAULT_PRESETS` — 9 preset chips (color + tool + thickness), saved per device
+  in localStorage (`ak_annotation_presets`).
+
+**Why it's deferred (not a clean quick patch):** the systems differ in scope
+(per-**report** legend vs per-**device** presets/swatches), shape (a meaning
+label vs id/tool/thickness), and count (5 vs 9). A good link needs design calls:
+which side is the source of truth, how 5 legend colors map onto 9 presets, and
+what happens to annotations already drawn in the previous colors.
+
+**Use case:** a client/region mandates a specific palette and wants us drawing in
+their exact colors (not just printing a legend that says so).
+
+**Quick partial (if ever asked to patch fast):** feed `report.colorLegend`
+colors into the annotation editor's swatch row (`ANNOTATION_COLORS`) so the
+draw-color choices match the report's legend. Requires passing the report (or
+just the legend) into `AnnotationEditor` (currently `{ photo, onSave, onClose }`)
+and rendering legend-derived hex swatches alongside the defaults. Leaves the
+per-device presets and existing annotations untouched — partial but low-risk.
+
+**Full v3:** one shared, per-report palette that drives the legend, the swatches,
+and the preset chips together, with an optional "recolor existing annotations"
+step when the palette changes.
+
 ## 2. Commercialization ideas (placeholder — Dustin to expand)
 
 - Re-enable account connectors when needed (Gmail = auto-email reports,
