@@ -584,8 +584,8 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
   </div>
 );
 
-const Field = ({ label, children, hint }) => (
-  <div style={{ marginBottom: 10 }}>
+const Field = ({ label, children, hint, className }) => (
+  <div className={className} style={{ marginBottom: 10 }}>
     <div style={{
       fontSize: 12, color: c.textDim, marginBottom: 4,
       textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
@@ -7547,17 +7547,14 @@ export default function GSSIReportApp() {
               Auto-generated from your Equipment &amp; calibration entries. Override only
               if you need custom phrasing.
             </div>
-            <Field label="Override (leave blank to use auto-generated)">
+            <Field label="Override (leave blank to use auto-generated)" className="no-print">
               <Textarea value={report.methodsOverride || ''}
                 className="no-print"
                 onChange={e => update({ methodsOverride: e.target.value })}
                 style={{ minHeight: 80 }}
                 placeholder={auto} />
             </Field>
-            <div className="print-only methods-print" style={{ marginTop: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
-                METHODS
-              </div>
+            <div className="print-only methods-print">
               <div style={{ fontSize: '10pt', lineHeight: 1.5, color: '#000', whiteSpace: 'pre-wrap' }}>
                 {(report.methodsOverride && report.methodsOverride.trim()) || auto}
               </div>
@@ -7569,32 +7566,42 @@ export default function GSSIReportApp() {
       {/* === LIMITATIONS (standard + full) === */}
       {showLimitations && (
         <Card title="Limitations & assumptions" className={ph('limitations')}>
-          {report.limitations.map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
-              <span style={{ color: c.accent, marginTop: 9, fontSize: 11 }}>▸</span>
-              <Input value={line} onChange={e => {
-                const next = [...report.limitations];
-                next[i] = e.target.value;
-                update({ limitations: next });
-              }} style={{ fontSize: 12, padding: '6px 9px' }} />
-              <Btn variant="ghost"
-                onClick={() => update({ limitations: report.limitations.filter((_, j) => j !== i) })}
-                style={{ padding: '6px 8px', fontSize: 11 }}>✕</Btn>
-            </div>
-          ))}
-          <Btn onClick={() => update({ limitations: [...report.limitations, ''] })} style={{ width: '100%', fontSize: 12 }}>
-            + Add limitation
-          </Btn>
+          <div className="no-print">
+            {report.limitations.map((line, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
+                <span style={{ color: c.accent, marginTop: 9, fontSize: 11 }}>▸</span>
+                <Input value={line} onChange={e => {
+                  const next = [...report.limitations];
+                  next[i] = e.target.value;
+                  update({ limitations: next });
+                }} style={{ fontSize: 12, padding: '6px 9px' }} />
+                <Btn variant="ghost"
+                  onClick={() => update({ limitations: report.limitations.filter((_, j) => j !== i) })}
+                  style={{ padding: '6px 8px', fontSize: 11 }}>✕</Btn>
+              </div>
+            ))}
+            <Btn onClick={() => update({ limitations: [...report.limitations, ''] })} style={{ width: '100%', fontSize: 12 }}>
+              + Add limitation
+            </Btn>
+          </div>
+          {/* Clean read-only list for the report. The inputs above are editor-
+              only; a single-line <input> can't wrap, so it would clip in print. */}
+          <ul className="print-only lim-print" style={{ margin: 0, paddingLeft: 20, fontSize: '10pt', lineHeight: 1.55, color: '#000' }}>
+            {report.limitations.filter(l => l && l.trim()).map((line, i) => (
+              <li key={i} style={{ marginBottom: 3 }}>{line}</li>
+            ))}
+          </ul>
         </Card>
       )}
 
       {/* === STANDARD NOTES (Xradar-style numbered general notes) === */}
       {report.enableStandardNotes && (
-        <Card title="Standard notes" className={ph('standardNotes')}>
+        <Card title="Standard notes" className={`${ph('standardNotes')}${report.enableCadPage ? ' no-print' : ''}`}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
             Numbered general notes printed alongside the drawing (CAD page) or as a
             standalone block before the legal disclaimer.
           </div>
+          <div className="no-print">
           {(report.standardNotes || []).map((line, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
               <span style={{
@@ -7633,6 +7640,7 @@ export default function GSSIReportApp() {
           <Btn onClick={() => update({ standardNotes: [...(report.standardNotes || []), ''] })} style={{ width: '100%', fontSize: 12 }}>
             + Add standard note
           </Btn>
+          </div>
 
           {/* Print rendering when CAD page is OFF — standalone block */}
           {!report.enableCadPage && (
