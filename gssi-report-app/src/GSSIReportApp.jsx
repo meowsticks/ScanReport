@@ -775,10 +775,12 @@ function ExecutiveSummary({ report }) {
     if (cs.includes('med')) return 'med';
     return 'high';
   }, [report.cores]);
+  // Solid fill + white text so the pill stays legible on screen (dark theme) and
+  // in the printed PDF — the old translucent dark-green bg made HIGH unreadable.
   const confMeta = {
-    high: { label: 'HIGH', color: c.green, bg: c.greenBg },
-    med:  { label: 'MEDIUM', color: c.amber, bg: c.amberBg },
-    low:  { label: 'LOW', color: c.red, bg: c.redBg },
+    high: { label: 'HIGH',   color: '#fff', bg: '#1a7f37' },
+    med:  { label: 'MEDIUM', color: '#fff', bg: '#b07400' },
+    low:  { label: 'LOW',    color: '#fff', bg: '#c0282d' },
   }[confidence] || null;
 
   const overallVerdict =
@@ -849,6 +851,7 @@ function ExecutiveSummary({ report }) {
               display: 'inline-block', padding: '1px 8px', borderRadius: 4,
               background: confMeta.bg, color: confMeta.color,
               fontWeight: 700, fontSize: 12, letterSpacing: 0.5,
+              WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
             }}>{confMeta.label}</span>
           </>
         )}
@@ -8211,7 +8214,7 @@ export default function GSSIReportApp() {
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
-        <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/></span>
+        <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong> · v{APP_VERSION}<br/></span>
         {(report.footerSubline ?? 'GSSI StructureScan Mini XT · British Columbia engineering edition').trim() || null}
       </div>
 
