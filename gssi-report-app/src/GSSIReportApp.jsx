@@ -7230,12 +7230,28 @@ export default function GSSIReportApp() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>Top</td><td>{topMin || '—'}</td><td>{topAvg || '—'}</td><td>{cs.topTarget || '—'}</td>
-                    </tr>
-                    <tr>
-                      <td>Bottom</td><td>{botMin || '—'}</td><td>{botAvg || '—'}</td><td>{cs.botTarget || '—'}</td>
-                    </tr>
+                    {(() => {
+                      const hasTop = !!(topMin || topAvg || cs.topTarget);
+                      const hasBot = !!(botMin || botAvg || cs.botTarget);
+                      // Show only the mat(s) with data; if the whole section is
+                      // blank, keep both rows so the table structure is intact.
+                      const showTop = hasTop || !hasBot;
+                      const showBot = hasBot || !hasTop;
+                      return (
+                        <>
+                          {showTop && (
+                            <tr>
+                              <td>Top</td><td>{topMin || '—'}</td><td>{topAvg || '—'}</td><td>{cs.topTarget || '—'}</td>
+                            </tr>
+                          )}
+                          {showBot && (
+                            <tr>
+                              <td>Bottom</td><td>{botMin || '—'}</td><td>{botAvg || '—'}</td><td>{cs.botTarget || '—'}</td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })()}
                   </tbody>
                 </table>
                 {cs.note && (
