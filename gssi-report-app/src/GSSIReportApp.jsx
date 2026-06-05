@@ -1006,25 +1006,31 @@ function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
 function DiagramSnapshot({ report, width = 1100, height = 750 }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
-  useEffect(() => {
+  // Size the canvas to the background image's aspect ratio when one is present,
+  // so the image fills it edge-to-edge instead of being letterboxed with dark
+  // bars. Falls back to the default WxH for image-less (drawn-only) diagrams.
+  const paint = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = width;
-    canvas.height = height;
+    const img = imgRef.current;
+    let w = width, h = height;
+    if (img && img.complete && img.naturalWidth > 0) {
+      h = Math.round(width * img.naturalHeight / img.naturalWidth);
+    }
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
-    drawSiteDiagramTo(ctx, width, height, report, { backgroundImage: imgRef.current });
+    drawSiteDiagramTo(ctx, w, h, report, { backgroundImage: img });
+  };
+  useEffect(() => {
+    paint();
   }, [report.diagramImage, report.diagramImageUrl, report.diagramStrokes, report.diagramPins, report.diagramZones, report.enableZones, width, height]);
   return (
     <>
       {diagramSrc(report) && (
         <img ref={imgRef} src={diagramSrc(report)} alt="" crossOrigin="anonymous"
           style={{ display: 'none' }}
-          onLoad={() => {
-            const c = canvasRef.current;
-            if (!c) return;
-            const ctx = c.getContext('2d');
-            drawSiteDiagramTo(ctx, c.width, c.height, report, { backgroundImage: imgRef.current });
-          }} />
+          onLoad={paint} />
       )}
       <canvas ref={canvasRef}
         style={{ width: '100%', height: 'auto', display: 'block', background: '#2a2a28' }} />
@@ -6124,8 +6130,8 @@ export default function GSSIReportApp() {
           /* Portrait sheet: drawing full-width on top, then the notes (two
              balanced columns, full width) and finally the title block, all in
              normal flow so the sheet fills one page in the common case. */
-          .cad-diagram { border: 1px solid #555; padding: 4px; margin-top: 4mm; }
-          .cad-diagram canvas { width: 100% !important; height: auto !important; max-height: 76mm !important; object-fit: contain !important; }
+          .cad-diagram { border: 1px solid #555; padding: 4px; margin: 4mm auto 0; width: fit-content; max-width: 100%; }
+          .cad-diagram canvas { display: block !important; height: 88mm !important; width: auto !important; max-width: 100% !important; }
           .cad-lower { margin-top: 5mm; }
           .cad-notes {
             font-size: 8pt; line-height: 1.35;
