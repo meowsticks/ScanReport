@@ -24,6 +24,7 @@ const HELP_AUTOSHOW_KEY = 'ak_help_autoshow'; // whether the Getting Started gui
 const RECENT_FILES_KEY = 'ak_recent_files';   // desktop: recently opened/saved file paths
 const AUTOSAVE_KEY = 'ak_autosave_min';        // desktop/FS: auto-save interval in minutes (0 = off)
 const EMAIL_PROVIDER_KEY = 'ak_email_provider'; // preferred webmail/compose target
+const SHARE_BACKUP_KEY = 'ak_share_attach_backup'; // attach the .json backup when sharing (default off)
 const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new popup
 
 // Bumped on every release. Each entry is shown by the What's-new modal the
@@ -5265,13 +5266,18 @@ export default function GSSIReportApp() {
     rememberRecents();
     const payload = { title: emailSubject, text: emailBody };
     try {
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-      const file = new File(
-        [blob],
-        `gssi-${report.projectNo || 'draft'}-${report.scanDate}.json`,
-        { type: 'application/json' },
-      );
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      // Only attach the .json backup when the user opts in — most recipients
+      // (client, engineer) just want the PDF.
+      let file = null;
+      if (shareBackup) {
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        file = new File(
+          [blob],
+          `gssi-${report.projectNo || 'draft'}-${report.scanDate}.json`,
+          { type: 'application/json' },
+        );
+      }
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ ...payload, files: [file] });
       } else {
         await navigator.share(payload);
@@ -5547,6 +5553,10 @@ export default function GSSIReportApp() {
   const lastAutoSaveRef = useRef(null);
   // Preferred email/compose target, remembered between reports.
   const [emailProvider, setEmailProvider] = useState(() => lsGet(EMAIL_PROVIDER_KEY, 'mailto'));
+  // Whether sharing attaches the .json backup. Off by default — a client or
+  // engineer only needs the PDF; the backup is for re-opening/editing in-app.
+  const [shareBackup, setShareBackup] = useState(() => lsGet(SHARE_BACKUP_KEY, false));
+  const toggleShareBackup = (on) => { setShareBackup(on); lsSet(SHARE_BACKUP_KEY, on); };
 
   const reportJSON = () => JSON.stringify(report, null, 2);
 
@@ -5641,6 +5651,14 @@ export default function GSSIReportApp() {
   };
   // Starting/loading a different job must not write into the previous job's file.
   const forgetFile = () => { fileHandleRef.current = null; desktopPathRef.current = null; setSavedFileName(null); };
+
+  // Desktop: reveal the linked .akscan file in its folder (Explorer/Finder) so
+  // the saved report is easy to find/attach.
+  const revealSavedFile = () => {
+    if (desktop && desktopPathRef.current && window.akDesktop?.showInFolder) {
+      window.akDesktop.showInFolder(desktopPathRef.current);
+    }
+  };
 
   const importJSON = (e) => {
     const file = e.target.files?.[0];
@@ -6509,6 +6527,7 @@ export default function GSSIReportApp() {
       }}>
         {/* Action buttons sit in their own row; save status pinned to the left */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span title="Your work auto-saves to this device" style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4,
@@ -6519,6 +6538,21 @@ export default function GSSIReportApp() {
             ✓ {savedAt
               ? `Saved ${new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
               : 'Auto-save on'}
+          </span>
+          {desktop && savedFileName && (
+            <button onClick={revealSavedFile}
+              title={`Show “${savedFileName}” in its folder`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
+                color: c.textDim, background: c.cardAlt,
+                border: `1px solid ${c.border}`, borderRadius: 20,
+                padding: '4px 9px', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontFamily: 'inherit', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+              📁 Show file
+            </button>
+          )}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {report.status === 'approved' ? (
@@ -8221,10 +8255,18 @@ export default function GSSIReportApp() {
               </Btn>
             </div>
             {canShare && (
-              <Btn onClick={shareReport} style={{ width: '100%', marginTop: 6 }}
-                title="Open your device's share menu (Mail, Messages, etc.) with this draft and a backup file attached">
-                📤 Share · attaches backup file
-              </Btn>
+              <>
+                <Btn onClick={shareReport} style={{ width: '100%', marginTop: 6 }}
+                  title="Open your device's share menu (Mail, Messages, etc.) with this draft">
+                  📤 Share{shareBackup ? ' · with backup file' : ''}
+                </Btn>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, fontSize: 11.5, color: c.textDim, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={shareBackup}
+                    onChange={e => toggleShareBackup(e.target.checked)}
+                    style={{ accentColor: c.accent, flexShrink: 0 }} />
+                  Attach the .json backup file (for re-opening/editing — clients and engineers don't need it)
+                </label>
+              </>
             )}
             {shareNote && (
               <div style={{ fontSize: 11, color: c.amberStrong, marginTop: 6, textAlign: 'center' }}>
