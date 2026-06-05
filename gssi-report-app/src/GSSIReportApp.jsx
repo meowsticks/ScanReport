@@ -7191,7 +7191,7 @@ export default function GSSIReportApp() {
                 <Field label="Target cover"><Input value={cs.botTarget || ''}
                   onChange={e => set('botTarget', e.target.value)} placeholder="e.g. 40 mm" /></Field>
               </div>
-              <Field label="Notes (overall cover commentary)">
+              <Field label="Notes (overall cover commentary)" className="no-print">
                 <Textarea value={cs.note || ''} onChange={e => set('note', e.target.value)}
                   style={{ minHeight: 56 }} />
               </Field>
@@ -7293,7 +7293,7 @@ export default function GSSIReportApp() {
 
       {/* === ZONES (named area groupings) === */}
       {report.enableNamedZones && (
-        <Card title="Zones" className={ph('zones')}>
+        <Card title="Zones" className={`${ph('zones')} no-print`}>
           <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
             Group scan locations under named areas (e.g. "Back of House", "Zone 4 — north corridor").
             Each location can be assigned a zone in its card.

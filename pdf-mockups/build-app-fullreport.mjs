@@ -53,8 +53,8 @@ const photoImgs = [
 //    issued (clean, no DRAFT), images in every visual card.
 const now = '2026-06-01';
 const zones = [
-  { id: 'z-boh', name: 'Back of House', note: 'Mechanical + storage rooms' },
-  { id: 'z-foh', name: 'Front of House', note: 'Lobby + retail slab' },
+  { id: 'z-boh', label: 'Back of House', notes: 'Mechanical + storage rooms — confined headroom; watch for embedded conduit runs feeding the gear room.' },
+  { id: 'z-foh', label: 'Front of House', notes: 'Lobby + retail slab — architectural finishes below; daylight before any core near the feature stair.' },
 ];
 const report = {
   ...sample,
