@@ -2233,7 +2233,7 @@ function AnnotatedImage({ src, annotations = [], style, alt }) {
 // AnnotationEditor — full-screen modal canvas editor
 // ============================================================
 
-function AnnotationEditor({ photo, onSave, onClose }) {
+function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -2575,6 +2575,22 @@ function AnnotationEditor({ photo, onSave, onClose }) {
     return () => cancelAnimationFrame(r1);
   }, [pendingText?.stamp]);
 
+  // Draw-color swatches mirror the report's editable Markup Color Key, so you
+  // can annotate in a client's exact palette (not just print a legend that
+  // says so). Deduped by hex; falls back to the built-in defaults.
+  const swatchColors = (() => {
+    const seen = new Set();
+    const out = [];
+    (colorLegend || []).forEach(e => {
+      const hex = (e.color || '').toLowerCase();
+      if (hex && !seen.has(hex)) { seen.add(hex); out.push({ hex: e.color, label: e.label || e.color }); }
+    });
+    return out.length ? out : ANNOTATION_COLORS.map(co => ({ hex: co.hex, label: co.id }));
+  })();
+  // Resolve the current color to a hex so a swatch highlights whether the color
+  // was picked by id ('red'), preset, legend swatch, or custom picker.
+  const activeHex = (ANNOTATION_COLOR_HEX[color] || color || '').toLowerCase();
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -2886,15 +2902,15 @@ function AnnotationEditor({ photo, onSave, onClose }) {
             style={{ flex: 1, accentColor: c.accent }} />
         </label>
         <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-            {ANNOTATION_COLORS.map(co => (
-              <button key={co.id}
-                onClick={() => setColor(co.id)}
-                title={co.id}
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+            {swatchColors.map(sw => (
+              <button key={sw.hex}
+                onClick={() => setColor(sw.hex)}
+                title={sw.label}
                 style={{
                   width: 24, height: 24, borderRadius: '50%',
-                  background: co.hex, cursor: 'pointer',
-                  border: color === co.id ? `3px solid ${c.text}` : `1px solid ${c.border}`,
+                  background: sw.hex, cursor: 'pointer',
+                  border: activeHex === sw.hex.toLowerCase() ? `3px solid ${c.text}` : `1px solid ${c.border}`,
                 }} />
             ))}
             <label title="Custom color"
@@ -3659,6 +3675,7 @@ function ScanPhotos({ report, update }) {
       {editingPhoto && (
         <AnnotationEditor
           photo={editingPhoto}
+          colorLegend={report.colorLegend || APWA_LEGEND}
           onSave={(annotations) => {
             updatePhoto(editingPhoto.id, { annotations });
             setEditingPhotoId(null);
@@ -4652,6 +4669,7 @@ function ScanLocations({ report, update }) {
         return (
           <AnnotationEditor
             photo={{ dataUrl: locPhotoSrc(loc), annotations: loc.photoAnnotations || [] }}
+            colorLegend={report.colorLegend || APWA_LEGEND}
             onSave={(annotations) => {
               updateLoc(loc.id, { photoAnnotations: annotations });
               setAnnotLocId(null);

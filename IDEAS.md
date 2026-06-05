@@ -40,16 +40,15 @@ what happens to annotations already drawn in the previous colors.
 **Use case:** a client/region mandates a specific palette and wants us drawing in
 their exact colors (not just printing a legend that says so).
 
-**Quick partial (if ever asked to patch fast):** feed `report.colorLegend`
-colors into the annotation editor's swatch row (`ANNOTATION_COLORS`) so the
-draw-color choices match the report's legend. Requires passing the report (or
-just the legend) into `AnnotationEditor` (currently `{ photo, onSave, onClose }`)
-and rendering legend-derived hex swatches alongside the defaults. Leaves the
-per-device presets and existing annotations untouched — partial but low-risk.
+**Quick partial — DONE 2026-06-05:** the annotation editor's draw swatches now
+mirror `report.colorLegend`, so you annotate in the report's exact palette.
+`AnnotationEditor` takes a `colorLegend` prop and renders legend-derived hex
+swatches; the custom-color picker and per-device preset chips are unchanged, and
+existing annotations are untouched.
 
-**Full v3:** one shared, per-report palette that drives the legend, the swatches,
-and the preset chips together, with an optional "recolor existing annotations"
-step when the palette changes.
+**Still v3 (remaining):** one shared, per-report palette that ALSO drives the
+preset chips (`DEFAULT_PRESETS`, currently per-device tool/thickness combos),
+plus an optional "recolor existing annotations" step when the palette changes.
 
 ## 2. Commercialization ideas (placeholder — Dustin to expand)
 
