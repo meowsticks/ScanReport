@@ -5862,6 +5862,13 @@ export default function GSSIReportApp() {
         @media print { .print-hidden { display: none !important; } }
         body.preview-mode .print-hidden { display: none !important; }
         body.preview-mode .no-print     { display: none !important; }
+        /* Match print: fields read as clean text, not editable boxes. */
+        body.preview-mode .ak-shell input:not([type="checkbox"]):not([type="radio"]),
+        body.preview-mode .ak-shell select {
+          border: none !important; background: transparent !important;
+          padding-left: 0 !important; -webkit-appearance: none !important; appearance: none !important;
+        }
+        body.preview-mode .ak-shell input[type="date"]::-webkit-calendar-picker-indicator { display: none !important; }
         body.preview-mode {
           background: #6a6a6a !important;
           padding: 0 !important;
@@ -6213,6 +6220,19 @@ export default function GSSIReportApp() {
             overflow-wrap: break-word;
             word-break: break-word;
           }
+          /* Cover / equipment fields are the report's content, not controls —
+             strip the editable-box chrome so they read as clean printed text. */
+          .ak-shell input:not([type="checkbox"]):not([type="radio"]),
+          .ak-shell select {
+            border: none !important;
+            background: transparent !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            color: #000 !important;
+            -webkit-appearance: none !important;
+            appearance: none !important;
+          }
+          .ak-shell input[type="date"]::-webkit-calendar-picker-indicator { display: none !important; }
           .findings-table th, .cover-summary-print th {
             background: #eee !important;
             font-size: 8pt;
@@ -7171,6 +7191,7 @@ export default function GSSIReportApp() {
           const ro = !!cs.autoFromTargets;
           return (
             <>
+              <div className="no-print">
               <div style={{ fontSize: 10.5, color: c.textDim, textTransform: 'uppercase',
                 letterSpacing: 0.6, fontWeight: 700, marginBottom: 4 }}>Top mat</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
@@ -7190,6 +7211,7 @@ export default function GSSIReportApp() {
                   onChange={e => set('botAvg', e.target.value)} placeholder="e.g. 30 mm" /></Field>
                 <Field label="Target cover"><Input value={cs.botTarget || ''}
                   onChange={e => set('botTarget', e.target.value)} placeholder="e.g. 40 mm" /></Field>
+              </div>
               </div>
               <Field label="Notes (overall cover commentary)" className="no-print">
                 <Textarea value={cs.note || ''} onChange={e => set('note', e.target.value)}
