@@ -6564,7 +6564,7 @@ export default function GSSIReportApp() {
           <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
             title={report.status === 'issued'
               ? 'Issued — sent to the engineer for review (FOR REVIEW watermark). Click to revert to Draft.'
-              : 'Draft — PDF carries a DRAFT watermark. Click to mark Issued (sent for review).'}
+              : 'Draft — not sent yet. PDF carries a FOR REVIEW watermark until approved. Click to mark Issued.'}
             aria-label="Toggle draft / issued status"
             style={{
               background: report.status === 'issued' ? c.greenBg : c.amberBg,
@@ -7029,8 +7029,8 @@ export default function GSSIReportApp() {
               <text x="500" y="700" textAnchor="middle"
                 transform="rotate(-30 500 660)"
                 fontFamily="Helvetica, Arial, sans-serif"
-                fontSize={report.status === 'draft' ? '230' : '150'} fontWeight="800" letterSpacing="14"
-                fill="#9ca3af" fillOpacity="0.18">{report.status === 'draft' ? 'DRAFT' : 'FOR REVIEW'}</text>
+                fontSize="150" fontWeight="800" letterSpacing="14"
+                fill="#9ca3af" fillOpacity="0.18">FOR REVIEW</text>
             </svg>
           </div>
         )}
