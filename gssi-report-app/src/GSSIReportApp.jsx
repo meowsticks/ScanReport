@@ -412,6 +412,8 @@ const DEFAULT_REPORT = {
   // Editable closing line printed at the very bottom (brand flourish). Crews can
   // set their own sign-off / company saying.
   footerTagline: 'Prepared with care by the AKCC crew · Know before you cut.',
+  // Small print-footer sub-line (equipment / edition). Editable; clear to hide.
+  footerSubline: 'GSSI StructureScan Mini XT · British Columbia engineering edition',
 
   // Engineer approval (F3). Set when the engineer approves by email; status
   // moves to 'approved' and the report is flagged archived in the reports list.
@@ -6179,12 +6181,17 @@ export default function GSSIReportApp() {
              black; specific elements that need to keep colour (brand ribbon,
              location header, photos, color swatches) opt back in below via
              higher-specificity rules later in this @media block. */
-          html, body, .ak-shell {
+          html, body, #root, .ak-shell {
             background: #fff !important;
             color: #000 !important;
           }
+          /* #root is the React mount between body and the shell; it carried the
+             dark theme background and showed as a black frame around the page on
+             the real print path. Force it (and any padding) flat-white. */
+          #root { padding: 0 !important; margin: 0 !important; }
           .ak-shell {
             padding: 0 !important;
+            margin: 0 !important;
             max-width: none !important;
           }
           .ak-sec {
@@ -8112,6 +8119,13 @@ export default function GSSIReportApp() {
             placeholder="Prepared with care by the AKCC crew · Know before you cut." />
         </Field>
 
+        <Field label="Footer sub-line" className="no-print"
+          hint="Small grey line under the footer (equipment / edition). Optional — edit it or clear it to remove.">
+          <Input value={report.footerSubline ?? ''}
+            onChange={e => update({ footerSubline: e.target.value })}
+            placeholder="GSSI StructureScan Mini XT · British Columbia engineering edition" />
+        </Field>
+
         {/* === ENGINEER APPROVAL (F3) — the engineer reviews & approves by email;
              recording it marks the report Approved and archives it. No lock. === */}
         <div className="no-print" style={{
@@ -8198,7 +8212,7 @@ export default function GSSIReportApp() {
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
         <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/></span>
-        GSSI StructureScan Mini XT · British Columbia engineering edition
+        {(report.footerSubline ?? 'GSSI StructureScan Mini XT · British Columbia engineering edition').trim() || null}
       </div>
 
       <Assistant report={report} update={update} />
