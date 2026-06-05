@@ -2730,9 +2730,9 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       </div>
 
       <div style={{
-        padding: '10px 12px', background: c.bgRaised,
+        padding: '6px 10px', background: c.bgRaised,
         borderTop: `1px solid ${c.borderStrong}`,
-        display: 'flex', flexDirection: 'column', gap: 8,
+        display: 'flex', flexDirection: 'column', gap: 5,
       }}>
         {/* === Preset chips — quick-switch color/thickness/tool combos === */}
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2846,9 +2846,9 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               style={{
                 background: tool === opt.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tool === opt.id ? c.accent : c.border}`,
-                borderRadius: 6, padding: '8px 4px',
+                borderRadius: 6, padding: '5px 4px',
                 color: tool === opt.id ? c.onAccentDim : c.text,
-                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
               }}>{opt.label}</button>
           ))}
         </div>
@@ -2892,7 +2892,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                 onClick={() => setColor(co.id)}
                 title={co.id}
                 style={{
-                  width: 28, height: 28, borderRadius: '50%',
+                  width: 24, height: 24, borderRadius: '50%',
                   background: co.hex, cursor: 'pointer',
                   border: color === co.id ? `3px solid ${c.text}` : `1px solid ${c.border}`,
                 }} />
@@ -2900,7 +2900,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
             <label title="Custom color"
               style={{
                 position: 'relative', display: 'inline-flex',
-                width: 28, height: 28, borderRadius: '50%',
+                width: 24, height: 24, borderRadius: '50%',
                 background: typeof color === 'string' && color.startsWith('#') ? color : 'conic-gradient(red, orange, yellow, green, blue, purple, red)',
                 cursor: 'pointer', overflow: 'hidden',
                 border: typeof color === 'string' && color.startsWith('#') ? `3px solid ${c.text}` : `1px solid ${c.border}`,
@@ -2927,7 +2927,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', lineHeight: 1.35 }}>
           {tool === 'freehand'
             ? 'Press and drag to draw a smooth line. Release to finish.'
             : tool === 'text'
@@ -2935,9 +2935,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               : anchor
                 ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
                 : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
-        </div>
-        <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', opacity: 0.85 }}>
-          Scroll to zoom toward the cursor · 🖐 Pan (or middle-mouse drag) to move
+          <span style={{ opacity: 0.7 }}> · Scroll to zoom · 🖐 Pan to move</span>
         </div>
       </div>
     </div>
