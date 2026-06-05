@@ -5517,6 +5517,19 @@ export default function GSSIReportApp() {
   const removeCore = (i) => update({ cores: report.cores.filter((_, j) => j !== i) });
   const moveCore = (i, dir) => update({ cores: moveInArray(report.cores, i, dir) });
 
+  // ---------- Markup color key ----------
+  // Editable per-report legend so a crew can match a region/client colour
+  // standard. Falls back to the APWA default for reports saved before this
+  // existed (no migration needed).
+  const legend = report.colorLegend || APWA_LEGEND;
+  const updateLegend = (i, patch) => {
+    const next = legend.map((it, j) => j === i ? { ...it, ...patch } : it);
+    update({ colorLegend: next });
+  };
+  const addLegend = () => update({ colorLegend: [...legend, { color: '#888888', label: '' }] });
+  const removeLegend = (i) => update({ colorLegend: legend.filter((_, j) => j !== i) });
+  const resetLegend = () => update({ colorLegend: APWA_LEGEND.map(x => ({ ...x })) });
+
   // ---------- Save / export ----------
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveNote, setSaveNote] = useState('');           // status line shown in the Save dialog
@@ -7399,16 +7412,39 @@ export default function GSSIReportApp() {
       {/* === MARKUP COLOR KEY (APWA-aligned) === */}
       {report.enableColorLegend && (
         <Card title="Markup color key" dense className="ak-sec ak-sec-colorLegend">
-          <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
-            Aligned to the APWA Uniform Color Code (utility-locating standard) plus concrete-scanning convention.
-            Colors below match the annotation presets used on the scan photos.
+          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+            Defaults to the APWA Uniform Color Code plus concrete-scanning convention.
+            Click a swatch to recolor it or edit a label to match a region or client
+            standard — this prints as the report's legend.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}>
-            {APWA_LEGEND.map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.text }}>
+          {/* Editor controls */}
+          <div className="no-print" style={{ display: 'grid', gap: 6 }}>
+            {legend.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="color" value={item.color}
+                  onChange={e => updateLegend(i, { color: e.target.value })}
+                  title="Pick a color"
+                  style={{ width: 30, height: 30, padding: 0, border: `1px solid ${c.border}`,
+                    borderRadius: 5, background: 'none', cursor: 'pointer', flexShrink: 0 }} />
+                <Input value={item.label} onChange={e => updateLegend(i, { label: e.target.value })}
+                  placeholder="What this color means" style={{ flex: 1, fontSize: 12 }} />
+                <Btn variant="ghost" onClick={() => removeLegend(i)}
+                  title="Remove" style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+              <Btn onClick={addLegend} style={{ flex: 1 }}>+ Add color</Btn>
+              <Btn variant="ghost" onClick={resetLegend} title="Restore the APWA default key">↺ Reset</Btn>
+            </div>
+          </div>
+          {/* Print legend */}
+          <div className="print-only" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}>
+            {legend.filter(it => (it.label || '').trim()).map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#000' }}>
                 <span style={{
                   width: 16, height: 16, borderRadius: 3, flexShrink: 0,
                   background: item.color, border: '1px solid rgba(128,128,128,0.4)',
+                  WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
                 }} />
                 {item.label}
               </div>
