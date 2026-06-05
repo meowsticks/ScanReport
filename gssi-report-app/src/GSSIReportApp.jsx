@@ -409,6 +409,9 @@ const DEFAULT_REPORT = {
   egbcEnabled: false,   // Off by default — most scan reports aren't P.Eng stamped
   permitNo: '',
   signDate: new Date().toISOString().slice(0, 10),
+  // Editable closing line printed at the very bottom (brand flourish). Crews can
+  // set their own sign-off / company saying.
+  footerTagline: 'Prepared with care by the AKCC crew · Know before you cut.',
 
   // Engineer approval (F3). Set when the engineer approves by email; status
   // moves to 'approved' and the report is flagged archived in the reports list.
@@ -6366,9 +6369,8 @@ export default function GSSIReportApp() {
             font-size: 9pt;
             line-height: 1.45;
             color: #000;
-            border-top: 1px solid #999;
-            margin-top: 12px;
-            padding-top: 10px;
+            /* No own divider — the card title already draws one. Keeps spacing
+               consistent with every other card (single line under the title). */
           }
           .findings-table, .cover-summary-print table {
             border: 1px solid #555;
@@ -8088,7 +8090,7 @@ export default function GSSIReportApp() {
         {report.egbcEnabled && (
           <div style={{
             border: `1px dashed ${c.borderStrong}`, borderRadius: 6,
-            padding: 12, textAlign: 'center', marginTop: 8,
+            padding: 12, textAlign: 'center', marginTop: 8, marginBottom: 16,
             background: c.cardAlt,
           }}>
             <div style={{ fontSize: 10, color: c.textFaint, letterSpacing: 1.5, marginBottom: 3, fontWeight: 600 }}>EGBC SEAL</div>
@@ -8101,6 +8103,13 @@ export default function GSSIReportApp() {
 
         <Field label="Signature date">
           <Input type="date" value={report.signDate} onChange={e => update({ signDate: e.target.value })} />
+        </Field>
+
+        <Field label="Report footer line" className="no-print"
+          hint='Printed at the very bottom when brand flourishes are on. Make it your own — e.g. "Shut up and cut straight." Clear it to hide the line.'>
+          <Input value={report.footerTagline ?? ''}
+            onChange={e => update({ footerTagline: e.target.value })}
+            placeholder="Prepared with care by the AKCC crew · Know before you cut." />
         </Field>
 
         {/* === ENGINEER APPROVAL (F3) — the engineer reviews & approves by email;
@@ -8157,11 +8166,11 @@ export default function GSSIReportApp() {
       </Card>
 
       {/* === BRAND FLOURISH FOOTER SIGNATURE (print/preview only, opt-in) === */}
-      {report.brandFlourishes && (
-        <div className="print-only brand-signoff">
-          Prepared with care by the AKCC crew · {BRAND_TAGLINE}
-        </div>
-      )}
+      {report.brandFlourishes && (() => {
+        // undefined (legacy/sample) → default line; '' (user cleared) → hidden.
+        const line = report.footerTagline ?? `Prepared with care by the AKCC crew · ${BRAND_TAGLINE}`;
+        return line.trim() ? <div className="print-only brand-signoff">{line}</div> : null;
+      })()}
 
       </div>{/* === END REPORT BODY === */}
       {/* RIGHT: At-a-glance rail — live core verdict tallies. Screen only. */}
