@@ -870,6 +870,75 @@ const StatTile = ({ color, bg, value, label }) => (
   </div>
 );
 
+// "At a glance" rail (editor-only). Each verdict row is clickable: it expands a
+// list of the matching core chips, and tapping a chip smooth-scrolls to that
+// core's editor card and briefly flashes it — a quick jump while rewriting.
+function AtAGlanceRail({ cores, targets }) {
+  const [open, setOpen] = useState(null); // 'safe' | 'caution' | 'nogo' | null
+  const cc = cores.reduce((a, co) => { a[co.verdict] = (a[co.verdict] || 0) + 1; return a; }, {});
+  const rows = [
+    { key: 'safe',    label: 'Safe',    n: cc.safe || 0,    color: c.greenStrong },
+    { key: 'caution', label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
+    { key: 'nogo',    label: 'No-go',   n: cc.nogo || 0,    color: c.redStrong },
+  ];
+  const cell = {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7,
+    padding: '7px 10px', font: 'inherit', textAlign: 'left', boxSizing: 'border-box',
+  };
+  const jumpTo = (i) => {
+    const el = document.getElementById('core-card-' + i);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('jump-flash');
+    void el.offsetWidth; // restart the animation on repeat clicks
+    el.classList.add('jump-flash');
+    setTimeout(() => el.classList.remove('jump-flash'), 1600);
+  };
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {rows.map(r => {
+        const items = cores.map((co, i) => ({ co, i })).filter(x => x.co.verdict === r.key);
+        const expandable = r.n > 0;
+        const isOpen = open === r.key && expandable;
+        return (
+          <div key={r.key}>
+            <button type="button" disabled={!expandable}
+              onClick={() => setOpen(isOpen ? null : r.key)}
+              aria-expanded={isOpen}
+              style={{ ...cell, width: '100%',
+                cursor: expandable ? 'pointer' : 'default',
+                borderColor: isOpen ? r.color : c.border }}>
+              <span style={{ fontSize: 12, color: c.textDim, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, width: 8, color: c.textFaint }}>{expandable ? (isOpen ? '▾' : '▸') : ''}</span>
+                {r.label}
+              </span>
+              <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
+            </button>
+            {isOpen && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '7px 2px 3px' }}>
+                {items.map(({ co, i }) => (
+                  <button key={i} type="button" onClick={() => jumpTo(i)}
+                    title={[co.size, co.clearance, co.note].filter(Boolean).join(' · ') || 'Jump to core'}
+                    style={{ fontSize: 12, fontWeight: 700, color: r.color,
+                      background: c.cardAlt, border: `1px solid ${c.border}`,
+                      borderRadius: 6, padding: '4px 9px', cursor: 'pointer', font: 'inherit' }}>
+                    {co.label || (i + 1)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div style={cell}>
+        <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
+        <b style={{ fontSize: 14, color: c.text }}>{cores.length} · {targets.length}</b>
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 // Site Diagram (photo + sketch + pins)
 // ============================================================
@@ -5826,6 +5895,12 @@ export default function GSSIReportApp() {
         /* === v2: 3-column responsive workspace shell (screen only) === */
         .ws-grid { display: block; }
         .ws-nav, .ws-rail { display: none; }
+        /* Brief highlight when "At a glance" jumps to a core card. */
+        @keyframes jumpFlash {
+          0%, 18% { box-shadow: 0 0 0 3px rgba(192,40,45,0.55); }
+          100%    { box-shadow: 0 0 0 3px rgba(192,40,45,0); }
+        }
+        .jump-flash { animation: jumpFlash 1.6s ease-out 1; }
         @media (min-width: 900px) {
           .ws-grid {
             display: grid;
@@ -7477,7 +7552,7 @@ export default function GSSIReportApp() {
             nogo:    { color: c.red,   bg: c.redBg,   label: '✕ Do not drill' },
           }[co.verdict];
           return (
-            <div key={i} style={{
+            <div key={i} id={`core-card-${i}`} style={{
               borderLeft: `3px solid ${v.color}`, background: v.bg,
               padding: '9px 11px', borderRadius: '0 6px 6px 0', marginBottom: 7,
             }}>
@@ -7941,29 +8016,7 @@ export default function GSSIReportApp() {
       {/* RIGHT: At-a-glance rail — live core verdict tallies. Screen only. */}
       <aside className="ws-rail no-print" aria-label="At a glance">
         <Card title="At a glance" dense>
-          {(() => {
-            const cc = report.cores.reduce((a, co) => { a[co.verdict] = (a[co.verdict] || 0) + 1; return a; }, {});
-            const rows = [
-              { label: 'Safe',    n: cc.safe || 0,    color: c.greenStrong },
-              { label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
-              { label: 'No-go',   n: cc.nogo || 0,    color: c.redStrong },
-            ];
-            const cell = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px' };
-            return (
-              <div style={{ display: 'grid', gap: 6 }}>
-                {rows.map(r => (
-                  <div key={r.label} style={cell}>
-                    <span style={{ fontSize: 12, color: c.textDim }}>{r.label}</span>
-                    <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
-                  </div>
-                ))}
-                <div style={cell}>
-                  <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
-                  <b style={{ fontSize: 14, color: c.text }}>{report.cores.length} · {report.targets.length}</b>
-                </div>
-              </div>
-            );
-          })()}
+          <AtAGlanceRail cores={report.cores} targets={report.targets} />
         </Card>
       </aside>
       </div>{/* === END WS-GRID === */}
