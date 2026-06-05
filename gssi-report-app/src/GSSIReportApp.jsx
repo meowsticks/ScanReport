@@ -1958,10 +1958,13 @@ function SiteDiagram({ report, update }) {
 // ============================================================
 
 const CONFIDENCE_ORDER = ['high', 'med', 'low'];
+// Solid fill + white text so HIGH/MED/LOW stay legible on the dark editor and in
+// preview. (Print uses the .ak-conf-* rules, which already render readable
+// light-fill/dark-text pills.)
 const CONFIDENCE_META = {
-  high: { label: 'High confidence', color: c.green,  bg: c.greenBg },
-  med:  { label: 'Medium confidence', color: c.amber, bg: c.amberBg },
-  low:  { label: 'Low confidence',  color: c.red,   bg: c.redBg },
+  high: { label: 'High confidence', color: '#fff',  bg: '#1a7f37' },
+  med:  { label: 'Medium confidence', color: '#fff', bg: '#b07400' },
+  low:  { label: 'Low confidence',  color: '#fff',   bg: '#c0282d' },
 };
 
 const SCAN_TYPES = [
