@@ -2947,18 +2947,17 @@ function AnnotationEditor({ photo, onSave, onClose }) {
 // Floating button bottom-right that opens a menu of visible sections. Tap
 // a section name to smooth-scroll to it. Replaces hunting through a long
 // vertical report.
-function SectionsQuickNav({ sections }) {
+// Simple floating scratchpad (bottom-right). Saves to this browser only — it's
+// never part of the report or the PDF. Deliberately minimal: a base to grow
+// into something richer (per-report notes, checklists) in v3.
+function Notepad() {
   const [open, setOpen] = useState(false);
-  if (!sections || sections.length === 0) return null;
-  const jump = (id) => {
-    const el = document.querySelector('.ak-sec-' + id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.style.transition = 'box-shadow 0.4s';
-      el.style.boxShadow = `0 0 0 3px ${c.accent}`;
-      setTimeout(() => { el.style.boxShadow = ''; }, 1500);
-    }
-    setOpen(false);
+  const [text, setText] = useState(() => {
+    try { return localStorage.getItem('ak_notepad') || ''; } catch { return ''; }
+  });
+  const onChange = (v) => {
+    setText(v);
+    try { localStorage.setItem('ak_notepad', v); } catch {}
   };
   return (
     <div className="no-print" style={{
@@ -2968,46 +2967,37 @@ function SectionsQuickNav({ sections }) {
       {open && (
         <div style={{
           background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 8, padding: 6,
-          maxHeight: '60vh', overflowY: 'auto',
-          minWidth: 200, maxWidth: 260,
+          borderRadius: 8, padding: 10, width: 290,
           boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
         }}>
-          <div style={{
-            fontSize: 10, color: c.textFaint, fontWeight: 700,
-            letterSpacing: 1, textTransform: 'uppercase',
-            padding: '4px 8px 6px',
-          }}>Jump to section</div>
-          {sections.map(s => (
-            <button key={s.id}
-              onClick={() => jump(s.id)}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                background: 'transparent', color: c.text,
-                border: 'none', borderRadius: 4,
-                padding: '7px 8px', fontSize: 12, cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = c.cardAlt}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              {s.label}
-            </button>
-          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 10, color: c.textFaint, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Notepad</span>
+            {text && (
+              <button onClick={() => onChange('')} title="Clear the notepad"
+                style={{ background: 'transparent', border: 0, color: c.textFaint, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Clear</button>
+            )}
+          </div>
+          <textarea value={text} onChange={e => onChange(e.target.value)}
+            placeholder="Quick notes, reminders, to-dos… saved in this browser only."
+            style={{
+              width: '100%', height: 160, resize: 'vertical', boxSizing: 'border-box',
+              background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+              borderRadius: 6, padding: 8, fontSize: 12.5, fontFamily: 'inherit', lineHeight: 1.45,
+            }} />
+          <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5 }}>Saved on this device · never prints</div>
         </div>
       )}
-      <button
-        onClick={() => setOpen(o => !o)}
-        title="Jump to a section"
-        aria-label="Jump to a section"
+      <button onClick={() => setOpen(o => !o)}
+        title="Scratch notepad" aria-label="Notepad"
         style={{
-          background: c.accent, color: '#fff',
-          border: `1px solid ${c.accent}`, borderRadius: 22,
+          background: c.cardAlt, color: c.text,
+          border: `1px solid ${c.borderStrong}`, borderRadius: 22,
           padding: '9px 12px', fontSize: 13, fontWeight: 700,
           cursor: 'pointer', fontFamily: 'inherit',
           boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           display: 'flex', alignItems: 'center', gap: 5,
         }}>
-        {open ? '✕' : '📑'} Sections
+        {open ? '✕' : '📝'} Notepad
       </button>
     </div>
   );
@@ -3032,10 +3022,20 @@ function ShortcutsPanel() {
       ['Shift + drag', 'Snap a line/arrow to 15°'],
       ['Enter / Esc', 'Save / cancel a text label'],
     ] },
+    { title: 'Side panel · sections', items: [
+      ['Checkbox', 'Add or leave a section out'],
+      ['▲ ▼ or drag', 'Reorder (report + PDF together)'],
+      ['Section name', 'Jump to that section'],
+      ['Reset', 'Default order + every section on'],
+    ] },
+    { title: 'At a glance', items: [
+      ['Safe / Caution / No-go', 'List those cores'],
+      ['A core chip', 'Jump to that core card'],
+    ] },
     { title: 'Report editor', items: [
       ['👁 Preview', 'See the exact PDF page'],
-      ['Drag a card (in Preview)', 'Reorder sections'],
-      ['⚙ Setup → Print setup', 'Drag rows to reorder'],
+      ['Markup color key', 'Click a swatch to recolor'],
+      ['📝 Notepad', 'Private notes (this device only)'],
       ['Esc', 'Cancel the current action'],
     ] },
   ];
@@ -5917,7 +5917,7 @@ export default function GSSIReportApp() {
         @media (min-width: 900px) {
           .ws-grid {
             display: grid;
-            grid-template-columns: 172px minmax(0, 1fr) 208px;
+            grid-template-columns: 214px minmax(0, 1fr) 208px;
             gap: 18px; align-items: start;
           }
           .ws-nav, .ws-rail { display: block; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; }
@@ -5934,6 +5934,35 @@ export default function GSSIReportApp() {
           transition: background .12s, color .12s, border-color .12s;
         }
         .ws-nav .ni:hover { background: ${c.cardAlt}; color: ${c.text}; border-left-color: ${c.accent}; }
+        /* Side-panel section manager rows: include toggle + jump + reorder. */
+        .ws-nav .sep-row { display: flex; align-items: center; justify-content: space-between; padding-right: 6px; }
+        .ws-nav .nav-reset {
+          background: transparent; border: 0; cursor: pointer; font: inherit;
+          font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+          color: ${c.textFaint}; padding: 2px 4px;
+        }
+        .ws-nav .nav-reset:hover { color: ${c.accent}; }
+        .ws-nav .nav-row {
+          display: flex; align-items: center; gap: 3px;
+          padding: 1px 3px 1px 4px; border-radius: 5px;
+          border-left: 2px solid transparent; transition: background .12s;
+        }
+        .ws-nav .nav-row:hover { background: ${c.cardAlt}; }
+        .ws-nav .nav-grip { color: ${c.textFaint}; font-size: 11px; cursor: grab; user-select: none; flex-shrink: 0; padding: 0 1px; }
+        .ws-nav .nav-row input[type=checkbox] { accent-color: ${c.accent}; flex-shrink: 0; margin: 0; cursor: pointer; }
+        .ws-nav .nav-name {
+          flex: 1; min-width: 0; text-align: left; background: transparent; border: 0;
+          color: ${c.textDim}; font: inherit; font-size: 12.5px; line-height: 1.3; cursor: pointer;
+          padding: 5px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ws-nav .nav-name:hover { color: ${c.text}; }
+        .ws-nav .nav-arrows { display: flex; flex-direction: column; gap: 0; flex-shrink: 0; }
+        .ws-nav .nav-arrows button {
+          background: transparent; border: 0; color: ${c.textFaint}; cursor: pointer;
+          font-size: 8px; line-height: 1; padding: 1px 3px;
+        }
+        .ws-nav .nav-arrows button:hover:not(:disabled) { color: ${c.text}; }
+        .ws-nav .nav-arrows button:disabled { opacity: 0.25; cursor: default; }
         @media print {
           .ws-grid { display: block !important; }
           .ws-nav, .ws-rail { display: none !important; }
@@ -6913,14 +6942,50 @@ export default function GSSIReportApp() {
       <div className="ws-grid">
       {/* LEFT: jump-nav — scrolls via existing .ak-sec-<id> classes. Screen only. */}
       <nav className="ws-nav no-print" aria-label="Report sections">
-        <div className="sep">Report</div>
-        {effectiveOrder.filter(id => vis(id)).map(id => {
+        <div className="sep sep-row">
+          <span>Report · {effectiveOrder.filter(id => vis(id)).length}/{SECTION_IDS.length}</span>
+          <button type="button" className="nav-reset"
+            title="Reset to the default order and show every section"
+            onClick={() => update({ sectionOrder: [], sectionVisibility: {} })}>Reset</button>
+        </div>
+        {effectiveOrder.map((id, idx) => {
+          const s = SECTION_IDS.find(x => x.id === id);
+          if (!s) return null;
           const L = { workflowStatus: 'Workflow', summary: 'Summary', cover: 'Project', slab: 'Slab', targets: 'Targets', findings: 'Findings', coverSummary: 'Cover depths', diagram: 'Diagram', drawingNotes: 'Drawing notes', scanPhotos: 'Photos', zones: 'Zones', locations: 'Scan locations', proposedCores: 'Proposed cores', gprScans: 'GPR scans', cores: 'Core verdicts', uncertainty: 'Uncertainty', equipment: 'Equipment', methods: 'Methods', limitations: 'Limitations', standardNotes: 'Std notes', cadPage: 'CAD page', disclaimer: 'Disclaimer', signoff: 'Sign-off' };
+          const on = vis(id);
+          const isDragged = dragSectionId === id;
+          const isTarget = dropTargetId?.id === id;
           return (
-            <button key={id} type="button" className="ni"
-              onClick={() => { const el = document.querySelector('.ak-sec-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
-              {L[id] || id}
-            </button>
+            <div key={id} className="nav-row" draggable
+              onDragStart={(e) => { setDragSectionId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!dragSectionId || dragSectionId === id) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                const side = (e.clientY - r.top) < r.height / 2 ? 'above' : 'below';
+                setDropTargetId({ id, side });
+              }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetId(prev => prev?.id === id ? null : prev); }}
+              onDrop={(e) => { e.preventDefault(); if (dragSectionId && dropTargetId) reorderTo(dragSectionId, dropTargetId.id, dropTargetId.side); setDragSectionId(null); setDropTargetId(null); }}
+              onDragEnd={() => { setDragSectionId(null); setDropTargetId(null); }}
+              style={{
+                opacity: isDragged ? 0.4 : 1,
+                boxShadow: isTarget ? (dropTargetId.side === 'above' ? `inset 0 2px 0 0 ${c.accent}` : `inset 0 -2px 0 0 ${c.accent}`) : 'none',
+              }}>
+              <span className="nav-grip" title="Drag to reorder">⋮⋮</span>
+              <input type="checkbox" checked={on} onChange={e => setVis(id, e.target.checked)}
+                title={on ? 'In the report — uncheck to leave it out' : 'Left out — check to add it'} />
+              <button type="button" className="nav-name"
+                style={{ textDecoration: on ? 'none' : 'line-through', opacity: on ? 1 : 0.5 }}
+                title={`Jump to ${s.label}`}
+                onClick={() => { const el = document.querySelector('.ak-sec-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+                {L[id] || s.label}
+              </button>
+              <span className="nav-arrows">
+                <button onClick={() => moveSection(id, -1)} disabled={idx === 0} title="Move up" aria-label="Move section up">▲</button>
+                <button onClick={() => moveSection(id, 1)} disabled={idx === effectiveOrder.length - 1} title="Move down" aria-label="Move section down">▼</button>
+              </span>
+            </div>
           );
         })}
       </nav>
@@ -8079,13 +8144,9 @@ export default function GSSIReportApp() {
 
       <Assistant report={report} update={update} />
 
-      {/* Floating Sections quick-nav — opens a small menu of visible sections.
-          Tap a name to smooth-scroll to that section. */}
-      <SectionsQuickNav
-        sections={effectiveOrder
-          .map(id => SECTION_IDS.find(s => s.id === id))
-          .filter(s => s && vis(s.id))}
-      />
+      {/* Sections quick-nav now lives in the always-on side panel (.ws-nav),
+          so the floating bottom-right button was removed. */}
+      <Notepad />
       <ShortcutsPanel />
 
       {emailDialogOpen && (
