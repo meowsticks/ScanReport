@@ -29,6 +29,15 @@
         -webkit-tap-highlight-color: transparent;
       }
       * { -webkit-text-size-adjust: 100%; }
+      /* The printed page canvas takes its background from <html>. In dark theme
+         that base is #000, which prints as a black frame around the page (the
+         component's @media print override doesn't reach the print canvas in
+         Electron printToPDF). Force the document base white on print so the
+         paper is always clean white, regardless of the on-screen theme. */
+      @media print {
+        :root, :root[data-theme="dark"], :root[data-theme="light"] { --ak-init-bg: #fff !important; }
+        html, body, #root { background: #fff !important; }
+      }
     </style>
   </head>
   <body>
