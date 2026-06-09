@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('akDesktop', {
   // returns { path, name } or null. Reveals the file in its folder.
   savePdf: (opts) => ipcRenderer.invoke('pdf:save', opts),
 
+  // One dialog -> save BOTH the editable .akscan and the PDF (same base name).
+  // Returns { akPath, pdfPath, akName, pdfName } or null.
+  saveBoth: (suggestedName, content) => ipcRenderer.invoke('save:both', { suggestedName, content }),
+
   // Reveal a file in the OS file manager.
   showInFolder: (path) => ipcRenderer.invoke('shell:show', path),
 

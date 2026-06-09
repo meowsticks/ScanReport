@@ -5830,6 +5830,29 @@ export default function GSSIReportApp() {
   const printPDF = () => { rememberRecents(); window.print(); };
   const exportPDF = () => { if (desktop) savePdfDesktop(); else printPDF(); };
 
+  // One button -> save BOTH the editable .akscan AND the PDF, same folder + base
+  // name. Stops the dangerous mix-up where someone keeps only the PDF (which
+  // can't be re-opened) and loses their report.
+  const saveReportBoth = async () => {
+    rememberRecents();
+    if (desktop) {
+      try {
+        const res = await window.akDesktop.saveBoth(`${baseFileName()}.akscan`, reportJSON());
+        if (!res) return;                          // cancelled
+        desktopPathRef.current = res.akPath;        // link the editable file for silent re-saves
+        setSavedFileName(res.akName);
+        pushRecentFile({ path: res.akPath, name: res.akName });
+        setSaveNote(`Saved 2 files: ${res.pdfName} (the PDF to send) + ${res.akName} (the file to re-open & edit).`);
+      } catch {
+        setSaveNote('Could not save the report.');
+      }
+    } else {
+      // Web: download the editable backup, then open the print dialog for the PDF.
+      exportJSON();
+      setTimeout(() => printPDF(), 500);
+    }
+  };
+
   // ---------- Email / compose ----------
   useEffect(() => { lsSet(EMAIL_PROVIDER_KEY, emailProvider); }, [emailProvider]);
   // mailto opens the OS mail client; webmail links open in the real browser.
@@ -8240,16 +8263,26 @@ export default function GSSIReportApp() {
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
+        display: 'flex', flexDirection: 'column', gap: 6,
         background: c.bg, padding: '10px 0 0',
       }}>
-        <Btn variant="primary" onClick={exportPDF} title={desktop ? 'Save a PDF next to your report file' : 'Open the print window — choose “Save as PDF” to make the file you send'}>📄 PDF</Btn>
-        <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email (attach the saved PDF yourself before sending)">📧 Email</Btn>
-        <Btn onClick={() => { setSaveNote(''); setSaveOpen(true); }} title="Save a backup file you can re-open or update later">💾 Save</Btn>
+        <Btn variant="primary" onClick={saveReportBoth}
+          title={desktop
+            ? 'Saves BOTH in one spot: the PDF you send, and the .akscan file you re-open to edit later — same folder, same name'
+            : 'Downloads the editable backup file, then opens the PDF print dialog'}
+          style={{ width: '100%' }}>
+          💾 Save report — PDF + editable file
+        </Btn>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          <Btn onClick={exportPDF} title="Just the PDF (the file you send out)">📄 PDF only</Btn>
+          <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email">📧 Email</Btn>
+          <Btn onClick={() => { setSaveNote(''); setSaveOpen(true); }} title="File options: link a file, auto-save, backups">💾 File…</Btn>
+        </div>
       </div>
       <div className="no-print" style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', marginTop: 7, lineHeight: 1.5 }}>
-        Your work auto-saves in this browser. <strong>💾 Save</strong> makes a backup file you can
-        update or keep — downloads never overwrite an earlier one. New here? Tap <strong>❓</strong> up top.
+        <strong>Save report</strong> writes two files together: the <strong>PDF</strong> you email out, and
+        the <strong>.akscan</strong> you re-open to keep editing — <em>the PDF can't be re-edited.</em> Your
+        work also auto-saves in the app.
       </div>
 
       <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>

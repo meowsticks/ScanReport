@@ -205,6 +205,30 @@ ipcMain.handle('file:read', async (_e, filePath) => {
   return { path: filePath, name: path.basename(filePath), content };
 });
 
+// ONE dialog -> write BOTH the editable .akscan and the PDF (same folder + base
+// name), so a user can never confuse "the file to re-open" with "the PDF to
+// send" (or save only the PDF and lose their editable report).
+ipcMain.handle('save:both', async (_e, { suggestedName, content }) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save report — writes the editable file AND the PDF',
+    defaultPath: suggestedName || 'scan-report.akscan',
+    filters: FILE_FILTERS,
+  });
+  if (result.canceled || !result.filePath) return null;
+  let base = result.filePath;
+  const ext = path.extname(base).toLowerCase();
+  if (['.akscan', '.json', '.pdf'].includes(ext)) base = base.slice(0, -ext.length);
+  const akPath = base + '.akscan';
+  const pdfPath = base + '.pdf';
+  await fs.writeFile(akPath, content, 'utf8');               // editable file
+  const data = await mainWindow.webContents.printToPDF({     // deliverable PDF
+    printBackground: true, preferCSSPageSize: true, pageSize: 'Letter',
+  });
+  await fs.writeFile(pdfPath, data);
+  shell.showItemInFolder(pdfPath);                           // reveal both
+  return { akPath, pdfPath, akName: path.basename(akPath), pdfName: path.basename(pdfPath) };
+});
+
 ipcMain.handle('pdf:save', async (_e, { suggestedName, currentFilePath }) => {
   // Render the current report to PDF using the print stylesheet, then save it
   // next to the report file by default so PDFs land in a predictable place.
