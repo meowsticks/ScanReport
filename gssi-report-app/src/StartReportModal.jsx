@@ -27,7 +27,7 @@ function previewValue(meta, val) {
 }
 
 export default function StartReportModal({
-  open, templates, onUseTemplate, onUseBlank, onEditTemplate, onClose, c,
+  open, templates, onUseTemplate, onUseBlank, onEditTemplate, onUseExample, onClose, c,
 }) {
   const [pickedId, setPickedId] = useState(null);
   if (!open) return null;
@@ -71,12 +71,37 @@ export default function StartReportModal({
           {!picked && (
             <>
               <div style={{ fontSize: 12, color: c.textDim, marginBottom: 12, lineHeight: 1.5 }}>
-                Tap a saved template to see exactly what gets filled in. You can edit
-                the template afterwards, or skip and start blank.
-                <br/>
-                Per-job data (photos, targets, dates, cores) is never auto-filled —
-                you'll add those for this job.
+                Pick a <strong>template</strong> to prefill the setup (tier, sections,
+                notes) — per-job data stays blank. Or open the <strong>filled example</strong>
+                to copy &amp; tweak a complete report.
+                <span style={{ display: 'block', marginTop: 6, color: c.textFaint }}>
+                  Either one opens a <strong>new</strong> report — whatever you're working on
+                  stays saved, so there's no wrong tap here.
+                </span>
               </div>
+
+              {onUseExample && (
+                <button onClick={onUseExample}
+                  style={{
+                    width: '100%', textAlign: 'left', cursor: 'pointer',
+                    background: c.accentDim || c.cardAlt,
+                    border: `1.5px solid ${c.accent}`, borderRadius: 8,
+                    padding: '12px 14px', color: c.text, fontFamily: 'inherit',
+                    marginBottom: 14,
+                  }}>
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>🧪 Open a filled example report</div>
+                  <div style={{ fontSize: 11.5, color: c.textDim, marginTop: 3, lineHeight: 1.45 }}>
+                    Every section populated (targets, cores, annotated photos, zones,
+                    CAD page). Edit it down for your job — or just export it to see the
+                    full report.
+                  </div>
+                </button>
+              )}
+
+              <div style={{
+                fontSize: 10.5, fontWeight: 800, color: c.textFaint,
+                letterSpacing: 0.5, textTransform: 'uppercase', margin: '2px 2px 7px',
+              }}>Templates — prefill setup only</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {templates.map(t => (
                   <button key={t.id}

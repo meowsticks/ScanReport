@@ -5,6 +5,7 @@ import { useCloudSync } from './lib/useCloudSync.js';
 import { compressImage } from './lib/image.js';
 import { ensureLibrary, loadReport, saveReport, removeReport, saveIndex, setCurrentId as persistCurrentId, newId } from './lib/reportsLibrary.js';
 import { loadTemplates, saveTemplates, newTemplateId, extractTemplateFields } from './lib/templates.js';
+import { buildExampleReport } from './lib/exampleReport.js';
 import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 import TemplateEditor from './TemplateEditor.jsx';
@@ -5198,6 +5199,22 @@ export default function GSSIReportApp() {
     setReportsOpen(false);
   };
 
+  // Create a new report from the fully-built example (sample targets, cores,
+  // annotated photos, zones, CAD page — every section populated).
+  const createReportFromExample = () => {
+    persistNow.current();
+    const r = { ...freshReport(), ...buildExampleReport() };
+    const rid = newId();
+    saveReport(rid, r);
+    setReportsIndex((idx) => {
+      const next = [{ id: rid, name: deriveReportName(r), updatedAt: Date.now() }, ...idx];
+      saveIndex(next); return next;
+    });
+    setCurrentIdState(rid); persistCurrentId(rid);
+    setReport(r); forgetFile();
+    setReportsOpen(false); setStartReportOpen(false);
+  };
+
   // ---------- Customer / contact directory ----------
   const [contacts, setContacts] = useState(() => lsGet(CONTACTS_KEY, []));
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -8364,16 +8381,9 @@ export default function GSSIReportApp() {
               Tap a report to open it; the one you're in is marked <strong>Open</strong>.
             </div>
             <Btn id="btn-new-report" variant="primary"
-              onClick={() => {
-                if (templates.length > 0) {
-                  setStartReportOpen(true);
-                  setReportsOpen(false);
-                } else {
-                  createReport();
-                }
-              }}
+              onClick={() => { setStartReportOpen(true); setReportsOpen(false); }}
               style={{ width: '100%', marginBottom: 12 }}>
-              ＋ New report{templates.length > 0 ? ' (pick template)' : ''}
+              ＋ New report — templates &amp; example
             </Btn>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {[...reportsIndex].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(e => {
@@ -8476,6 +8486,7 @@ export default function GSSIReportApp() {
         c={c}
         onUseTemplate={(id) => { setStartReportOpen(false); createReportFromTemplate(id); }}
         onUseBlank={() => { setStartReportOpen(false); createReport(); }}
+        onUseExample={createReportFromExample}
         onEditTemplate={(id) => { setStartReportOpen(false); openEditTemplate(id); }}
         onClose={() => setStartReportOpen(false)}
       />

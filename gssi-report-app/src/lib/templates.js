@@ -5,15 +5,32 @@
 // a template pre-fills those fields, while per-job data (photos, targets,
 // dates) stays empty so the user fills it in for the new job.
 
+import { STARTER_TEMPLATES } from './starterTemplates.js';
+
 const KEY = 'ak_templates';
+const SEED_KEY = 'ak_templates_seeded';
 
 export function newTemplateId() {
   return 't-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
 }
 
 export function loadTemplates() {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
-  catch { return []; }
+  try {
+    const list = JSON.parse(localStorage.getItem(KEY) || '[]');
+    // First run on a device: drop in the bundled starter templates so the
+    // operator isn't staring at an empty list. The seed flag means deleting a
+    // starter sticks (we don't re-add it on the next launch).
+    if (!localStorage.getItem(SEED_KEY)) {
+      const have = new Set(list.map((t) => t.id));
+      const merged = [...list, ...STARTER_TEMPLATES.filter((t) => !have.has(t.id))];
+      localStorage.setItem(KEY, JSON.stringify(merged));
+      localStorage.setItem(SEED_KEY, '1');
+      return merged;
+    }
+    return list;
+  } catch {
+    return STARTER_TEMPLATES.slice();
+  }
 }
 
 export function saveTemplates(list) {
