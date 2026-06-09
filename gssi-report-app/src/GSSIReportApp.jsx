@@ -2903,23 +2903,22 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
               }}>{opt.label}</button>
           ))}
         </div>
-        {tool === 'arrow' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: c.textDim }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={outlineOn}
-                onChange={e => setOutlineOn(e.target.checked)}
-                style={{ accentColor: c.accent }} />
-              <span>Arrow outline <span style={{ color: c.textFaint }}>(stops it getting lost on busy photos)</span></span>
-            </label>
-            {outlineOn && (
-              <label title="Outline color" style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: 4, overflow: 'hidden', border: `1px solid ${c.border}`, cursor: 'pointer', flexShrink: 0 }}>
-                <input type="color" value={outlineColor}
-                  onChange={e => setOutlineColor(e.target.value)}
-                  style={{ width: '150%', height: '150%', margin: '-25%', cursor: 'pointer', border: 'none', padding: 0, background: 'none' }} />
-              </label>
-            )}
-          </div>
-        )}
+        {/* Always rendered with a stable height so selecting the arrow tool
+            doesn't change the toolbar height (which would resize/shift the photo
+            and the marks already on it). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: c.textDim, minHeight: 26 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', opacity: tool === 'arrow' ? 1 : 0.5 }}>
+            <input type="checkbox" checked={outlineOn}
+              onChange={e => setOutlineOn(e.target.checked)}
+              style={{ accentColor: c.accent }} />
+            <span>Arrow outline <span style={{ color: c.textFaint }}>(keeps arrows visible on busy photos)</span></span>
+          </label>
+          <label title="Outline color" style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: 4, overflow: 'hidden', border: `1px solid ${c.border}`, cursor: 'pointer', flexShrink: 0, visibility: outlineOn ? 'visible' : 'hidden' }}>
+            <input type="color" value={outlineColor}
+              onChange={e => setOutlineColor(e.target.value)}
+              style={{ width: '150%', height: '150%', margin: '-25%', cursor: 'pointer', border: 'none', padding: 0, background: 'none' }} />
+          </label>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button onClick={() => setPanMode(m => !m)}
             title="Pan / move the photo (or hold middle-mouse and drag). Scroll to zoom."
