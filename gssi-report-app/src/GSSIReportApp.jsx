@@ -2090,6 +2090,28 @@ function drawAnnotation(ctx, a, W, H) {
   if (a.type === 'arrow' && a.start && a.end) {
     const x1 = a.start.x * W, y1 = a.start.y * H;
     const x2 = a.end.x * W,   y2 = a.end.y * H;
+    // Outline / halo so a coloured arrow stays readable on busy slab photos and
+    // doesn't get lost among the chalk/crayon marks. On unless a.outline ===
+    // false; a.outlineColor overrides the dark default.
+    if (a.outline !== false) {
+      const oc = a.outlineColor || 'rgba(0,0,0,0.9)';
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      const headLen = Math.max(10, Math.hypot(x2 - x1, y2 - y1) * 0.18, drawnLineWidth * 2.4);
+      ctx.save();
+      ctx.strokeStyle = oc; ctx.fillStyle = oc;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.lineWidth = drawnLineWidth + Math.max(2.5, drawnLineWidth * 0.85);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - headLen * Math.cos(ang - Math.PI / 7), y2 - headLen * Math.sin(ang - Math.PI / 7));
+      ctx.lineTo(x2 - headLen * Math.cos(ang + Math.PI / 7), y2 - headLen * Math.sin(ang + Math.PI / 7));
+      ctx.closePath();
+      ctx.lineWidth = Math.max(2.5, drawnLineWidth * 1.6);
+      ctx.stroke(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = drawnLineWidth;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -2254,6 +2276,10 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
   const [tool, setTool] = useState('arrow');
   const [color, setColor] = useState('red');
   const [strokeScale, setStrokeScale] = useState(5); // 1..16, default = legacy
+  // Arrow outline/halo so arrows don't get lost on busy slab photos. On by
+  // default; colour adjustable.
+  const [outlineOn, setOutlineOn] = useState(true);
+  const [outlineColor, setOutlineColor] = useState('#111111');
   const [anchor, setAnchor] = useState(null);   // first click (fractional)
   const [hover, setHover] = useState(null);     // mouse-move (fractional)
   const [drawingPath, setDrawingPath] = useState(null);  // active freehand stroke
@@ -2479,7 +2505,7 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
       const id = `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       let ann = null;
       if (tool === 'arrow') {
-        ann = { id, type: 'arrow', color, start: anchor, end: pt, strokeScale };
+        ann = { id, type: 'arrow', color, start: anchor, end: pt, strokeScale, outline: outlineOn, outlineColor: outlineOn ? outlineColor : undefined };
       } else if (tool === 'line') {
         ann = { id, type: 'line', color, start: anchor, end: pt, strokeScale };
       } else if (tool === 'circle') {
@@ -2881,6 +2907,23 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
               }}>{opt.label}</button>
           ))}
         </div>
+        {tool === 'arrow' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: c.textDim }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={outlineOn}
+                onChange={e => setOutlineOn(e.target.checked)}
+                style={{ accentColor: c.accent }} />
+              <span>Arrow outline <span style={{ color: c.textFaint }}>(stops it getting lost on busy photos)</span></span>
+            </label>
+            {outlineOn && (
+              <label title="Outline color" style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: 4, overflow: 'hidden', border: `1px solid ${c.border}`, cursor: 'pointer', flexShrink: 0 }}>
+                <input type="color" value={outlineColor}
+                  onChange={e => setOutlineColor(e.target.value)}
+                  style={{ width: '150%', height: '150%', margin: '-25%', cursor: 'pointer', border: 'none', padding: 0, background: 'none' }} />
+              </label>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button onClick={() => setPanMode(m => !m)}
             title="Pan / move the photo (or hold middle-mouse and drag). Scroll to zoom."
