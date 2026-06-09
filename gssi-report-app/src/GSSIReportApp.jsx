@@ -2221,18 +2221,17 @@ function AnnotatedImage({ src, annotations = [], style, alt }) {
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // Draw annotations onto a canvas whose INTERNAL resolution = the image's
-  // natural pixels, then let CSS stretch that canvas to 100%/100% of the image
-  // box. The <img> (width:100%, height:auto) and the canvas are both sized by
-  // CSS off the same container, so they stay locked together at ANY display
-  // size — editor, preview, and the printed/exported PDF.
+  // Draw the photo AND its annotations into ONE canvas at the image's natural
+  // resolution. Because the marks are baked into the same bitmap as the photo,
+  // any later CSS sizing (width:100%, max-height, object-fit) scales them
+  // TOGETHER — the marks can NEVER drift off the photo.
   //
-  // The old version sized the canvas from getBoundingClientRect (the on-screen
-  // pixel size) and never re-ran at print scale: when the report printed, the
-  // photo shrank but the canvas kept its bigger screen size, so arrows/lines
-  // overflowed the photo and ran down the page onto later pages. Tying the
-  // overlay to the image via CSS removes that mismatch entirely. drawAnnotation
-  // is resolution-independent (everything scales off W,H), so sizes are unchanged.
+  // The previous overlay-canvas approach broke on the print path: a tall photo
+  // hit `max-height: 21cm` + `object-fit: contain`, which letterboxed the photo
+  // inside a wider element box, while the absolutely-positioned overlay filled
+  // that whole box — so arrows/circles landed way off the actual photo (only in
+  // the PDF/preview, only on portrait photos). Baking removes the overlay
+  // entirely, so there's nothing left to misalign.
   const redraw = () => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
@@ -2243,23 +2242,20 @@ function AnnotatedImage({ src, annotations = [], style, alt }) {
     if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, w, h);
+    if (img.complete && img.naturalWidth) {
+      try { ctx.drawImage(img, 0, 0, w, h); } catch (e) { /* tainted remote img still displays */ }
+    }
     annotations.forEach(a => drawAnnotation(ctx, a, w, h));
   };
 
   useEffect(redraw, [annotations, src]);
 
   return (
-    <div style={{
-      position: 'relative', display: 'block', lineHeight: 0,
-      overflow: 'hidden', ...style,
-    }}>
-      <img ref={imgRef} src={src} alt={alt || 'Scan'}
-        onLoad={redraw}
+    <div style={{ display: 'block', lineHeight: 0, ...style }}>
+      {/* Hidden source image — feeds drawImage; never displayed itself. */}
+      <img ref={imgRef} src={src} alt="" onLoad={redraw} style={{ display: 'none' }} />
+      <canvas ref={canvasRef} className="ak-annot-photo" aria-label={alt || 'Scan'}
         style={{ display: 'block', width: '100%', height: 'auto' }} />
-      <canvas ref={canvasRef} style={{
-        position: 'absolute', top: 0, left: 0,
-        width: '100%', height: '100%', pointerEvents: 'none',
-      }} />
     </div>
   );
 }
@@ -6420,7 +6416,8 @@ export default function GSSIReportApp() {
              page or land header-less on its own — keeps it WITH its header. */
           .ak-sec-diagram canvas, .ak-sec-diagram img,
           .scan-photo-row img, .gpr-scan-figure img,
-          .scan-location-card .loc-photo img {
+          .scan-location-card .loc-photo img,
+          .ak-annot-photo {
             max-height: 21cm !important;
             height: auto !important;
             object-fit: contain !important;
