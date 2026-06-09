@@ -2370,6 +2370,16 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
     if (!w || !h) return;
     canvas.width = w;
     canvas.height = h;
+    // Lock the canvas's CSS box to the image's ACTUAL rendered size, not the
+    // wrapper's. The wrapper is an inline-block with max-height:100% — the
+    // classic shrink-wrap trap where its box can be taller/wider than the
+    // displayed <img>. If the canvas (inset:0 / 100%) covered that larger box,
+    // getFractionalCoords would divide clicks by the wrong rect and every mark
+    // would land offset from the photo — making the whole overlay look shifted,
+    // and baking that offset into the saved GPR render. Matching the img box
+    // exactly keeps the overlay locked to the photo at any zoom/layout.
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -2434,11 +2444,25 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
 
   useEffect(redraw, [annotations, anchor, hover, tool, color, strokeScale, drawingPath]);
 
+  // Re-sync the overlay on ANY layout change, not just window resizes — the
+  // toolbar growing/shrinking, the side panels, or the container reflowing all
+  // change the rendered <img> size without firing a window 'resize'. A stale
+  // canvas box is exactly what made the overlay drift off the photo, so we
+  // observe the image directly and redraw whenever its box changes.
   useEffect(() => {
     const handler = () => redraw();
     window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, [annotations, anchor, hover]);
+    let ro;
+    const img = imgRef.current;
+    if (img && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(handler);
+      ro.observe(img);
+    }
+    return () => {
+      window.removeEventListener('resize', handler);
+      if (ro) ro.disconnect();
+    };
+  }, [annotations, anchor, hover, tool, color, strokeScale, drawingPath]);
 
   const handleStart = (e) => {
     // Pan takes priority: 🖐 Pan tool (left-drag) or middle-mouse drag.
@@ -2672,7 +2696,7 @@ function AnnotationEditor({ photo, onSave, onClose, colorLegend = APWA_LEGEND })
           <canvas
             ref={canvasRef}
             style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
               touchAction: 'none',
               cursor: panMode ? (panDragRef.current ? 'grabbing' : 'grab')
                 : (tool === 'text' ? 'text' : 'crosshair'),
