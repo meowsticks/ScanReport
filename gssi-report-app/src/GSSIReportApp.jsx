@@ -2195,46 +2195,47 @@ function locPhotoSrc(loc) {
 }
 
 function AnnotatedImage({ src, annotations = [], style, alt }) {
-  const containerRef = useRef(null);
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
 
+  // Draw annotations onto a canvas whose INTERNAL resolution = the image's
+  // natural pixels, then let CSS stretch that canvas to 100%/100% of the image
+  // box. The <img> (width:100%, height:auto) and the canvas are both sized by
+  // CSS off the same container, so they stay locked together at ANY display
+  // size — editor, preview, and the printed/exported PDF.
+  //
+  // The old version sized the canvas from getBoundingClientRect (the on-screen
+  // pixel size) and never re-ran at print scale: when the report printed, the
+  // photo shrank but the canvas kept its bigger screen size, so arrows/lines
+  // overflowed the photo and ran down the page onto later pages. Tying the
+  // overlay to the image via CSS removes that mismatch entirely. drawAnnotation
+  // is resolution-independent (everything scales off W,H), so sizes are unchanged.
   const redraw = () => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
-    const container = containerRef.current;
-    if (!canvas || !img || !container) return;
-    const imgRect = img.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    if (imgRect.width === 0 || imgRect.height === 0) return;
-    canvas.style.left = (imgRect.left - containerRect.left) + 'px';
-    canvas.style.top = (imgRect.top - containerRect.top) + 'px';
-    canvas.style.width = imgRect.width + 'px';
-    canvas.style.height = imgRect.height + 'px';
-    canvas.width = imgRect.width;
-    canvas.height = imgRect.height;
+    if (!canvas || !img) return;
+    const w = img.naturalWidth || 1000;
+    const h = img.naturalHeight || 750;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    annotations.forEach(a => drawAnnotation(ctx, a, canvas.width, canvas.height));
+    ctx.clearRect(0, 0, w, h);
+    annotations.forEach(a => drawAnnotation(ctx, a, w, h));
   };
 
   useEffect(redraw, [annotations, src]);
 
-  useEffect(() => {
-    const handler = () => redraw();
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, [annotations]);
-
   return (
-    <div ref={containerRef} style={{
-      position: 'relative', display: 'block', lineHeight: 0, ...style,
+    <div style={{
+      position: 'relative', display: 'block', lineHeight: 0,
+      overflow: 'hidden', ...style,
     }}>
       <img ref={imgRef} src={src} alt={alt || 'Scan'}
         onLoad={redraw}
         style={{ display: 'block', width: '100%', height: 'auto' }} />
       <canvas ref={canvasRef} style={{
-        position: 'absolute', pointerEvents: 'none',
+        position: 'absolute', top: 0, left: 0,
+        width: '100%', height: '100%', pointerEvents: 'none',
       }} />
     </div>
   );
