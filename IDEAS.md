@@ -81,3 +81,40 @@ signal**.
 **Note:** live screen-share with Claude isn't a thing; in the field, pasting a
 screenshot/photo into the Claude app (or claude.ai) on the tablet is the way to
 get help on a scan or report.
+
+## 6. Annotation overlay — make alignment structurally bulletproof (v3)  ⟵ raised 2026-06-09
+
+**Background:** in the annotate editor the photo and the drawing surface are two
+separate elements (an `<img>` and a transparent `<canvas>` stacked on top). The
+canvas has to be sized to *exactly* the photo's rendered box or every mark maps
+slightly off. The wrapper around them is an `inline-block` with `max-height:100%`
+— a **well-known CSS trap** where the wrapper can shrink-wrap a touch
+taller/wider than the actual `<img>`. That mismatch is what made the whole
+overlay look shifted, and the offset baked into the saved GPR render.
+
+**What we did (v1.0.22, shipped):** measure the image's real rendered size each
+draw and pin the canvas CSS box to it, anchor it at the photo's top-left, and
+re-sync via a `ResizeObserver` on the image so no layout reflow can leave a stale
+box. This *neutralizes* the trap by constantly re-measuring.
+
+**v3 — remove the trap entirely (don't just neutralize it):** the measure-and-pin
+approach is robust but still relies on JS running after layout. Make it
+impossible-by-construction instead:
+- **Single source of geometry.** Bake the editor on the same principle as the
+  saved render (`AnnotatedImage`): draw the photo + marks into ONE canvas at
+  natural resolution, and do live editing on a single surface whose pixel buffer
+  *is* the image — no separate `<img>` to drift from. The editor canvas becomes
+  the only element; there is no wrapper box to mismatch.
+- **Or** drop the wrapper trap with modern CSS: give the photo an explicit
+  `aspect-ratio` box and have the canvas share the exact same grid cell
+  (`display:grid; grid-area:1/1` on both img + canvas) so they're guaranteed the
+  same box without `inline-block` shrink-wrap or `max-height` percentage games.
+- Add a tiny **alignment self-test** (dev-only): drop a mark at a known fraction,
+  read back its on-screen pixel, assert it lands within 1px of `frac * imgBox`.
+  Wire it into the regression harness (`pdf-mockups/test-annotation-overflow.cjs`)
+  so any future regression fails CI instead of reaching the boss.
+
+**Why v3 not now:** the shipped fix already locks alignment; this is the
+"can't-regress-by-design" hardening, and the grid/aspect-ratio rewrite touches
+the editor's zoom/pan transform math, so it wants its own focused session + test
+pass rather than riding along in a patch.
