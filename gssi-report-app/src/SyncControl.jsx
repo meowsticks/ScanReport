@@ -23,7 +23,7 @@ export default function SyncControl({ auth, sync, c }) {
   const status = signedIn ? sync.status : 'off';
   const dotColor =
     status === 'synced' ? c.green
-    : status === 'error' ? '#e0564b'
+    : status === 'error' ? c.redStrong
     : c.textDim;
 
   const btnStyle = {
@@ -69,7 +69,7 @@ export default function SyncControl({ auth, sync, c }) {
     flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
     fontWeight: 700, fontSize: 13,
     background: primary ? c.accent : c.cardAlt,
-    color: primary ? '#fff' : c.text,
+    color: primary ? c.onAccent : c.text,
     border: `1px solid ${primary ? c.accent : c.borderStrong}`,
     opacity: busy ? 0.6 : 1,
   });
@@ -100,7 +100,7 @@ export default function SyncControl({ auth, sync, c }) {
               style={{
                 width: '100%', padding: '11px 12px', borderRadius: 6, cursor: 'pointer',
                 fontWeight: 700, fontSize: 13, marginBottom: 8,
-                background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+                background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
               }}>
               Keep this device’s report
             </button>
@@ -181,7 +181,7 @@ export default function SyncControl({ auth, sync, c }) {
                   onKeyDown={(e) => { if (e.key === 'Enter') submit('in'); }}
                 />
                 {msg && (
-                  <div style={{ marginTop: 10, fontSize: 12.5, color: '#e0564b', lineHeight: 1.4 }}>
+                  <div style={{ marginTop: 10, fontSize: 12.5, color: c.redStrong, lineHeight: 1.4 }}>
                     {msg}
                   </div>
                 )}

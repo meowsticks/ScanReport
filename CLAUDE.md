@@ -19,6 +19,11 @@
 - `boss-intake.html` (in app `public/`) — the "grill me" setup form;
   QR at `pdf-mockups/boss-intake-qr.png` → `scan-report.vercel.app/boss-intake.html`.
 - `V2-MANIFEST.md` — cleanup plan (keep/delete/move). `IDEAS.md` — future backlog.
+- `gssi-report-app/src/theme/` — the token-based theme engine (ak-steel /
+  ak-paper / ak-ember). **Never hardcode a color in app chrome — use a `c.*`
+  token; new color → new token in EVERY theme file.** Report-data colors,
+  print CSS, and scrims are deliberate constants. Full rules + mapping:
+  `THEME-ENGINE.md`.
 
 ## The locked v2 "STEEL" design (canonical)
 - Caveat two-tone wordmark: "Aggarwal Kamikazes" ink, **"Cutting & Coring Ltd."

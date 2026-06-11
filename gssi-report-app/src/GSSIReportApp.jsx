@@ -9,6 +9,7 @@ import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 import TemplateEditor from './TemplateEditor.jsx';
 import StartReportModal from './StartReportModal.jsx';
+import ThemeEngine from './theme/engine.js';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -468,89 +469,39 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — Aggarwal Kamikaze's palette (light + dark)
-// Token values are CSS variables so theme switches without a
-// React re-render. See <ThemeStyles /> for the palette definitions
-// and the data-theme="light" overrides for outdoor readability.
+// Design tokens — resolved by the AK theme engine (src/theme/).
+// Palettes live in src/theme/themes/*.js as data; the engine flattens
+// the active theme onto <html> as --color-* / --space-* / --type-* /
+// --radius-* variables, so a theme switch never re-renders React.
+// `c` keeps the original JS-side names — only the CSS vars beneath
+// them changed (mapping table: THEME-ENGINE.md at the repo root).
 // ============================================================
 
 const c = {
-  bg:           'var(--ak-bg)',
-  bgRaised:     'var(--ak-bg-raised)',
-  card:         'var(--ak-card)',
-  cardAlt:      'var(--ak-card-alt)',
-  border:       'var(--ak-border)',
-  borderStrong: 'var(--ak-border-strong)',
-  text:         'var(--ak-text)',
-  textDim:      'var(--ak-text-dim)',
-  textFaint:    'var(--ak-text-faint)',
-  accent:       'var(--ak-accent)',
-  accentDim:    'var(--ak-accent-dim)',
-  onAccentDim:  'var(--ak-on-accent-dim)',  // text/icon on accent-dim bg
-  green:        'var(--ak-green)',
-  greenBg:      'var(--ak-green-bg)',
-  greenStrong:  'var(--ak-green-strong)',
-  amber:        'var(--ak-amber)',
-  amberBg:      'var(--ak-amber-bg)',
-  amberStrong:  'var(--ak-amber-strong)',
-  red:          'var(--ak-red)',
-  redBg:        'var(--ak-red-bg)',
-  redStrong:    'var(--ak-red-strong)',
+  bg:           'var(--color-bg)',
+  bgRaised:     'var(--color-bg-raised)',
+  card:         'var(--color-surface)',
+  cardAlt:      'var(--color-surface-alt)',
+  border:       'var(--color-border)',
+  borderStrong: 'var(--color-border-strong)',
+  text:         'var(--color-text)',
+  textDim:      'var(--color-text-muted)',
+  textFaint:    'var(--color-text-faint)',
+  accent:       'var(--color-accent)',
+  accentDim:    'var(--color-accent-dim)',
+  onAccent:     'var(--color-on-accent)',      // text/icon on solid accent bg
+  onAccentDim:  'var(--color-on-accent-dim)',  // text/icon on accent-dim bg
+  signal:       'var(--color-signal)',         // AK signal red — drag/drop + live markers
+  green:        'var(--color-safe)',
+  greenBg:      'var(--color-safe-bg)',
+  greenStrong:  'var(--color-safe-strong)',
+  amber:        'var(--color-warning)',
+  amberBg:      'var(--color-warning-bg)',
+  amberStrong:  'var(--color-warning-strong)',
+  red:          'var(--color-danger)',
+  redBg:        'var(--color-danger-bg)',
+  redStrong:    'var(--color-danger-strong)',
 };
-
-function ThemeStyles() {
-  return (
-    <style>{`
-      :root, :root[data-theme="dark"] {
-        --ak-bg:            #14171c;
-        --ak-bg-raised:     #1a1e24;
-        --ak-card:          #1e232a;
-        --ak-card-alt:      #242a32;
-        --ak-border:        #2c333c;
-        --ak-border-strong: #3a4250;
-        --ak-text:          #e8e4dc;
-        --ak-text-dim:      #a8a59e;
-        --ak-text-faint:    #6e6c66;
-        --ak-accent:        #d44545;
-        --ak-accent-dim:    #5a1c1f;
-        --ak-on-accent-dim: #f4ece0;
-        --ak-green:         #4fb86a;
-        --ak-green-bg:      #16291e;
-        --ak-green-strong:  #6cd082;
-        --ak-amber:         #d9a35a;
-        --ak-amber-bg:      #2a2114;
-        --ak-amber-strong:  #ecbf6e;
-        --ak-red:           #d44545;
-        --ak-red-bg:        #2c1818;
-        --ak-red-strong:    #e96868;
-      }
-      :root[data-theme="light"] {
-        --ak-bg:            #f6f3ec;
-        --ak-bg-raised:     #ede9df;
-        --ak-card:          #fbf8f1;
-        --ak-card-alt:      #e8e4d8;
-        --ak-border:        #cfcabc;
-        --ak-border-strong: #9c9685;
-        --ak-text:          #1f1d18;
-        --ak-text-dim:      #46423a;
-        --ak-text-faint:    #6e6a5e;
-        --ak-accent:        #a32626;
-        --ak-accent-dim:    #f0d4d2;
-        --ak-on-accent-dim: #5e1416;
-        --ak-green:         #2b6e3a;
-        --ak-green-bg:      #d8ecdc;
-        --ak-green-strong:  #1d5028;
-        --ak-amber:         #7a5510;
-        --ak-amber-bg:      #f4e4c4;
-        --ak-amber-strong:  #5e4308;
-        --ak-red:           #a32626;
-        --ak-red-bg:        #efd8d6;
-        --ak-red-strong:    #7c1818;
-      }
-      html, body, #root { background: var(--ak-bg); color: var(--ak-text); }
-    `}</style>
-  );
-}
 
 // ============================================================
 // UI Primitives
@@ -873,6 +824,23 @@ const StatTile = ({ color, bg, value, label }) => (
 // Site Diagram (photo + sketch + pins)
 // ============================================================
 
+// ── Diagram/data color policy ───────────────────────────────
+// Everything the canvases draw (strokes, zones, pins, legends) is REPORT
+// CONTENT, not chrome: the colors carry utility-marking meaning (APWA/CSA
+// conventions), are stored in saved report data (each stroke keeps its hex),
+// and print into the locked deliverable. They are deliberately NOT theme
+// tokens — an app re-skin must never change what a saved report says.
+// See THEME-ENGINE.md §data-colors.
+
+// Verdict pin colors — shared by the editor canvas, the CAD-page snapshot
+// canvas, and the "next pin verdict" picker chips.
+const VERDICT_PIN_COLORS = {
+  safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
+  caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
+  nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
+};
+const VERDICT_PIN_FALLBACK = { fill: '#888', stroke: '#000', text: '#fff' };
+
 // Hatched-zone styles. Shared between the live editor canvas and the
 // print-only CAD-page snapshot canvas.
 const ZONE_PATTERNS = {
@@ -981,11 +949,7 @@ function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
     ctx.restore();
   });
   (report.diagramPins || []).forEach(pin => {
-    const vc = {
-      safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
-      caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
-      nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
-    }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
+    const vc = VERDICT_PIN_COLORS[pin.verdict] || VERDICT_PIN_FALLBACK;
     const r = pin.size ?? 18;
     ctx.beginPath();
     ctx.arc(pin.x, pin.y, r, 0, Math.PI * 2);
@@ -1278,11 +1242,7 @@ function SiteDiagram({ report, update }) {
     }
 
     report.diagramPins.forEach(pin => {
-      const vc = {
-        safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
-        caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
-        nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
-      }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
+      const vc = VERDICT_PIN_COLORS[pin.verdict] || VERDICT_PIN_FALLBACK;
 
       const r = pinRadius(pin);
       ctx.beginPath();
@@ -1708,9 +1668,9 @@ function SiteDiagram({ report, update }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }}>
             {[
-              { id: 'safe',    label: 'Safe',    bg: '#3fb950', fg: '#000' },
-              { id: 'caution', label: 'Caution', bg: '#e0a020', fg: '#000' },
-              { id: 'nogo',    label: 'No-go',   bg: '#e02020', fg: '#fff' },
+              { id: 'safe',    label: 'Safe',    bg: VERDICT_PIN_COLORS.safe.fill,    fg: VERDICT_PIN_COLORS.safe.text },
+              { id: 'caution', label: 'Caution', bg: VERDICT_PIN_COLORS.caution.fill, fg: VERDICT_PIN_COLORS.caution.text },
+              { id: 'nogo',    label: 'No-go',   bg: VERDICT_PIN_COLORS.nogo.fill,    fg: VERDICT_PIN_COLORS.nogo.text },
             ].map(v => (
               <button key={v.id}
                 onClick={() => setPinVerdict(v.id)}
@@ -2636,7 +2596,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               <div style={{ display: 'flex', gap: 5 }}>
                 <button onClick={commit}
                   style={{
-                    flex: 1, background: c.accent, color: '#fff', border: 'none',
+                    flex: 1, background: c.accent, color: c.onAccent, border: 'none',
                     borderRadius: 4, padding: '5px 8px',
                     fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   }}>✓ Add</button>
@@ -2924,7 +2884,7 @@ function SectionsQuickNav({ sections }) {
         title="Jump to a section"
         aria-label="Jump to a section"
         style={{
-          background: c.accent, color: '#fff',
+          background: c.accent, color: c.onAccent,
           border: `1px solid ${c.accent}`, borderRadius: 22,
           padding: '9px 12px', fontSize: 13, fontWeight: 700,
           cursor: 'pointer', fontFamily: 'inherit',
@@ -3093,7 +3053,7 @@ function WhatsNewModal({ entries, onClose }) {
                       <button
                         onClick={() => jumpTo(item)}
                         style={{
-                          background: c.accent, color: c.onAccent || '#fff',
+                          background: c.accent, color: c.onAccent,
                           border: 'none', borderRadius: 5,
                           padding: '5px 9px', fontSize: 11, fontWeight: 700,
                           cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
@@ -3319,7 +3279,7 @@ function ScanPhotos({ report, update }) {
         <label style={{
           display: 'block', background: c.accent, border: `1px solid ${c.accent}`,
           borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
-          color: '#fff', cursor: 'pointer', fontWeight: 700,
+          color: c.onAccent, cursor: 'pointer', fontWeight: 700,
         }}>
           📷 Take photo
           <input ref={cameraRef} type="file" accept="image/*"
@@ -4042,7 +4002,7 @@ function ScanLocations({ report, update }) {
               }}
               onDragEnd={() => { setDragId(null); setOverId(null); }}
               style={{
-                background: c.accent, color: '#fff', padding: '7px 11px',
+                background: c.accent, color: c.onAccent, padding: '7px 11px',
                 fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                 cursor: 'grab', userSelect: 'none',
@@ -4397,7 +4357,7 @@ function ScanLocations({ report, update }) {
                             updateLoc(loc.id, { photo: null, photoAnnotations: [] });
                             setMenuLocId(null);
                           }}
-                          style={{ ...photoMenuBtnStyle(c), color: '#ff7b7b' }}>
+                          style={{ ...photoMenuBtnStyle(c), color: c.redStrong }}>
                           ✕<br /><span style={{ fontSize: 11 }}>Remove</span>
                         </button>
                         <button
@@ -4744,7 +4704,7 @@ function Assistant({ report, update }) {
       <button onClick={() => setCollapsed(x => !x)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: c.accentDim, color: '#fff', border: 'none',
+          background: c.accentDim, color: c.onAccent, border: 'none',
           padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 13,
         }}>
         <span>🤖 Assistant {tips[0]?.level === 'ok' ? '· all good' : `· ${tips.length} tip${tips.length === 1 ? '' : 's'}`}</span>
@@ -4811,7 +4771,7 @@ function Assistant({ report, update }) {
                 <button onClick={addCustom}
                   disabled={!draftText.trim()}
                   style={{
-                    background: c.accent, color: '#fff', border: 'none',
+                    background: c.accent, color: c.onAccent, border: 'none',
                     borderRadius: 4, padding: '5px 10px', fontSize: 12, fontWeight: 700,
                     cursor: draftText.trim() ? 'pointer' : 'not-allowed',
                     opacity: draftText.trim() ? 1 : 0.5,
@@ -4852,10 +4812,15 @@ export default function GSSIReportApp() {
   const [reportsIndex, setReportsIndex] = useState(lib.index);
   const [report, setReport] = useState(lib.currentReport);
 
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem('ak_theme') || 'dark'; }
-    catch { return 'dark'; }
-  });
+  // Theme name lives in the engine (init'd in main.jsx before mount).
+  // themechange keeps this state in sync with every apply() source —
+  // the ☀/☾ toggle, the console, or a future Settings tab.
+  const [theme, setTheme] = useState(() => ThemeEngine.activeName || 'ak-steel');
+  useEffect(() => {
+    const onThemeChange = (e) => { if (e.detail) setTheme(e.detail); };
+    document.addEventListener('themechange', onThemeChange);
+    return () => document.removeEventListener('themechange', onThemeChange);
+  }, []);
 
   // ---------- Auto-save status indicator ----------
   const [savedAt, setSavedAt] = useState(null);
@@ -4923,12 +4888,9 @@ export default function GSSIReportApp() {
     };
   }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem('ak_theme', theme); } catch {}
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  // ☀/☾ flips between the dark default and paper; ak-ember (or any future
+  // dark theme) also toggles out to paper and back to steel.
+  const toggleTheme = () => ThemeEngine.apply(theme === 'ak-paper' ? 'ak-steel' : 'ak-paper');
 
   // ---------- Cloud sync (opt-in: only active once signed in) ----------
   // The app stays fully local until a user signs in via the header ☁ button.
@@ -5348,8 +5310,8 @@ export default function GSSIReportApp() {
       if (!lastTarget || lastTarget.el !== card || lastTarget.side !== side) {
         clearMarker();
         card.style.boxShadow = side === 'above'
-          ? 'inset 0 3px 0 0 #e02020'
-          : 'inset 0 -3px 0 0 #e02020';
+          ? `inset 0 3px 0 0 ${c.signal}`
+          : `inset 0 -3px 0 0 ${c.signal}`;
         lastTarget = { el: card, side };
       }
     };
@@ -5681,10 +5643,9 @@ export default function GSSIReportApp() {
   return (
     <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
-      fontFamily: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontFamily: 'var(--type-font-body)',
       padding: '14px 12px 100px', margin: '0 auto',
     }}>
-      <ThemeStyles />
       {previewMode && (
         <div className="preview-bar">
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -5715,9 +5676,10 @@ export default function GSSIReportApp() {
         .brand-ribbon {
           display: flex; align-items: center; gap: 12px;
           padding: 10px 14px; margin-bottom: 12px;
-          background: linear-gradient(90deg, rgba(212,69,69,0.08), rgba(212,69,69,0));
-          border-left: 3px solid var(--ak-accent);
-          border-radius: 6px;
+          background: linear-gradient(90deg,
+            color-mix(in srgb, var(--color-accent) 8%, transparent), transparent);
+          border-left: 3px solid var(--color-accent);
+          border-radius: var(--radius-md);
         }
         .brand-ribbon-mark {
           height: 44px; width: auto; flex-shrink: 0;
@@ -5726,17 +5688,17 @@ export default function GSSIReportApp() {
         .brand-ribbon-text { line-height: 1.2; }
         .brand-ribbon-title {
           font-size: 11pt; font-weight: 800;
-          color: var(--ak-text); letter-spacing: 0.3px;
+          color: var(--color-text); letter-spacing: 0.3px;
         }
         .brand-ribbon-tagline {
           font-size: 9.5pt; font-style: italic;
-          color: var(--ak-accent); margin-top: 2px;
+          color: var(--color-accent); margin-top: 2px;
         }
         .brand-signoff {
           margin-top: 18px; padding-top: 10px;
-          border-top: 1px solid var(--ak-border);
+          border-top: 1px solid var(--color-border);
           font-size: 9pt; font-style: italic; text-align: center;
-          color: var(--ak-text-faint);
+          color: var(--color-text-faint);
         }
         @media print {
           .brand-ribbon { background: #fafafa; }
@@ -5746,7 +5708,7 @@ export default function GSSIReportApp() {
         }
         /* Mirror brand-ribbon print colours into Preview mode — without
            these, the title renders white-on-light (invisible) since the
-           dark-theme var(--ak-text) is still in effect on screen. */
+           dark-theme var(--color-text) is still in effect on screen. */
         body.preview-mode .brand-ribbon { background: #fafafa !important; }
         body.preview-mode .brand-ribbon-title { color: #111 !important; }
         body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
@@ -5792,7 +5754,7 @@ export default function GSSIReportApp() {
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
         .scan-photo-row.drop-target {
-          outline: 2px dashed #e02020;
+          outline: 2px dashed var(--color-signal);
           outline-offset: -2px;
         }
         /* Typography polish — crisp rendering and aligned figures for a more
@@ -6367,7 +6329,7 @@ export default function GSSIReportApp() {
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
           <button onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
+            title={theme !== 'ak-paper' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
             style={{
               background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
@@ -6375,14 +6337,14 @@ export default function GSSIReportApp() {
               color: c.text, cursor: 'pointer', fontWeight: 900,
               whiteSpace: 'nowrap', lineHeight: 1,
             }}>
-            {theme === 'dark' ? '☀' : '☾'}
+            {theme !== 'ak-paper' ? '☀' : '☾'}
           </button>
           <button onClick={() => update({ assistantOn: !report.assistantOn })}
             title={report.assistantOn ? 'Hide assistant' : 'Show assistant'}
             aria-label="Toggle assistant"
             style={{
               background: report.assistantOn ? c.accentDim : c.cardAlt,
-              color: report.assistantOn ? '#fff' : c.textDim,
+              color: report.assistantOn ? c.onAccent : c.textDim,
               border: `1px solid ${report.assistantOn ? c.accent : c.borderStrong}`,
               borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
@@ -6436,7 +6398,7 @@ export default function GSSIReportApp() {
           <label style={{
             background: c.accent, border: `1px solid ${c.accent}`,
             borderRadius: 6, padding: '7px 12px', textAlign: 'center', fontSize: 11,
-            color: '#fff', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
+            color: c.onAccent, cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
             letterSpacing: 1, textTransform: 'uppercase',
           }}>
             📂 Load
@@ -8011,7 +7973,7 @@ export default function GSSIReportApp() {
                     <Input value={e.name}
                       onChange={ev => renameReport(e.id, ev.target.value)}
                       style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 10.5, color: isOpen ? c.onAccent : c.textFaint, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       {e.status === 'approved' && (
                         <span style={{ background: c.greenBg, color: c.green, border: `1px solid ${c.green}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>✓ APPROVED · ARCHIVED</span>
                       )}
@@ -8402,7 +8364,7 @@ export default function GSSIReportApp() {
               }}>
                 <div style={{
                   flexShrink: 0, width: 30, height: 30, borderRadius: 8,
-                  background: c.accentDim, color: '#fff',
+                  background: c.accentDim, color: c.onAccent,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 15, fontWeight: 800,
                 }}>{step.icon}</div>

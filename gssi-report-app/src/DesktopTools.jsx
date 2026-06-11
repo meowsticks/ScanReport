@@ -69,7 +69,7 @@ export function FeedbackButton({ c }) {
               }}>Cancel</button>
               <button onClick={send} style={{
                 flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700,
-                fontSize: 13, background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+                fontSize: 13, background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
               }}>Send</button>
             </div>
           </div>
@@ -98,14 +98,14 @@ export function VersionToggle({ c }) {
 
   const isTest = mode.testMode && mode.testUrl;
   const btn = {
-    background: isTest ? '#7a4dd6' : c.cardAlt, color: isTest ? '#fff' : c.textDim,
+    background: isTest ? '#7a4dd6' : c.cardAlt, color: isTest ? c.onAccent : c.textDim,
     border: `1px solid ${isTest ? '#7a4dd6' : c.borderStrong}`,
     borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
     fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
   };
   const action = (primary) => ({
     flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13,
-    background: primary ? '#7a4dd6' : c.cardAlt, color: primary ? '#fff' : c.text,
+    background: primary ? '#7a4dd6' : c.cardAlt, color: primary ? c.onAccent : c.text,
     border: `1px solid ${primary ? '#7a4dd6' : c.borderStrong}`,
   });
 

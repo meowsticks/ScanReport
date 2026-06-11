@@ -8,23 +8,28 @@
     <link rel="alternate icon" href="/favicon.svg" />
     <title>AK ScanReport</title>
     <script>
-      // Honor saved theme before React mounts to avoid a flash
+      // Paint the saved theme's background before the bundle runs (no flash).
+      // The theme engine (src/theme/engine.js) stores the active bg here on
+      // every apply(); the legacy 'ak_theme' fallback covers the first launch
+      // after updating from the pre-engine build.
       (function() {
         try {
-          var t = localStorage.getItem('ak_theme');
-          if (t === 'light' || t === 'dark') {
-            document.documentElement.dataset.theme = t;
+          var bg = localStorage.getItem('ak-theme-bg');
+          if (!bg) {
+            bg = localStorage.getItem('ak_theme') === 'light' ? '#f6f3ec' : '#14171c';
           }
+          document.documentElement.style.setProperty('--ak-init-bg', bg);
         } catch (e) {}
       })();
     </script>
     <style>
-      :root, :root[data-theme="dark"] { --ak-init-bg: #000; }
-      :root[data-theme="light"]       { --ak-init-bg: #fff; }
+      :root { --ak-init-bg: #14171c; }
       html, body, #root {
         margin: 0;
         padding: 0;
-        background: var(--ak-init-bg, #000);
+        /* --color-bg/-text arrive when the engine inits in main.jsx */
+        background: var(--color-bg, var(--ak-init-bg));
+        color: var(--color-text, inherit);
         min-height: 100vh;
         -webkit-tap-highlight-color: transparent;
       }

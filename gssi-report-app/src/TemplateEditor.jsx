@@ -132,7 +132,7 @@ export default function TemplateEditor({ open, mode, initialName, initialFields,
           <button onClick={save} style={{
             flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
             fontWeight: 700, fontSize: 13,
-            background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+            background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
           }}>{mode === 'edit' ? 'Save changes' : 'Save template'}</button>
         </div>
       </div>

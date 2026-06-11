@@ -171,7 +171,7 @@ export default function StartReportModal({
               <button onClick={() => { onUseTemplate(picked.id); }} style={{
                 padding: '9px 14px', borderRadius: 6, cursor: 'pointer',
                 fontWeight: 800, fontSize: 13,
-                background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+                background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
               }}>Use this template →</button>
             </>
           ) : (
