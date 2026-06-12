@@ -9,6 +9,8 @@ import SyncControl from './SyncControl.jsx';
 import { FeedbackButton, VersionToggle } from './DesktopTools.jsx';
 import TemplateEditor from './TemplateEditor.jsx';
 import StartReportModal from './StartReportModal.jsx';
+import ThemeEngine from './theme/engine.js';
+import ThemePanel from './ThemePanel.jsx';
 
 // ============================================================
 // GSSI StructureScan Mini XT — Scan Report Builder v2
@@ -31,6 +33,16 @@ const LAST_SEEN_VERSION_KEY = 'ak_last_seen_version'; // drives the What's-new p
 // page so the "Take me there" button can scroll the user to the section.
 const APP_VERSION = (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) || '0.0.0';
 const CHANGELOG = [
+  {
+    version: '1.0.15',
+    headline: 'Theme studio — make the app yours',
+    items: [
+      { title: '🎨 Theme studio (the palette button in the header)', anchorClass: null,
+        body: 'Pick a theme — Steel (dark), Paper (light), or the new Ember (industrial orange) — then tune it: your own accent color, the danger red, density, and text size. Everything applies live and saves on this device, per theme. Reset puts a theme back to factory anytime.' },
+      { title: 'Bigger text for field days', anchorClass: null,
+        body: 'The text-size slider scales the whole editor up to 130% — easier with gloves and sunlight. Density tightens or relaxes the spacing the same way. Both are screen-only: the printed report keeps its locked layout and palette, no matter how wild the tinkering gets.' },
+    ],
+  },
   {
     version: '1.0.14',
     headline: 'Critical fix: the .exe launches again',
@@ -468,89 +480,39 @@ const DEFAULT_REPORT = {
 };
 
 // ============================================================
-// Design tokens — Aggarwal Kamikaze's palette (light + dark)
-// Token values are CSS variables so theme switches without a
-// React re-render. See <ThemeStyles /> for the palette definitions
-// and the data-theme="light" overrides for outdoor readability.
+// Design tokens — resolved by the AK theme engine (src/theme/).
+// Palettes live in src/theme/themes/*.js as data; the engine flattens
+// the active theme onto <html> as --color-* / --space-* / --type-* /
+// --radius-* variables, so a theme switch never re-renders React.
+// `c` keeps the original JS-side names — only the CSS vars beneath
+// them changed (mapping table: THEME-ENGINE.md at the repo root).
 // ============================================================
 
 const c = {
-  bg:           'var(--ak-bg)',
-  bgRaised:     'var(--ak-bg-raised)',
-  card:         'var(--ak-card)',
-  cardAlt:      'var(--ak-card-alt)',
-  border:       'var(--ak-border)',
-  borderStrong: 'var(--ak-border-strong)',
-  text:         'var(--ak-text)',
-  textDim:      'var(--ak-text-dim)',
-  textFaint:    'var(--ak-text-faint)',
-  accent:       'var(--ak-accent)',
-  accentDim:    'var(--ak-accent-dim)',
-  onAccentDim:  'var(--ak-on-accent-dim)',  // text/icon on accent-dim bg
-  green:        'var(--ak-green)',
-  greenBg:      'var(--ak-green-bg)',
-  greenStrong:  'var(--ak-green-strong)',
-  amber:        'var(--ak-amber)',
-  amberBg:      'var(--ak-amber-bg)',
-  amberStrong:  'var(--ak-amber-strong)',
-  red:          'var(--ak-red)',
-  redBg:        'var(--ak-red-bg)',
-  redStrong:    'var(--ak-red-strong)',
+  bg:           'var(--color-bg)',
+  bgRaised:     'var(--color-bg-raised)',
+  card:         'var(--color-surface)',
+  cardAlt:      'var(--color-surface-alt)',
+  border:       'var(--color-border)',
+  borderStrong: 'var(--color-border-strong)',
+  text:         'var(--color-text)',
+  textDim:      'var(--color-text-muted)',
+  textFaint:    'var(--color-text-faint)',
+  accent:       'var(--color-accent)',
+  accentDim:    'var(--color-accent-dim)',
+  onAccent:     'var(--color-on-accent)',      // text/icon on solid accent bg
+  onAccentDim:  'var(--color-on-accent-dim)',  // text/icon on accent-dim bg
+  signal:       'var(--color-signal)',         // AK signal red — drag/drop + live markers
+  green:        'var(--color-safe)',
+  greenBg:      'var(--color-safe-bg)',
+  greenStrong:  'var(--color-safe-strong)',
+  amber:        'var(--color-warning)',
+  amberBg:      'var(--color-warning-bg)',
+  amberStrong:  'var(--color-warning-strong)',
+  red:          'var(--color-danger)',
+  redBg:        'var(--color-danger-bg)',
+  redStrong:    'var(--color-danger-strong)',
 };
-
-function ThemeStyles() {
-  return (
-    <style>{`
-      :root, :root[data-theme="dark"] {
-        --ak-bg:            #14171c;
-        --ak-bg-raised:     #1a1e24;
-        --ak-card:          #1e232a;
-        --ak-card-alt:      #242a32;
-        --ak-border:        #2c333c;
-        --ak-border-strong: #3a4250;
-        --ak-text:          #e8e4dc;
-        --ak-text-dim:      #a8a59e;
-        --ak-text-faint:    #6e6c66;
-        --ak-accent:        #d44545;
-        --ak-accent-dim:    #5a1c1f;
-        --ak-on-accent-dim: #f4ece0;
-        --ak-green:         #4fb86a;
-        --ak-green-bg:      #16291e;
-        --ak-green-strong:  #6cd082;
-        --ak-amber:         #d9a35a;
-        --ak-amber-bg:      #2a2114;
-        --ak-amber-strong:  #ecbf6e;
-        --ak-red:           #d44545;
-        --ak-red-bg:        #2c1818;
-        --ak-red-strong:    #e96868;
-      }
-      :root[data-theme="light"] {
-        --ak-bg:            #f6f3ec;
-        --ak-bg-raised:     #ede9df;
-        --ak-card:          #fbf8f1;
-        --ak-card-alt:      #e8e4d8;
-        --ak-border:        #cfcabc;
-        --ak-border-strong: #9c9685;
-        --ak-text:          #1f1d18;
-        --ak-text-dim:      #46423a;
-        --ak-text-faint:    #6e6a5e;
-        --ak-accent:        #a32626;
-        --ak-accent-dim:    #f0d4d2;
-        --ak-on-accent-dim: #5e1416;
-        --ak-green:         #2b6e3a;
-        --ak-green-bg:      #d8ecdc;
-        --ak-green-strong:  #1d5028;
-        --ak-amber:         #7a5510;
-        --ak-amber-bg:      #f4e4c4;
-        --ak-amber-strong:  #5e4308;
-        --ak-red:           #a32626;
-        --ak-red-bg:        #efd8d6;
-        --ak-red-strong:    #7c1818;
-      }
-      html, body, #root { background: var(--ak-bg); color: var(--ak-text); }
-    `}</style>
-  );
-}
 
 // ============================================================
 // UI Primitives
@@ -561,19 +523,19 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
     background: c.card,
     border: `1px solid ${accent ? c.accent : c.border}`,
     borderRadius: 10,
-    padding: dense ? 12 : 14,
-    marginBottom: 12,
+    padding: dense ? 'calc(12px * var(--space-scale))' : 'calc(14px * var(--space-scale))',
+    marginBottom: 'calc(12px * var(--space-scale))',
     ...(accent && { boxShadow: `0 0 0 1px ${c.accentDim}` }),
     ...style,
   }}>
     {title && (
       <div className="ak-card-head" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 10, paddingBottom: 8,
+        marginBottom: 'calc(10px * var(--space-scale))', paddingBottom: 'calc(8px * var(--space-scale))',
         borderBottom: `1px solid ${c.border}`,
       }}>
         <h2 style={{
-          margin: 0, fontSize: 13, fontWeight: 700,
+          margin: 0, fontSize: 'calc(13px * var(--type-scale))', fontWeight: 700,
           color: accent ? c.accent : c.textDim,
           letterSpacing: 1.2, textTransform: 'uppercase',
         }}>{title}</h2>
@@ -585,13 +547,13 @@ const Card = ({ title, badge, children, dense, accent, className, style }) => (
 );
 
 const Field = ({ label, children, hint }) => (
-  <div style={{ marginBottom: 10 }}>
+  <div style={{ marginBottom: 'calc(10px * var(--space-scale))' }}>
     <div style={{
-      fontSize: 12, color: c.textDim, marginBottom: 4,
+      fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(4px * var(--space-scale))',
       textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
     }}>{label}</div>
     {children}
-    {hint && <div style={{ fontSize: 12.5, color: c.textFaint, marginTop: 4 }}>{hint}</div>}
+    {hint && <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(4px * var(--space-scale))' }}>{hint}</div>}
   </div>
 );
 
@@ -649,7 +611,7 @@ const Input = ({ value, onChange, onBlur, ...rest }) => {
     <input {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '10px 12px', color: c.text, fontSize: 16,
+      padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', color: c.text, fontSize: 'calc(16px * var(--type-scale))',
       fontFamily: 'inherit', boxSizing: 'border-box',
       ...rest.style,
     }} />
@@ -662,7 +624,7 @@ const Textarea = ({ value, onChange, onBlur, ...rest }) => {
     <textarea {...rest} value={local} onChange={onLocalChange} onBlur={onLocalBlur} style={{
       width: '100%', background: c.cardAlt,
       border: `1px solid ${c.border}`, borderRadius: 6,
-      padding: '10px 12px', color: c.text, fontSize: 16,
+      padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', color: c.text, fontSize: 'calc(16px * var(--type-scale))',
       fontFamily: 'inherit', boxSizing: 'border-box',
       resize: 'vertical', minHeight: 64,
       ...rest.style,
@@ -699,7 +661,7 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
         style={{
           width: '100%', background: c.cardAlt,
           border: `1px solid ${c.border}`, borderRadius: 6,
-          padding: '11px 13px', color: c.text, fontSize: 15, lineHeight: 1.55,
+          padding: 'calc(11px * var(--space-scale)) calc(13px * var(--space-scale))', color: c.text, fontSize: 'calc(15px * var(--type-scale))', lineHeight: 1.55,
           fontFamily: 'inherit', boxSizing: 'border-box',
           resize: 'none', overflow: 'hidden',
           ...style,
@@ -711,7 +673,7 @@ function AutoGrowTextarea({ value, onChange, className, style }) {
       {!ownsPrint && (
         <div className="print-only ak-ta-print" style={{
           width: '100%', border: '1px solid #98a0aa', borderRadius: 6,
-          padding: '11px 13px', fontSize: 15, lineHeight: 1.55,
+          padding: 'calc(11px * var(--space-scale)) calc(13px * var(--space-scale))', fontSize: 'calc(15px * var(--type-scale))', lineHeight: 1.55,
           whiteSpace: 'pre-wrap', boxSizing: 'border-box', ...style,
         }}>{value}</div>
       )}
@@ -723,7 +685,7 @@ const Select = ({ children, ...props }) => (
   <select {...props} style={{
     width: '100%', background: c.cardAlt,
     border: `1px solid ${c.border}`, borderRadius: 6,
-    padding: '10px 12px', color: c.text, fontSize: 16,
+    padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', color: c.text, fontSize: 'calc(16px * var(--type-scale))',
     fontFamily: 'inherit', boxSizing: 'border-box',
     ...props.style,
   }}>{children}</select>
@@ -739,8 +701,8 @@ const Btn = ({ children, variant = 'default', ...props }) => {
   return (
     <button {...props} style={{
       background: v.bg, border: `1px solid ${v.bd}`,
-      borderRadius: 6, padding: '10px 14px', color: v.fg,
-      fontSize: 15, fontWeight: 500, cursor: 'pointer',
+      borderRadius: 6, padding: 'calc(10px * var(--space-scale)) calc(14px * var(--space-scale))', color: v.fg,
+      fontSize: 'calc(15px * var(--type-scale))', fontWeight: 500, cursor: 'pointer',
       fontFamily: 'inherit',
       ...props.style,
     }}>{children}</button>
@@ -795,60 +757,60 @@ function ExecutiveSummary({ report }) {
       <div style={{
         background: verdictBg,
         border: `1px solid ${verdictColor}`,
-        borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+        borderRadius: 8, padding: 'calc(12px * var(--space-scale)) calc(14px * var(--space-scale))', marginBottom: 'calc(12px * var(--space-scale))',
       }}>
         <div style={{
-          fontSize: 10, color: c.textDim, letterSpacing: 1,
-          textTransform: 'uppercase', marginBottom: 4,
+          fontSize: 'calc(10px * var(--type-scale))', color: c.textDim, letterSpacing: 1,
+          textTransform: 'uppercase', marginBottom: 'calc(4px * var(--space-scale))',
         }}>Overall verdict</div>
         <div style={{
-          fontSize: 18, fontWeight: 700, color: verdictColor,
+          fontSize: 'calc(18px * var(--type-scale))', fontWeight: 700, color: verdictColor,
           letterSpacing: 0.3,
         }}>{overallVerdict}</div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(8px * var(--space-scale))', marginBottom: 'calc(12px * var(--space-scale))' }}>
         <StatTile color={c.green} bg={c.greenBg} value={stats.safe} label="Safe" />
         <StatTile color={c.amber} bg={c.amberBg} value={stats.caution} label="Caution" />
         <StatTile color={c.red} bg={c.redBg} value={stats.nogo} label="No-go" />
       </div>
 
       <div style={{
-        background: c.cardAlt, borderRadius: 6, padding: 10,
-        fontSize: 13, color: c.text, lineHeight: 1.5,
+        background: c.cardAlt, borderRadius: 6, padding: 'calc(10px * var(--space-scale))',
+        fontSize: 'calc(13px * var(--type-scale))', color: c.text, lineHeight: 1.5,
       }}>
-        <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
           Site:
         </strong>{' '}
         {report.siteAddress || '—'}<br/>
-        <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
           Area:
         </strong>{' '}
         {report.scanArea || '—'}<br/>
-        <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
           Targets located:
         </strong>{' '}
-        {stats.targets} · <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        {stats.targets} · <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
           Cores assessed:
         </strong>{' '}
         {stats.total}
         {report.enableConfidenceBand && confMeta && (
           <>
             <br/>
-            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
               Overall confidence:
             </strong>{' '}
             <span style={{
-              display: 'inline-block', padding: '1px 8px', borderRadius: 4,
+              display: 'inline-block', padding: 'calc(1px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4,
               background: confMeta.bg, color: confMeta.color,
-              fontWeight: 700, fontSize: 12, letterSpacing: 0.5,
+              fontWeight: 700, fontSize: 'calc(12px * var(--type-scale))', letterSpacing: 0.5,
             }}>{confMeta.label}</span>
           </>
         )}
         {report.coreStandoff && (
           <>
             <br/>
-            <strong style={{ color: c.textDim, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <strong style={{ color: c.textDim, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
               Standoff margin:
             </strong>{' '}
             Keep all coring/cutting at least <strong>{report.coreStandoff}</strong> clear of any marked target. Daylight to verify before drilling.
@@ -862,16 +824,33 @@ function ExecutiveSummary({ report }) {
 const StatTile = ({ color, bg, value, label }) => (
   <div style={{
     background: bg, border: `1px solid ${color}40`,
-    borderRadius: 6, padding: '10px 8px', textAlign: 'center',
+    borderRadius: 6, padding: 'calc(10px * var(--space-scale)) calc(8px * var(--space-scale))', textAlign: 'center',
   }}>
-    <div style={{ fontSize: 24, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-    <div style={{ fontSize: 10.5, color: c.textDim, marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</div>
+    <div style={{ fontSize: 'calc(24px * var(--type-scale))', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+    <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginTop: 'calc(4px * var(--space-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>{label}</div>
   </div>
 );
 
 // ============================================================
 // Site Diagram (photo + sketch + pins)
 // ============================================================
+
+// ── Diagram/data color policy ───────────────────────────────
+// Everything the canvases draw (strokes, zones, pins, legends) is REPORT
+// CONTENT, not chrome: the colors carry utility-marking meaning (APWA/CSA
+// conventions), are stored in saved report data (each stroke keeps its hex),
+// and print into the locked deliverable. They are deliberately NOT theme
+// tokens — an app re-skin must never change what a saved report says.
+// See THEME-ENGINE.md §data-colors.
+
+// Verdict pin colors — shared by the editor canvas, the CAD-page snapshot
+// canvas, and the "next pin verdict" picker chips.
+const VERDICT_PIN_COLORS = {
+  safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
+  caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
+  nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
+};
+const VERDICT_PIN_FALLBACK = { fill: '#888', stroke: '#000', text: '#fff' };
 
 // Hatched-zone styles. Shared between the live editor canvas and the
 // print-only CAD-page snapshot canvas.
@@ -981,11 +960,7 @@ function drawSiteDiagramTo(ctx, W, H, report, opts = {}) {
     ctx.restore();
   });
   (report.diagramPins || []).forEach(pin => {
-    const vc = {
-      safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
-      caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
-      nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
-    }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
+    const vc = VERDICT_PIN_COLORS[pin.verdict] || VERDICT_PIN_FALLBACK;
     const r = pin.size ?? 18;
     ctx.beginPath();
     ctx.arc(pin.x, pin.y, r, 0, Math.PI * 2);
@@ -1278,11 +1253,7 @@ function SiteDiagram({ report, update }) {
     }
 
     report.diagramPins.forEach(pin => {
-      const vc = {
-        safe:    { fill: '#3fb950', stroke: '#0d2818', text: '#000' },
-        caution: { fill: '#e0a020', stroke: '#2a1f08', text: '#000' },
-        nogo:    { fill: '#e02020', stroke: '#2a1010', text: '#fff' },
-      }[pin.verdict] || { fill: '#888', stroke: '#000', text: '#fff' };
+      const vc = VERDICT_PIN_COLORS[pin.verdict] || VERDICT_PIN_FALLBACK;
 
       const r = pinRadius(pin);
       ctx.beginPath();
@@ -1594,9 +1565,9 @@ function SiteDiagram({ report, update }) {
     <Btn
       variant={tool === id ? 'primary' : 'default'}
       onClick={() => setTool(id)}
-      style={{ fontSize: 12, padding: '8px 6px' }}
+      style={{ fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(8px * var(--space-scale)) calc(6px * var(--space-scale))' }}
     >
-      {color && <span style={{ color, marginRight: 4 }}>━</span>}{label}
+      {color && <span style={{ color, marginRight: 'calc(4px * var(--space-scale))' }}>━</span>}{label}
     </Btn>
   );
 
@@ -1605,7 +1576,7 @@ function SiteDiagram({ report, update }) {
       <div ref={containerRef} style={{
         position: 'relative', background: '#2a2a28',
         borderRadius: 8, aspectRatio: '4 / 3',
-        overflow: 'hidden', marginBottom: 10,
+        overflow: 'hidden', marginBottom: 'calc(10px * var(--space-scale))',
         border: `1px solid ${c.border}`,
       }}>
         {diagramSrc(report) ? (
@@ -1615,7 +1586,7 @@ function SiteDiagram({ report, update }) {
           <div className="no-print" style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: c.textFaint, fontSize: 12, textAlign: 'center', padding: 20,
+            color: c.textFaint, fontSize: 'calc(12px * var(--type-scale))', textAlign: 'center', padding: 'calc(20px * var(--space-scale))',
           }}>
             Tap Photo to add site image<br/>or sketch on the blank canvas
           </div>
@@ -1659,9 +1630,9 @@ function SiteDiagram({ report, update }) {
       {diagramSrc(report) && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 8, marginBottom: 6, padding: '6px 10px',
+          gap: 'calc(8px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))', padding: 'calc(6px * var(--space-scale)) calc(10px * var(--space-scale))',
           background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
-          fontSize: 11, color: c.textDim,
+          fontSize: 'calc(11px * var(--type-scale))', color: c.textDim,
         }}>
           <span>📷 Site photo loaded</span>
           <Btn variant="ghost"
@@ -1671,16 +1642,16 @@ function SiteDiagram({ report, update }) {
               }
             }}
             title="Remove site photo"
-            style={{ fontSize: 11, padding: '4px 9px' }}>
+            style={{ fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))' }}>
             ✕ Remove photo
           </Btn>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))' }}>
         <label style={{
           background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 13,
+          borderRadius: 6, padding: 'calc(8px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(13px * var(--type-scale))',
           color: c.text, cursor: 'pointer', fontWeight: 500,
         }}>
           📷 Photo
@@ -1700,17 +1671,17 @@ function SiteDiagram({ report, update }) {
       {tool === 'pin' && (
         <div style={{
           background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
-          padding: '8px 10px', marginBottom: 6,
+          padding: 'calc(8px * var(--space-scale)) calc(10px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))',
         }}>
-          <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 5,
+          <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(5px * var(--space-scale))',
             textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
             Next pin verdict
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(5px * var(--space-scale))' }}>
             {[
-              { id: 'safe',    label: 'Safe',    bg: '#3fb950', fg: '#000' },
-              { id: 'caution', label: 'Caution', bg: '#e0a020', fg: '#000' },
-              { id: 'nogo',    label: 'No-go',   bg: '#e02020', fg: '#fff' },
+              { id: 'safe',    label: 'Safe',    bg: VERDICT_PIN_COLORS.safe.fill,    fg: VERDICT_PIN_COLORS.safe.text },
+              { id: 'caution', label: 'Caution', bg: VERDICT_PIN_COLORS.caution.fill, fg: VERDICT_PIN_COLORS.caution.text },
+              { id: 'nogo',    label: 'No-go',   bg: VERDICT_PIN_COLORS.nogo.fill,    fg: VERDICT_PIN_COLORS.nogo.text },
             ].map(v => (
               <button key={v.id}
                 onClick={() => setPinVerdict(v.id)}
@@ -1718,13 +1689,13 @@ function SiteDiagram({ report, update }) {
                   background: pinVerdict === v.id ? v.bg : c.card,
                   color: pinVerdict === v.id ? v.fg : c.text,
                   border: `1px solid ${pinVerdict === v.id ? v.bg : c.border}`,
-                  borderRadius: 5, padding: '7px 8px',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  borderRadius: 5, padding: 'calc(7px * var(--space-scale)) calc(8px * var(--space-scale))',
+                  fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, cursor: 'pointer',
                   fontFamily: 'inherit',
                 }}>● {v.label}</button>
             ))}
           </div>
-          <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(5px * var(--space-scale))', lineHeight: 1.4 }}>
             Tap the diagram to drop a pin with the selected verdict. Switch the
             verdict between drops for mixed sets.
           </div>
@@ -1733,13 +1704,13 @@ function SiteDiagram({ report, update }) {
       {report.enableZones && tool === 'draw-zone' && (
         <div style={{
           background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
-          padding: '8px 10px', marginBottom: 6,
+          padding: 'calc(8px * var(--space-scale)) calc(10px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))',
         }}>
-          <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 5,
+          <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(5px * var(--space-scale))',
             textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
             Zone pattern
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))' }}>
             {Object.entries(ZONE_PATTERNS).map(([id, meta]) => (
               <button key={id}
                 onClick={() => setZonePattern(id)}
@@ -1748,26 +1719,26 @@ function SiteDiagram({ report, update }) {
                   color: zonePattern === id ? c.onAccentDim : c.text,
                   border: `1px solid ${zonePattern === id ? c.accent : c.border}`,
                   borderLeft: `4px solid ${meta.color}`,
-                  borderRadius: 5, padding: '6px 7px',
-                  fontSize: 11, fontWeight: 600, textAlign: 'left', cursor: 'pointer',
+                  borderRadius: 5, padding: 'calc(6px * var(--space-scale)) calc(7px * var(--space-scale))',
+                  fontSize: 'calc(11px * var(--type-scale))', fontWeight: 600, textAlign: 'left', cursor: 'pointer',
                 }}>{meta.label}</button>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))' }}>
             <Btn
               variant={zoneDrawMode === 'box' ? 'primary' : 'default'}
               onClick={() => setZoneDrawMode('box')}
               disabled={!!zoneDraft}
-              style={{ fontSize: 11 }}>▭ Drag a box</Btn>
+              style={{ fontSize: 'calc(11px * var(--type-scale))' }}>▭ Drag a box</Btn>
             <Btn
               variant={zoneDrawMode === 'points' ? 'primary' : 'default'}
               onClick={() => setZoneDrawMode('points')}
               disabled={!!zoneDraft}
-              style={{ fontSize: 11 }}>✥ Tap points</Btn>
+              style={{ fontSize: 'calc(11px * var(--type-scale))' }}>✥ Tap points</Btn>
           </div>
           {zoneDraft && (
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ fontSize: 10.5, color: c.textDim, marginBottom: 3,
+            <div style={{ marginBottom: 'calc(6px * var(--space-scale))' }}>
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(3px * var(--space-scale))',
                 textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
                 Zone label
               </div>
@@ -1779,21 +1750,21 @@ function SiteDiagram({ report, update }) {
                   width: '100%', boxSizing: 'border-box',
                   background: c.bg || c.cardAlt, color: c.text,
                   border: `1px solid ${c.borderStrong}`, borderRadius: 5,
-                  padding: '6px 8px', fontSize: 12, fontFamily: 'inherit',
+                  padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', fontFamily: 'inherit',
                 }} />
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
             <Btn variant="primary" onClick={finishZone}
               disabled={!zoneDraft || zoneDraft.points.length < 3}
-              style={{ fontSize: 12 }}>
+              style={{ fontSize: 'calc(12px * var(--type-scale))' }}>
               ✓ Save zone {zoneDraft ? `(${zoneDraft.points.length} pts)` : ''}
             </Btn>
             <Btn variant="ghost" onClick={cancelZone}
               disabled={!zoneDraft && !boxDragRef.current}
-              style={{ fontSize: 12 }}>Cancel zone</Btn>
+              style={{ fontSize: 'calc(12px * var(--type-scale))' }}>Cancel zone</Btn>
           </div>
-          <div style={{ fontSize: 10, color: c.textFaint, marginTop: 5, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(5px * var(--space-scale))', lineHeight: 1.4 }}>
             {zoneDrawMode === 'box'
               ? 'Click-drag a box on the diagram to start. Then drag the corner squares to reshape, or drag any edge\'s circle outward to bend that side into a curve. Right-click an edge\'s circle to straighten it again. Esc or right-click on empty area cancels the draft.'
               : 'Tap the diagram to drop polygon vertices (3+). When the outline is closed, drag corners to reshape or edge midpoints to bend into curves. Esc cancels.'}
@@ -1801,12 +1772,12 @@ function SiteDiagram({ report, update }) {
         </div>
       )}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
-        padding: '8px 10px', marginBottom: 6,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))',
+        padding: 'calc(8px * var(--space-scale)) calc(10px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))',
         background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 6,
       }}>
-        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
-          <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <label style={{ display: 'block', fontSize: 'calc(10.5px * var(--type-scale))', fontWeight: 600, color: c.textDim }}>
+          <div style={{ marginBottom: 'calc(3px * var(--space-scale))', textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Line thickness{selectedStrokeIdx != null ? ' (selected)' : ''}: <span style={{ color: c.text }}>
               {(selectedStrokeIdx != null && report.diagramStrokes[selectedStrokeIdx]?.width) || strokeWidth}px
             </span>
@@ -1823,8 +1794,8 @@ function SiteDiagram({ report, update }) {
             }}
             style={{ width: '100%', accentColor: c.accent }} />
         </label>
-        <label style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: c.textDim }}>
-          <div style={{ marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <label style={{ display: 'block', fontSize: 'calc(10.5px * var(--type-scale))', fontWeight: 600, color: c.textDim }}>
+          <div style={{ marginBottom: 'calc(3px * var(--space-scale))', textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Pin size: <span style={{ color: c.text }}>{pinSize}px</span>
           </div>
           <input type="range" min="10" max="36" step="2"
@@ -1833,21 +1804,21 @@ function SiteDiagram({ report, update }) {
             style={{ width: '100%', accentColor: c.accent }} />
         </label>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-        <Btn onClick={undo} style={{ fontSize: 12 }}>↶ Undo</Btn>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
+        <Btn onClick={undo} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>↶ Undo</Btn>
         {selectedStrokeIdx != null ? (
-          <Btn variant="danger" onClick={deleteSelected} style={{ fontSize: 12 }}>🗑 Delete selected line</Btn>
+          <Btn variant="danger" onClick={deleteSelected} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>🗑 Delete selected line</Btn>
         ) : (
-          <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 12 }}>Clear</Btn>
+          <Btn variant="ghost" onClick={clearAll} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>Clear</Btn>
         )}
       </div>
 
       <div style={{
-        marginTop: 10, padding: 9, background: c.cardAlt,
-        borderRadius: 6, fontSize: 11,
+        marginTop: 'calc(10px * var(--space-scale))', padding: 'calc(9px * var(--space-scale))', background: c.cardAlt,
+        borderRadius: 6, fontSize: 'calc(11px * var(--type-scale))',
       }}>
-        <div style={{ color: c.textDim, marginBottom: 5, fontWeight: 600, letterSpacing: 0.5 }}>LEGEND (CSA color codes)</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', color: c.text, fontSize: 11 }}>
+        <div style={{ color: c.textDim, marginBottom: 'calc(5px * var(--space-scale))', fontWeight: 600, letterSpacing: 0.5 }}>LEGEND (CSA color codes)</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'calc(6px * var(--space-scale)) calc(12px * var(--space-scale))', color: c.text, fontSize: 'calc(11px * var(--type-scale))' }}>
           <span><span style={{ color: '#FAC775' }}>━</span> Rebar</span>
           <span><span style={{ color: '#F09595' }}>━</span> PT cable</span>
           <span><span style={{ color: '#9BC5E8' }}>━</span> Conduit</span>
@@ -2371,7 +2342,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         pushAnnotation({
           id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           type: 'text', color, position: pendingText.pt,
-          content: pendingText.content.trim(), fontSize: 14, strokeScale,
+          content: pendingText.content.trim(), fontSize: 'calc(14px * var(--type-scale))', strokeScale,
         });
       }
       // Stamp the spot — a useEffect below focuses the input once React
@@ -2505,22 +2476,22 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{
-        padding: '10px 12px', background: c.bgRaised,
+        padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', background: c.bgRaised,
         borderBottom: `1px solid ${c.borderStrong}`,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'calc(8px * var(--space-scale))',
       }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>
+        <div style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 700, color: c.text }}>
           🖊 Annotate scan
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Btn variant="ghost" onClick={onClose} style={{ fontSize: 12 }}>Cancel</Btn>
-          <Btn variant="primary" onClick={save} style={{ fontSize: 12 }}>✓ Save</Btn>
+        <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))' }}>
+          <Btn variant="ghost" onClick={onClose} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>Cancel</Btn>
+          <Btn variant="primary" onClick={save} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>✓ Save</Btn>
         </div>
       </div>
 
       <div ref={containerRef} style={{
         flex: 1, position: 'relative', overflow: 'hidden',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'calc(8px * var(--space-scale))',
       }}>
         <div style={{
           position: 'relative', display: 'inline-block',
@@ -2576,7 +2547,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               pushAnnotation({
                 id: `ann-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 type: 'text', color, position: pendingText.pt,
-                content: text, fontSize: 14, strokeScale,
+                content: text, fontSize: 'calc(14px * var(--type-scale))', strokeScale,
               });
             }
             setPendingText(null);
@@ -2595,11 +2566,11 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               style={{
                 position: 'absolute', left, top, zIndex: 5,
                 background: c.bgRaised, border: `1px solid ${c.accent}`,
-                borderRadius: 6, padding: 6, width: inputW,
+                borderRadius: 6, padding: 'calc(6px * var(--space-scale))', width: inputW,
                 boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
-                display: 'flex', flexDirection: 'column', gap: 5,
+                display: 'flex', flexDirection: 'column', gap: 'calc(5px * var(--space-scale))',
               }}>
-              <div style={{ fontSize: 10, color: c.textFaint, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                 Comment for this spot
               </div>
               <input
@@ -2631,20 +2602,20 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                   width: '100%', boxSizing: 'border-box',
                   background: c.bg, color: c.text,
                   border: `1px solid ${c.borderStrong}`, borderRadius: 4,
-                  padding: '6px 8px', fontSize: 13, fontFamily: 'inherit',
+                  padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', fontFamily: 'inherit',
                 }} />
-              <div style={{ display: 'flex', gap: 5 }}>
+              <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))' }}>
                 <button onClick={commit}
                   style={{
-                    flex: 1, background: c.accent, color: '#fff', border: 'none',
-                    borderRadius: 4, padding: '5px 8px',
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    flex: 1, background: c.accent, color: c.onAccent, border: 'none',
+                    borderRadius: 4, padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))',
+                    fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, cursor: 'pointer',
                   }}>✓ Add</button>
                 <button onClick={cancel}
                   style={{
                     background: 'transparent', color: c.textDim,
                     border: `1px solid ${c.border}`, borderRadius: 4,
-                    padding: '5px 8px', fontSize: 11, cursor: 'pointer',
+                    padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', cursor: 'pointer',
                   }}>Cancel</button>
               </div>
             </div>
@@ -2653,23 +2624,23 @@ function AnnotationEditor({ photo, onSave, onClose }) {
       </div>
 
       <div style={{
-        padding: '10px 12px', background: c.bgRaised,
+        padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', background: c.bgRaised,
         borderTop: `1px solid ${c.borderStrong}`,
-        display: 'flex', flexDirection: 'column', gap: 8,
+        display: 'flex', flexDirection: 'column', gap: 'calc(8px * var(--space-scale))',
       }}>
         {/* === Preset chips — quick-switch color/thickness/tool combos === */}
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', flexWrap: 'wrap', alignItems: 'center' }}>
           {presets.map(p => {
             const active = isActivePreset(p);
             return (
               <button key={p.id} onClick={() => applyPreset(p)}
                 title={`${p.label} · ${p.tool} · thickness ${p.strokeScale}`}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  display: 'inline-flex', alignItems: 'center', gap: 'calc(5px * var(--space-scale))',
                   background: active ? c.accentDim : c.cardAlt,
                   border: `1px solid ${active ? c.accent : c.border}`,
-                  borderRadius: 14, padding: '4px 9px',
-                  cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  borderRadius: 14, padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))',
+                  cursor: 'pointer', fontSize: 'calc(11px * var(--type-scale))', fontWeight: 600,
                   color: active ? c.onAccentDim : c.text, whiteSpace: 'nowrap',
                 }}>
                 <span style={{
@@ -2685,8 +2656,8 @@ function AnnotationEditor({ photo, onSave, onClose }) {
             style={{
               background: showPresetEditor ? c.cardAlt : 'transparent',
               border: `1px dashed ${c.border}`,
-              borderRadius: 14, padding: '4px 9px',
-              cursor: 'pointer', fontSize: 11, color: c.textDim,
+              borderRadius: 14, padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))',
+              cursor: 'pointer', fontSize: 'calc(11px * var(--type-scale))', color: c.textDim,
             }}>
             ⚙ {showPresetEditor ? 'Close' : 'Edit'}
           </button>
@@ -2695,27 +2666,27 @@ function AnnotationEditor({ photo, onSave, onClose }) {
         {showPresetEditor && (
           <div style={{
             background: c.cardAlt, border: `1px solid ${c.border}`,
-            borderRadius: 6, padding: 8, fontSize: 11,
+            borderRadius: 6, padding: 'calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))',
           }}>
-            <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(6px * var(--space-scale))', letterSpacing: 0.5, textTransform: 'uppercase' }}>
               Customize presets (saved on this device)
             </div>
             {presets.map(p => (
               <div key={p.id} style={{
                 display: 'grid', gridTemplateColumns: '1fr auto auto auto auto',
-                gap: 5, alignItems: 'center', marginBottom: 4,
+                gap: 'calc(5px * var(--space-scale))', alignItems: 'center', marginBottom: 'calc(4px * var(--space-scale))',
               }}>
                 <input value={p.label}
                   onChange={e => updatePreset(p.id, { label: e.target.value })}
                   style={{
                     background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                    borderRadius: 4, padding: '4px 6px', fontSize: 11, minWidth: 0,
+                    borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', minWidth: 0,
                   }} />
                 <select value={p.tool}
                   onChange={e => updatePreset(p.id, { tool: e.target.value })}
                   style={{
                     background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                    borderRadius: 4, padding: '4px 4px', fontSize: 11,
+                    borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(4px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))',
                   }}>
                   <option value="freehand">Draw</option>
                   <option value="line">Line</option>
@@ -2738,16 +2709,16 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                   title="Delete preset"
                   style={{
                     background: 'transparent', border: 'none', color: c.textFaint,
-                    cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                    cursor: 'pointer', fontSize: 'calc(14px * var(--type-scale))', lineHeight: 1, padding: 0,
                   }}>✕</button>
               </div>
             ))}
-            <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
-              <Btn variant="ghost" onClick={addPreset} style={{ fontSize: 11, flex: 1 }}>
+            <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', marginTop: 'calc(6px * var(--space-scale))' }}>
+              <Btn variant="ghost" onClick={addPreset} style={{ fontSize: 'calc(11px * var(--type-scale))', flex: 1 }}>
                 + Add preset
               </Btn>
               <Btn variant="ghost" onClick={resetPresets}
-                style={{ fontSize: 11, color: c.textFaint }}
+                style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint }}
                 title="Restore the original 5 presets">
                 ↺ Reset
               </Btn>
@@ -2755,7 +2726,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'calc(5px * var(--space-scale))' }}>
           {[
             { id: 'freehand', label: '✎ Draw' },
             { id: 'line',     label: '— Line' },
@@ -2769,36 +2740,36 @@ function AnnotationEditor({ photo, onSave, onClose }) {
               style={{
                 background: tool === opt.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tool === opt.id ? c.accent : c.border}`,
-                borderRadius: 6, padding: '8px 4px',
+                borderRadius: 6, padding: 'calc(8px * var(--space-scale)) calc(4px * var(--space-scale))',
                 color: tool === opt.id ? c.onAccentDim : c.text,
-                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                fontSize: 'calc(12px * var(--type-scale))', fontWeight: 600, cursor: 'pointer',
               }}>{opt.label}</button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))' }}>
           <button onClick={() => setPanMode(m => !m)}
             title="Pan / move the photo (or hold middle-mouse and drag). Scroll to zoom."
             style={{
               background: panMode ? c.accentDim : c.cardAlt,
               border: `1px solid ${panMode ? c.accent : c.border}`,
-              borderRadius: 6, padding: '7px 11px',
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(11px * var(--space-scale))',
               color: panMode ? c.onAccentDim : c.text,
-              fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+              fontSize: 'calc(12px * var(--type-scale))', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
             }}>🖐 Pan</button>
           <span style={{ flex: 1 }} />
           <Btn variant="ghost" onClick={() => setZoom(z => Math.max(MIN_ZOOM, +(z / 1.25).toFixed(2)))}
-            title="Zoom out" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom <= MIN_ZOOM}>−</Btn>
-          <span style={{ fontSize: 12, color: c.textDim, minWidth: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+            title="Zoom out" style={{ fontSize: 'calc(16px * var(--type-scale))', padding: 'calc(4px * var(--space-scale)) calc(12px * var(--space-scale))' }} disabled={zoom <= MIN_ZOOM}>−</Btn>
+          <span style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, minWidth: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
             {Math.round(zoom * 100)}%
           </span>
           <Btn variant="ghost" onClick={() => setZoom(z => Math.min(MAX_ZOOM, +(z * 1.25).toFixed(2)))}
-            title="Zoom in" style={{ fontSize: 16, padding: '4px 12px' }} disabled={zoom >= MAX_ZOOM}>+</Btn>
+            title="Zoom in" style={{ fontSize: 'calc(16px * var(--type-scale))', padding: 'calc(4px * var(--space-scale)) calc(12px * var(--space-scale))' }} disabled={zoom >= MAX_ZOOM}>+</Btn>
           <Btn variant="ghost" onClick={resetView}
-            title="Reset zoom & position" style={{ fontSize: 12 }}
+            title="Reset zoom & position" style={{ fontSize: 'calc(12px * var(--type-scale))' }}
             disabled={zoom === 1 && pan.x === 0 && pan.y === 0}>Reset view</Btn>
         </div>
         <label style={{
-          display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textDim,
+          display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', color: c.textDim,
         }}>
           <span style={{ fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
             Thickness <span style={{ color: c.text }}>{strokeScale}</span>
@@ -2808,8 +2779,8 @@ function AnnotationEditor({ photo, onSave, onClose }) {
             onChange={e => setStrokeScale(Number(e.target.value))}
             style={{ flex: 1, accentColor: c.accent }} />
         </label>
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', alignItems: 'center' }}>
             {ANNOTATION_COLORS.map(co => (
               <button key={co.id}
                 onClick={() => setColor(co.id)}
@@ -2837,20 +2808,20 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                 }} />
             </label>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))' }}>
             <Btn variant="ghost" onClick={undo}
               title={undoLabel ? `Undo ${undoLabel}` : 'Nothing to undo'}
-              style={{ fontSize: 12 }} disabled={annotations.length === 0}>
+              style={{ fontSize: 'calc(12px * var(--type-scale))' }} disabled={annotations.length === 0}>
               ↶ Undo{undoLabel ? ` ${undoLabel}` : ''}
             </Btn>
             <Btn variant="ghost" onClick={redo}
               title="Redo last undone annotation"
-              style={{ fontSize: 12 }} disabled={redoStack.length === 0}>↷ Redo</Btn>
+              style={{ fontSize: 'calc(12px * var(--type-scale))' }} disabled={redoStack.length === 0}>↷ Redo</Btn>
             <Btn variant="ghost" onClick={clearAll}
-              style={{ fontSize: 12 }} disabled={annotations.length === 0}>Clear</Btn>
+              style={{ fontSize: 'calc(12px * var(--type-scale))' }} disabled={annotations.length === 0}>Clear</Btn>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', lineHeight: 1.45 }}>
+        <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, textAlign: 'center', lineHeight: 1.45 }}>
           {tool === 'freehand'
             ? 'Press and drag to draw a smooth line. Release to finish.'
             : tool === 'text'
@@ -2859,7 +2830,7 @@ function AnnotationEditor({ photo, onSave, onClose }) {
                 ? `Tap to finish the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift to snap to 15° angles.' : ''}`
                 : `Tap to start the ${tool}.${(tool === 'line' || tool === 'arrow') ? ' Hold Shift while dragging for angle-snap.' : ''}`}
         </div>
-        <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', opacity: 0.85 }}>
+        <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, textAlign: 'center', opacity: 0.85 }}>
           Scroll to zoom toward the cursor · 🖐 Pan (or middle-mouse drag) to move
         </div>
       </div>
@@ -2887,20 +2858,20 @@ function SectionsQuickNav({ sections }) {
   return (
     <div className="no-print" style={{
       position: 'fixed', right: 14, bottom: 70, zIndex: 90,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'calc(6px * var(--space-scale))',
     }}>
       {open && (
         <div style={{
           background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 8, padding: 6,
+          borderRadius: 8, padding: 'calc(6px * var(--space-scale))',
           maxHeight: '60vh', overflowY: 'auto',
           minWidth: 200, maxWidth: 260,
           boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
         }}>
           <div style={{
-            fontSize: 10, color: c.textFaint, fontWeight: 700,
+            fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, fontWeight: 700,
             letterSpacing: 1, textTransform: 'uppercase',
-            padding: '4px 8px 6px',
+            padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale)) calc(6px * var(--space-scale))',
           }}>Jump to section</div>
           {sections.map(s => (
             <button key={s.id}
@@ -2909,7 +2880,7 @@ function SectionsQuickNav({ sections }) {
                 display: 'block', width: '100%', textAlign: 'left',
                 background: 'transparent', color: c.text,
                 border: 'none', borderRadius: 4,
-                padding: '7px 8px', fontSize: 12, cursor: 'pointer',
+                padding: 'calc(7px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
               onMouseEnter={e => e.currentTarget.style.background = c.cardAlt}
@@ -2924,12 +2895,12 @@ function SectionsQuickNav({ sections }) {
         title="Jump to a section"
         aria-label="Jump to a section"
         style={{
-          background: c.accent, color: '#fff',
+          background: c.accent, color: c.onAccent,
           border: `1px solid ${c.accent}`, borderRadius: 22,
-          padding: '9px 12px', fontSize: 13, fontWeight: 700,
+          padding: 'calc(9px * var(--space-scale)) calc(12px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', fontWeight: 700,
           cursor: 'pointer', fontFamily: 'inherit',
           boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', gap: 5,
+          display: 'flex', alignItems: 'center', gap: 'calc(5px * var(--space-scale))',
         }}>
         {open ? '✕' : '📑'} Sections
       </button>
@@ -2966,24 +2937,24 @@ function ShortcutsPanel() {
   return (
     <div className="no-print" style={{
       position: 'fixed', left: 14, bottom: 70, zIndex: 90,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 'calc(6px * var(--space-scale))',
     }}>
       {open && (
         <div style={{
           background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-          borderRadius: 8, padding: '8px 10px',
+          borderRadius: 8, padding: 'calc(8px * var(--space-scale)) calc(10px * var(--space-scale))',
           maxHeight: '62vh', overflowY: 'auto',
           minWidth: 256, maxWidth: 310,
           boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
         }}>
           {groups.map(g => (
-            <div key={g.title} style={{ marginBottom: 9 }}>
+            <div key={g.title} style={{ marginBottom: 'calc(9px * var(--space-scale))' }}>
               <div style={{
-                fontSize: 10, color: c.textFaint, fontWeight: 700,
-                letterSpacing: 1, textTransform: 'uppercase', padding: '2px 2px 6px',
+                fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, fontWeight: 700,
+                letterSpacing: 1, textTransform: 'uppercase', padding: 'calc(2px * var(--space-scale)) calc(2px * var(--space-scale)) calc(6px * var(--space-scale))',
               }}>{g.title}</div>
               {g.items.map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', gap: 8, padding: '3px 2px', fontSize: 12, lineHeight: 1.4 }}>
+                <div key={k} style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))', padding: 'calc(3px * var(--space-scale)) calc(2px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', lineHeight: 1.4 }}>
                   <span style={{ flex: '0 0 auto', fontWeight: 700, color: c.text, minWidth: 110 }}>{k}</span>
                   <span style={{ color: c.textDim }}>{v}</span>
                 </div>
@@ -2991,8 +2962,8 @@ function ShortcutsPanel() {
             </div>
           ))}
           <div style={{
-            fontSize: 10, color: c.textFaint, paddingTop: 5,
-            borderTop: `1px solid ${c.border}`, marginTop: 1,
+            fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, paddingTop: 'calc(5px * var(--space-scale))',
+            borderTop: `1px solid ${c.border}`, marginTop: 'calc(1px * var(--space-scale))',
           }}>On-screen only — never prints.</div>
         </div>
       )}
@@ -3002,10 +2973,10 @@ function ShortcutsPanel() {
         style={{
           background: c.cardAlt, color: c.text,
           border: `1px solid ${c.borderStrong}`, borderRadius: 22,
-          padding: '9px 12px', fontSize: 13, fontWeight: 700,
+          padding: 'calc(9px * var(--space-scale)) calc(12px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', fontWeight: 700,
           cursor: 'pointer', fontFamily: 'inherit',
           boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', gap: 5,
+          display: 'flex', alignItems: 'center', gap: 'calc(5px * var(--space-scale))',
         }}>
         {open ? '✕' : '⌨'} Shortcuts
       </button>
@@ -3035,7 +3006,7 @@ function WhatsNewModal({ entries, onClose }) {
       style={{
         position: 'fixed', inset: 0, zIndex: 1200,
         background: 'rgba(0,0,0,0.7)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', padding: 14,
+        alignItems: 'center', justifyContent: 'center', padding: 'calc(14px * var(--space-scale))',
       }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{
@@ -3045,18 +3016,18 @@ function WhatsNewModal({ entries, onClose }) {
           color: c.text, boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
         }}>
         <div style={{
-          padding: '16px 18px', borderBottom: `1px solid ${c.border}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: 'calc(16px * var(--space-scale)) calc(18px * var(--space-scale))', borderBottom: `1px solid ${c.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'calc(12px * var(--space-scale))',
         }}>
           <div>
-            <div style={{ fontSize: 11, color: c.textFaint, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 700 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 700 }}>
               What's new
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>
+            <div style={{ fontSize: 'calc(18px * var(--type-scale))', fontWeight: 800, marginTop: 'calc(2px * var(--space-scale))' }}>
               AK ScanReport · v{entries[0].version}
             </div>
             {entries[0].headline && (
-              <div style={{ fontSize: 12, color: c.textDim, marginTop: 3 }}>
+              <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, marginTop: 'calc(3px * var(--space-scale))' }}>
                 {entries[0].headline}
               </div>
             )}
@@ -3064,44 +3035,45 @@ function WhatsNewModal({ entries, onClose }) {
           <button onClick={onClose} aria-label="Close"
             style={{
               background: 'transparent', border: 'none', color: c.text,
-              fontSize: 22, cursor: 'pointer', padding: 4, lineHeight: 1,
+              fontSize: 'calc(22px * var(--type-scale))', cursor: 'pointer', padding: 'calc(4px * var(--space-scale))', lineHeight: 1,
             }}>×</button>
         </div>
-        <div style={{ padding: '12px 18px 18px' }}>
+        <div style={{ padding: 'calc(12px * var(--space-scale)) calc(18px * var(--space-scale)) calc(18px * var(--space-scale))' }}>
           {entries.map((entry, ei) => (
             <div key={entry.version} style={{
               borderTop: ei === 0 ? 'none' : `1px solid ${c.border}`,
-              marginTop: ei === 0 ? 0 : 14, paddingTop: ei === 0 ? 0 : 14,
+              marginTop: ei === 0 ? 0 : 'calc(14px * var(--space-scale))',
+              paddingTop: ei === 0 ? 0 : 'calc(14px * var(--space-scale))',
             }}>
               {ei > 0 && (
-                <div style={{ fontSize: 12, color: c.textFaint, marginBottom: 6, fontWeight: 700 }}>
+                <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(6px * var(--space-scale))', fontWeight: 700 }}>
                   v{entry.version} · {entry.headline}
                 </div>
               )}
               {entry.items.map((item, i) => (
                 <div key={i} style={{
-                  padding: '10px 11px', marginBottom: 7,
+                  padding: 'calc(10px * var(--space-scale)) calc(11px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))',
                   background: c.cardAlt, borderRadius: 7,
                   border: `1px solid ${c.border}`,
                 }}>
                   <div style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                    display: 'flex', alignItems: 'flex-start', gap: 'calc(8px * var(--space-scale))',
                     justifyContent: 'space-between',
                   }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{item.title}</div>
+                    <div style={{ fontSize: 'calc(13.5px * var(--type-scale))', fontWeight: 700 }}>{item.title}</div>
                     {(item.anchorId || item.anchorClass) && (
                       <button
                         onClick={() => jumpTo(item)}
                         style={{
-                          background: c.accent, color: c.onAccent || '#fff',
+                          background: c.accent, color: c.onAccent,
                           border: 'none', borderRadius: 5,
-                          padding: '5px 9px', fontSize: 11, fontWeight: 700,
+                          padding: 'calc(5px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700,
                           cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                         }}>Take me there →</button>
                     )}
                   </div>
                   {item.body && (
-                    <div style={{ fontSize: 12, color: c.textDim, marginTop: 5, lineHeight: 1.45 }}>
+                    <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, marginTop: 'calc(5px * var(--space-scale))', lineHeight: 1.45 }}>
                       {item.body}
                     </div>
                   )}
@@ -3110,9 +3082,9 @@ function WhatsNewModal({ entries, onClose }) {
             </div>
           ))}
           <div style={{
-            display: 'flex', justifyContent: 'flex-end', marginTop: 8,
+            display: 'flex', justifyContent: 'flex-end', marginTop: 'calc(8px * var(--space-scale))',
           }}>
-            <Btn variant="primary" onClick={onClose} style={{ fontSize: 12 }}>
+            <Btn variant="primary" onClick={onClose} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>
               Got it
             </Btn>
           </div>
@@ -3132,7 +3104,7 @@ function PhotoLightbox({ photo, onClose }) {
       style={{
         position: 'fixed', inset: 0, zIndex: 1100,
         background: 'rgba(0,0,0,0.88)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', padding: 16,
+        alignItems: 'center', justifyContent: 'center', padding: 'calc(16px * var(--space-scale))',
       }}>
       <button
         onClick={onClose} aria-label="Close photo"
@@ -3140,7 +3112,7 @@ function PhotoLightbox({ photo, onClose }) {
           position: 'absolute', top: 14, right: 16, zIndex: 2,
           background: 'rgba(255,255,255,0.16)', color: '#fff',
           border: '1px solid rgba(255,255,255,0.45)', borderRadius: 8,
-          padding: '8px 13px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+          padding: 'calc(8px * var(--space-scale)) calc(13px * var(--space-scale))', fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, cursor: 'pointer',
         }}>
         ✕ Close
       </button>
@@ -3152,7 +3124,7 @@ function PhotoLightbox({ photo, onClose }) {
           style={{ width: 'min(94vw, 1100px)' }}
         />
         {photo.caption && (
-          <div style={{ color: '#fff', fontSize: 13, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+          <div style={{ color: '#fff', fontSize: 'calc(13px * var(--type-scale))', marginTop: 'calc(10px * var(--space-scale))', textAlign: 'center', lineHeight: 1.5 }}>
             {photo.caption}
           </div>
         )}
@@ -3204,7 +3176,7 @@ function CaptionField({ value, onCommit, style, ...rest }) {
       style={{
         width: '100%', background: c.cardAlt,
         border: `1px solid ${c.border}`, borderRadius: 6,
-        padding: '10px 12px', color: c.text, fontSize: 16,
+        padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', color: c.text, fontSize: 'calc(16px * var(--type-scale))',
         fontFamily: 'inherit', boxSizing: 'border-box',
         resize: 'vertical', minHeight: 64,
         ...style,
@@ -3306,20 +3278,20 @@ function ScanPhotos({ report, update }) {
   return (
     <Card title="Scan photos" badge={
       <span style={{
-        background: c.cardAlt, color: c.textDim, fontSize: 11,
-        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+        background: c.cardAlt, color: c.textDim, fontSize: 'calc(11px * var(--type-scale))',
+        padding: 'calc(2px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4, fontWeight: 500,
       }}>{report.scanPhotos.length}</span>
     }>
-      <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
         Add photos of the scanned area with markup, obstructions, or context shots.
         Each photo is grouped by confidence and embedded into the PDF.
       </div>
 
-      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))' }}>
         <label style={{
           display: 'block', background: c.accent, border: `1px solid ${c.accent}`,
-          borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
-          color: '#fff', cursor: 'pointer', fontWeight: 700,
+          borderRadius: 6, padding: 'calc(11px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(13px * var(--type-scale))',
+          color: c.onAccent, cursor: 'pointer', fontWeight: 700,
         }}>
           📷 Take photo
           <input ref={cameraRef} type="file" accept="image/*"
@@ -3327,7 +3299,7 @@ function ScanPhotos({ report, update }) {
         </label>
         <label style={{
           display: 'block', background: c.cardAlt, border: `1px dashed ${c.borderStrong}`,
-          borderRadius: 6, padding: '11px', textAlign: 'center', fontSize: 13,
+          borderRadius: 6, padding: 'calc(11px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(13px * var(--type-scale))',
           color: c.text, cursor: 'pointer', fontWeight: 500,
         }}>
           📂 From library
@@ -3338,7 +3310,7 @@ function ScanPhotos({ report, update }) {
 
       {report.scanPhotos.length === 0 ? (
         <div style={{
-          padding: '14px', textAlign: 'center', fontSize: 12,
+          padding: 'calc(14px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))',
           color: c.textFaint, background: c.cardAlt, borderRadius: 6,
         }}>
           No photos yet.
@@ -3346,19 +3318,19 @@ function ScanPhotos({ report, update }) {
       ) : grouped.map(group => {
         if (group.photos.length === 0) return null;
         return (
-          <div key={group.level} style={{ marginBottom: 12 }}>
+          <div key={group.level} style={{ marginBottom: 'calc(12px * var(--space-scale))' }}>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '6px 9px', marginBottom: 7,
+              display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))',
+              padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))',
               background: group.meta.bg,
               borderLeft: `3px solid ${group.meta.color}`,
               borderRadius: '0 4px 4px 0',
             }}>
               <span style={{
-                fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.6,
                 color: group.meta.color, textTransform: 'uppercase',
               }}>{group.meta.label}</span>
-              <span style={{ fontSize: 11, color: c.textDim }}>
+              <span style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim }}>
                 · {group.photos.length} photo{group.photos.length === 1 ? '' : 's'}
               </span>
             </div>
@@ -3401,12 +3373,12 @@ function ScanPhotos({ report, update }) {
                   onDragEnd={() => { setDragPhotoId(null); setOverPhotoId(null); }}
                   style={{
                     border: `1px solid ${c.border}`, borderRadius: 6,
-                    padding: 9, marginBottom: 7, background: c.cardAlt,
+                    padding: 'calc(9px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))', background: c.cardAlt,
                     cursor: 'grab',
                   }}>
                   <div className="no-print">
                   <div style={{
-                    display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 7,
+                    display: 'flex', gap: 'calc(9px * var(--space-scale))', alignItems: 'flex-start', marginBottom: 'calc(7px * var(--space-scale))',
                   }}>
                     <div style={{ width: 84, flexShrink: 0 }}>
                       <button
@@ -3431,8 +3403,8 @@ function ScanPhotos({ report, update }) {
                         <span style={{
                           position: 'absolute', bottom: 3, right: 3,
                           background: 'rgba(0,0,0,0.62)', color: '#fff',
-                          borderRadius: 4, fontSize: 11, lineHeight: 1,
-                          padding: '2px 4px', pointerEvents: 'none',
+                          borderRadius: 4, fontSize: 'calc(11px * var(--type-scale))', lineHeight: 1,
+                          padding: 'calc(2px * var(--space-scale)) calc(4px * var(--space-scale))', pointerEvents: 'none',
                         }}>🔍</span>
                       </button>
                     </div>
@@ -3441,13 +3413,13 @@ function ScanPhotos({ report, update }) {
                         value={photo.caption}
                         onCommit={v => updatePhoto(photo.id, { caption: v })}
                         placeholder="Caption: what does this photo show?"
-                        style={{ minHeight: 56, fontSize: 12, padding: '6px 9px' }}
+                        style={{ minHeight: 56, fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))' }}
                       />
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginTop: 'calc(5px * var(--space-scale))' }}>
                         <Select
                           value={photo.scanType || 'site'}
                           onChange={e => updatePhoto(photo.id, { scanType: e.target.value })}
-                          style={{ padding: '6px 8px', fontSize: 12 }}
+                          style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                         >
                           {SCAN_TYPES.map(t => (
                             <option key={t.id} value={t.id}>{t.label}</option>
@@ -3458,7 +3430,7 @@ function ScanPhotos({ report, update }) {
                           onChange={e => updatePhoto(photo.id, { locationRef: e.target.value.toUpperCase() })}
                           placeholder="Loc (L1)"
                           list={`loc-list-${photo.id}`}
-                          style={{ padding: '6px 8px', fontSize: 12 }}
+                          style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                         />
                         <datalist id={`loc-list-${photo.id}`}>
                           {(report.scanLocations || []).map(l => (
@@ -3470,31 +3442,31 @@ function ScanPhotos({ report, update }) {
                         value={photo.scaleInfo || ''}
                         onChange={e => updatePhoto(photo.id, { scaleInfo: e.target.value })}
                         placeholder="Scale (e.g. 0–70 cm × 0–20 in)"
-                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                        style={{ marginTop: 'calc(5px * var(--space-scale))', padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                       />
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 5 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginTop: 'calc(5px * var(--space-scale))' }}>
                         <Input
                           value={photo.panelGroup || ''}
                           onChange={e => updatePhoto(photo.id, { panelGroup: e.target.value })}
                           placeholder="Panel group"
-                          style={{ padding: '6px 9px', fontSize: 12 }}
+                          style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                         />
                         <Input
                           value={photo.panelLabel || ''}
                           onChange={e => updatePhoto(photo.id, { panelLabel: e.target.value })}
                           placeholder="Sub-label (a/b/c)"
-                          style={{ padding: '6px 9px', fontSize: 12 }}
+                          style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                         />
                       </div>
                       <Input
                         value={photo.pinRef}
                         onChange={e => updatePhoto(photo.id, { pinRef: e.target.value })}
                         placeholder="Refs pin (e.g. A, B)"
-                        style={{ marginTop: 5, padding: '6px 9px', fontSize: 12 }}
+                        style={{ marginTop: 'calc(5px * var(--space-scale))', padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}
                       />
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 5 }}>
+                  <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))' }}>
                     {[
                       { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
                       { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
@@ -3508,51 +3480,51 @@ function ScanPhotos({ report, update }) {
                           background: photo.confidence === opt.id ? opt.bg : c.card,
                           color: photo.confidence === opt.id ? opt.color : c.textDim,
                           border: `1px solid ${photo.confidence === opt.id ? opt.color : c.border}`,
-                          borderRadius: 4, padding: '5px 6px',
-                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          borderRadius: 4, padding: 'calc(5px * var(--space-scale)) calc(6px * var(--space-scale))',
+                          fontSize: 'calc(11px * var(--type-scale))', fontWeight: 600, cursor: 'pointer',
                         }}>{opt.label} conf.</button>
                     ))}
                   </div>
                   {pendingAnnotateIds.has(photo.id) && (
                     <div style={{
-                      marginTop: 5, padding: '7px 8px',
+                      marginTop: 'calc(5px * var(--space-scale))', padding: 'calc(7px * var(--space-scale)) calc(8px * var(--space-scale))',
                       background: c.accentDim, color: c.onAccentDim,
                       border: `1px solid ${c.accent}`, borderRadius: 5,
-                      fontSize: 11, display: 'flex', alignItems: 'center',
-                      gap: 6, flexWrap: 'wrap',
+                      fontSize: 'calc(11px * var(--type-scale))', display: 'flex', alignItems: 'center',
+                      gap: 'calc(6px * var(--space-scale))', flexWrap: 'wrap',
                     }}>
                       <span style={{ flex: 1, minWidth: 100 }}>Open annotation editor for this photo?</span>
                       <button
                         onClick={() => { dismissAnnotatePrompt(photo.id); setEditingPhotoId(photo.id); }}
                         style={{
                           background: '#fff', color: '#000', border: 'none',
-                          borderRadius: 4, padding: '4px 8px',
-                          fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale))',
+                          fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, cursor: 'pointer',
                         }}>Annotate now</button>
                       <button
                         onClick={() => dismissAnnotatePrompt(photo.id)}
                         style={{
                           background: 'transparent', color: c.onAccentDim,
                           border: '1px solid rgba(255,255,255,0.4)',
-                          borderRadius: 4, padding: '4px 8px',
-                          fontSize: 11, cursor: 'pointer',
+                          borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale))',
+                          fontSize: 'calc(11px * var(--type-scale))', cursor: 'pointer',
                         }}>Not now</button>
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                  <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', marginTop: 'calc(5px * var(--space-scale))' }}>
                     <Btn variant="primary"
                       onClick={() => { dismissAnnotatePrompt(photo.id); setEditingPhotoId(photo.id); }}
-                      style={{ flex: 1.4, fontSize: 11, padding: '5px 6px' }}>
+                      style={{ flex: 1.4, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(5px * var(--space-scale)) calc(6px * var(--space-scale))' }}>
                       🖊 Annotate{annotationCount > 0 ? ` (${annotationCount})` : ''}
                     </Btn>
                     <Btn variant="ghost" onClick={() => movePhoto(photo.id, -1)}
-                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(5px * var(--space-scale)) calc(6px * var(--space-scale))' }}
                       disabled={globalIdx === 0}>↑ Up</Btn>
                     <Btn variant="ghost" onClick={() => movePhoto(photo.id, 1)}
-                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}
+                      style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(5px * var(--space-scale)) calc(6px * var(--space-scale))' }}
                       disabled={globalIdx === report.scanPhotos.length - 1}>↓ Down</Btn>
                     <Btn variant="danger" onClick={() => removePhoto(photo.id)}
-                      style={{ flex: 1, fontSize: 11, padding: '5px 6px' }}>✕</Btn>
+                      style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(5px * var(--space-scale)) calc(6px * var(--space-scale))' }}>✕</Btn>
                   </div>
                   </div>{/* /no-print editor */}
                   {/* Print-only clean figure: large photo + caption + confidence */}
@@ -3627,7 +3599,7 @@ function GPRScans({ report }) {
 
   return (
     <Card title="GPR scans · full size">
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
         Full-size render of every scan (B-scan, C-scan, Focus, marked-up slab) grouped by
         type. Multi-panel figures (a/b/c) display side-by-side. Annotations are baked in.
       </div>
@@ -3635,18 +3607,18 @@ function GPRScans({ report }) {
       {byType.map(group => {
         const { groups, singles } = partition(group.items);
         return (
-          <div key={group.type} style={{ marginBottom: 14 }}>
+          <div key={group.type} style={{ marginBottom: 'calc(14px * var(--space-scale))' }}>
             <div style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+              fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.6,
               color: c.textDim, textTransform: 'uppercase',
-              padding: '6px 9px', marginBottom: 8,
+              padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', marginBottom: 'calc(8px * var(--space-scale))',
               borderLeft: `3px solid ${c.accent}`, background: c.cardAlt,
             }}>{group.label} · {group.items.length}</div>
 
             {/* Multi-panel groups */}
             {Object.entries(groups).map(([gname, items]) => (
               <div key={gname} className="gpr-scan-figure gpr-panel-group" style={{
-                display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10,
+                display: 'flex', flexWrap: 'wrap', gap: 'calc(8px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))',
               }}>
                 {items
                   .slice()
@@ -3654,10 +3626,10 @@ function GPRScans({ report }) {
                   .map(p => (
                     <div key={p.id} className="gpr-panel" style={{
                       flex: '1 1 30%', minWidth: 0,
-                      border: `1px solid ${c.border}`, borderRadius: 4, padding: 6,
+                      border: `1px solid ${c.border}`, borderRadius: 4, padding: 'calc(6px * var(--space-scale))',
                       background: c.cardAlt,
                     }}>
-                      <div className="gpr-panel-sublabel" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, color: c.text }}>
+                      <div className="gpr-panel-sublabel" style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, marginBottom: 'calc(4px * var(--space-scale))', color: c.text }}>
                         {p.panelLabel ? `(${p.panelLabel}) ` : ''}{p.locationRef || ''}
                       </div>
                       <AnnotatedImage
@@ -3666,14 +3638,14 @@ function GPRScans({ report }) {
                         style={{ background: '#000', borderRadius: 3 }}
                       />
                       {(p.caption || p.scaleInfo) && (
-                        <div style={{ fontSize: 11, color: c.text, marginTop: 5, lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.text, marginTop: 'calc(5px * var(--space-scale))', lineHeight: 1.4 }}>
                           {p.caption && <div>{p.caption}</div>}
                           {p.scaleInfo && <div style={{ color: c.textDim }}>{p.scaleInfo}</div>}
                         </div>
                       )}
                     </div>
                   ))}
-                <div style={{ flexBasis: '100%', fontSize: 11, color: c.textDim, fontStyle: 'italic' }}>
+                <div style={{ flexBasis: '100%', fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, fontStyle: 'italic' }}>
                   Figure: {gname}
                 </div>
               </div>
@@ -3682,12 +3654,12 @@ function GPRScans({ report }) {
             {/* Singles */}
             {singles.map(p => (
               <div key={p.id} className="gpr-scan-figure" style={{
-                border: `1px solid ${c.border}`, borderRadius: 6, padding: 9,
-                marginBottom: 9, background: c.cardAlt,
+                border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(9px * var(--space-scale))',
+                marginBottom: 'calc(9px * var(--space-scale))', background: c.cardAlt,
               }}>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginBottom: 6, fontSize: 11, color: c.textDim,
+                  marginBottom: 'calc(6px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', color: c.textDim,
                 }}>
                   <span>
                     {p.locationRef && <strong style={{ color: c.text }}>{p.locationRef}</strong>}
@@ -3701,7 +3673,7 @@ function GPRScans({ report }) {
                   style={{ background: '#000', borderRadius: 4 }}
                 />
                 {p.caption && (
-                  <div style={{ fontSize: 12, color: c.text, marginTop: 6, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.text, marginTop: 'calc(6px * var(--space-scale))', lineHeight: 1.4 }}>
                     {p.caption}
                   </div>
                 )}
@@ -3724,10 +3696,10 @@ function NorthArrow({ rotation, size = 36 }) {
   return (
     <div style={{
       position: 'absolute', top: 6, right: 6,
-      background: '#fff', borderRadius: 6, padding: '3px 6px',
-      display: 'flex', alignItems: 'center', gap: 4,
+      background: '#fff', borderRadius: 6, padding: 'calc(3px * var(--space-scale)) calc(6px * var(--space-scale))',
+      display: 'flex', alignItems: 'center', gap: 'calc(4px * var(--space-scale))',
       boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-      fontSize: 10, fontWeight: 700, color: '#000',
+      fontSize: 'calc(10px * var(--type-scale))', fontWeight: 700, color: '#000',
       letterSpacing: 0.5, lineHeight: 1,
     }}>
       <span style={{
@@ -3742,8 +3714,8 @@ function NorthArrow({ rotation, size = 36 }) {
 const photoMenuBtnStyle = (c) => ({
   background: c.card, color: c.text,
   border: `1px solid ${c.borderStrong}`,
-  borderRadius: 8, padding: '14px 6px',
-  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+  borderRadius: 8, padding: 'calc(14px * var(--space-scale)) calc(6px * var(--space-scale))',
+  fontSize: 'calc(14px * var(--type-scale))', fontWeight: 700, cursor: 'pointer',
   textAlign: 'center', lineHeight: 1.2,
 });
 
@@ -3953,11 +3925,11 @@ function ScanLocations({ report, update }) {
   return (
     <Card title="Scan locations · per-location cards" badge={
       <span style={{
-        background: c.cardAlt, color: c.textDim, fontSize: 11,
-        padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+        background: c.cardAlt, color: c.textDim, fontSize: 'calc(11px * var(--type-scale))',
+        padding: 'calc(2px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4, fontWeight: 500,
       }}>{report.scanLocations.length}</span>
     }>
-      <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(10px * var(--space-scale))', lineHeight: 1.5 }}>
         Each location (L1, L2…) prints as a side-by-side card: notes + core spec on
         the left, annotated photo with north arrow on the right. This is the industry-
         standard "Concrete Scanning Data" format.
@@ -3990,16 +3962,16 @@ function ScanLocations({ report, update }) {
             const isLast = idx > 0;
             zoneHeader = (
               <div className="zone-group-header" style={{
-                marginTop: isLast ? 16 : 0, marginBottom: 8,
-                padding: '8px 12px', borderRadius: 6,
+                marginTop: isLast ? 16 : 0, marginBottom: 'calc(8px * var(--space-scale))',
+                padding: 'calc(8px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6,
                 background: c.amberBg, borderLeft: `4px solid ${c.amber}`,
               }}>
                 <div style={{
-                  fontSize: 13, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
+                  fontSize: 'calc(13px * var(--type-scale))', fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
                   color: c.amberStrong,
                 }}>{label}</div>
                 {notes && (
-                  <div style={{ fontSize: 11.5, color: c.text, lineHeight: 1.45, marginTop: 4, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 'calc(11.5px * var(--type-scale))', color: c.text, lineHeight: 1.45, marginTop: 'calc(4px * var(--space-scale))', whiteSpace: 'pre-wrap' }}>
                     {notes}
                   </div>
                 )}
@@ -4030,7 +4002,7 @@ function ScanLocations({ report, update }) {
             }}
             style={{
               border: `1px solid ${c.borderStrong}`, borderRadius: 8,
-              marginBottom: 12, overflow: 'hidden',
+              marginBottom: 'calc(12px * var(--space-scale))', overflow: 'hidden',
             }}>
             {/* On-screen header: doubles as drag handle */}
             <div className="loc-header"
@@ -4042,27 +4014,27 @@ function ScanLocations({ report, update }) {
               }}
               onDragEnd={() => { setDragId(null); setOverId(null); }}
               style={{
-                background: c.accent, color: '#fff', padding: '7px 11px',
-                fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                background: c.accent, color: c.onAccent, padding: 'calc(7px * var(--space-scale)) calc(11px * var(--space-scale))',
+                fontSize: 'calc(12px * var(--type-scale))', fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'calc(8px * var(--space-scale))',
                 cursor: 'grab', userSelect: 'none',
               }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))' }}>
                 <span className="no-print" style={{
-                  fontSize: 13, opacity: 0.85, letterSpacing: 0,
+                  fontSize: 'calc(13px * var(--type-scale))', opacity: 0.85, letterSpacing: 0,
                   fontWeight: 900, lineHeight: 1,
                 }} aria-hidden>⋮⋮</span>
                 Concrete Scanning Data
               </span>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>{loc.label}</span>
+              <span style={{ fontSize: 'calc(11px * var(--type-scale))', opacity: 0.8 }}>{loc.label}</span>
             </div>
 
-            <div className="loc-body" style={{ padding: 11 }}>
+            <div className="loc-body" style={{ padding: 'calc(11px * var(--space-scale))' }}>
               {/* Left side (notes etc) */}
               <div className="loc-left">
                 {/* Print-only summary line */}
-                <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 8 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Location: {loc.label || '—'}</div>
+                <div className="loc-print-only" style={{ fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(8px * var(--space-scale))' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 'calc(4px * var(--space-scale))' }}>Location: {loc.label || '—'}</div>
                   {(loc.coreCount || loc.coreSize || loc.overCut) && (
                     <div>
                       Notes: {loc.coreCount && `${loc.coreCount} `}
@@ -4072,29 +4044,29 @@ function ScanLocations({ report, update }) {
                   )}
                 </div>
 
-                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(8px * var(--space-scale))' }}>
                   <Field label="Label">
                     <Input value={loc.label}
                       onChange={e => updateLoc(loc.id, { label: e.target.value })}
-                      style={{ padding: '6px 8px', fontSize: 13, fontWeight: 600 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', fontWeight: 600 }} />
                   </Field>
                   <Field label="Count">
                     <Input value={loc.coreCount}
                       onChange={e => updateLoc(loc.id, { coreCount: e.target.value })}
                       placeholder="(1)"
-                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))' }} />
                   </Field>
                   <Field label="Core">
                     <Input value={loc.coreSize}
                       onChange={e => updateLoc(loc.id, { coreSize: e.target.value })}
                       placeholder='5"'
-                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))' }} />
                   </Field>
                   <Field label="Over-cut">
                     <Input value={loc.overCut}
                       onChange={e => updateLoc(loc.id, { overCut: e.target.value })}
                       placeholder='8"'
-                      style={{ padding: '6px 8px', fontSize: 13 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))' }} />
                   </Field>
                 </div>
 
@@ -4110,19 +4082,19 @@ function ScanLocations({ report, update }) {
                 {/* Print-only notes text */}
                 {loc.notes && (
                   <div className="loc-print-only" style={{
-                    fontSize: 12, lineHeight: 1.5, marginBottom: 10,
+                    fontSize: 'calc(12px * var(--type-scale))', lineHeight: 1.5, marginBottom: 'calc(10px * var(--space-scale))',
                     whiteSpace: 'pre-wrap',
                   }}>{loc.notes}</div>
                 )}
 
                 {/* What's in the slab — editor */}
-                <div className="loc-edit-only" style={{ marginBottom: 10 }}>
+                <div className="loc-edit-only" style={{ marginBottom: 'calc(10px * var(--space-scale))' }}>
                   <div style={{
-                    fontSize: 10.5, color: c.textDim, marginBottom: 6,
+                    fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(6px * var(--space-scale))',
                     textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
                   }}>What's in the slab</div>
                   <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 7,
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(4px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))',
                   }}>
                     {SLAB_TYPES.map(t => (
                       <button key={t.id}
@@ -4130,7 +4102,7 @@ function ScanLocations({ report, update }) {
                         style={{
                           background: c.cardAlt, border: `1px solid ${c.border}`,
                           borderLeft: `4px solid ${t.color}`, borderRadius: 5,
-                          padding: '6px 6px', fontSize: 11, fontWeight: 700,
+                          padding: 'calc(6px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700,
                           color: c.text, cursor: 'pointer', textAlign: 'left',
                           letterSpacing: 0.2,
                         }}>+ {t.label}</button>
@@ -4141,30 +4113,30 @@ function ScanLocations({ report, update }) {
                     return (
                       <div key={sc.id} style={{
                         border: `1px solid ${c.border}`, borderLeft: `4px solid ${t.color}`,
-                        borderRadius: 5, padding: 6, marginBottom: 5, background: c.cardAlt,
+                        borderRadius: 5, padding: 'calc(6px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))', background: c.cardAlt,
                       }}>
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          marginBottom: 5,
+                          marginBottom: 'calc(5px * var(--space-scale))',
                         }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{t.label}</span>
+                          <span style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, color: c.text }}>{t.label}</span>
                           <Btn variant="ghost" onClick={() => removeSlabContent(loc.id, sc.id)}
-                            style={{ padding: '2px 7px', fontSize: 11 }}>✕</Btn>
+                            style={{ padding: 'calc(2px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✕</Btn>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))' }}>
                           <Input value={sc.depth}
                             onChange={e => updateSlabContent(loc.id, sc.id, { depth: e.target.value })}
                             placeholder='Depth (e.g. 2.5")'
-                            style={{ padding: '5px 8px', fontSize: 12 }} />
+                            style={{ padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                           <Input value={sc.count}
                             onChange={e => updateSlabContent(loc.id, sc.id, { count: e.target.value })}
                             placeholder='Count / spacing'
-                            style={{ padding: '5px 8px', fontSize: 12 }} />
+                            style={{ padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                         </div>
                         <Input value={sc.notes}
                           onChange={e => updateSlabContent(loc.id, sc.id, { notes: e.target.value })}
                           placeholder='Description / orientation / notes'
-                          style={{ padding: '5px 8px', fontSize: 12 }} />
+                          style={{ padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                       </div>
                     );
                   })}
@@ -4172,13 +4144,13 @@ function ScanLocations({ report, update }) {
 
                 {/* What's in the slab — print */}
                 {(loc.slabContents || []).length > 0 && (
-                  <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 3 }}>What's in the slab:</div>
+                  <div className="loc-print-only" style={{ fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(10px * var(--space-scale))' }}>
+                    <div style={{ fontWeight: 700, marginBottom: 'calc(3px * var(--space-scale))' }}>What's in the slab:</div>
                     {(loc.slabContents || []).map((sc, i) => {
                       const t = SLAB_TYPE_BY_ID[sc.type] || SLAB_TYPE_BY_ID.other;
                       const bits = [sc.depth, sc.count].filter(Boolean).join(' · ');
                       return (
-                        <div key={i} style={{ marginBottom: 2 }}>
+                        <div key={i} style={{ marginBottom: 'calc(2px * var(--space-scale))' }}>
                           • <strong>{t.label}</strong>
                           {bits && ` — ${bits}`}
                           {sc.notes && ` — ${sc.notes}`}
@@ -4191,32 +4163,32 @@ function ScanLocations({ report, update }) {
                 {/* Depth callouts — editor */}
                 <div className="loc-edit-only">
                   <div style={{
-                    fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                    fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(4px * var(--space-scale))',
                     textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
                   }}>Depth callouts</div>
                   {(loc.depthCallouts || []).map((d, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 5, marginBottom: 5 }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))' }}>
                       <Input value={d.position}
                         onChange={e => updateDepth(loc.id, loc, i, { position: e.target.value })}
                         placeholder="east side"
-                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                        style={{ padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                       <Input value={d.depth}
                         onChange={e => updateDepth(loc.id, loc, i, { depth: e.target.value })}
                         placeholder='1.5"'
-                        style={{ padding: '5px 8px', fontSize: 12 }} />
+                        style={{ padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                       <Btn variant="ghost" onClick={() => removeDepth(loc.id, loc, i)}
-                        style={{ padding: '4px 8px', fontSize: 11 }}>✕</Btn>
+                        style={{ padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✕</Btn>
                     </div>
                   ))}
                   <Btn onClick={() => addDepth(loc.id, loc)}
-                    style={{ width: '100%', fontSize: 11, padding: '5px 8px', marginBottom: 8 }}>
+                    style={{ width: '100%', fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', marginBottom: 'calc(8px * var(--space-scale))' }}>
                     + Add depth callout
                   </Btn>
                 </div>
 
                 {/* Depth callouts — print */}
                 {(loc.depthCallouts || []).filter(d => d.position || d.depth).length > 0 && (
-                  <div className="loc-print-only" style={{ fontSize: 12, marginBottom: 10 }}>
+                  <div className="loc-print-only" style={{ fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(10px * var(--space-scale))' }}>
                     {(loc.depthCallouts || []).filter(d => d.position || d.depth).map((d, i) => (
                       <div key={i}>• {d.position}: {d.depth}</div>
                     ))}
@@ -4234,12 +4206,12 @@ function ScanLocations({ report, update }) {
 
                 {loc.instruction && (
                   <div className="loc-print-only" style={{
-                    fontSize: 12, fontWeight: 700, marginTop: 4,
+                    fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, marginTop: 'calc(4px * var(--space-scale))',
                   }}>- {loc.instruction}</div>
                 )}
 
                 {report.enableNamedZones && (
-                  <div className="loc-edit-only" style={{ marginBottom: 7 }}>
+                  <div className="loc-edit-only" style={{ marginBottom: 'calc(7px * var(--space-scale))' }}>
                     <Field label="Zone">
                       <Select value={loc.zoneId || ''}
                         onChange={e => updateLoc(loc.id, { zoneId: e.target.value || null })}>
@@ -4252,7 +4224,7 @@ function ScanLocations({ report, update }) {
                   </div>
                 )}
 
-                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div className="loc-edit-only" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
                   <Field label="Verdict">
                     <Select value={loc.verdict}
                       onChange={e => updateLoc(loc.id, { verdict: e.target.value })}
@@ -4263,7 +4235,7 @@ function ScanLocations({ report, update }) {
                     </Select>
                   </Field>
                   <Field label="Confidence">
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 'calc(4px * var(--space-scale))' }}>
                       {[
                         { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
                         { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
@@ -4277,8 +4249,8 @@ function ScanLocations({ report, update }) {
                             background: loc.confidence === opt.id ? opt.bg : c.cardAlt,
                             color: loc.confidence === opt.id ? opt.color : c.textDim,
                             border: `1px solid ${loc.confidence === opt.id ? opt.color : c.border}`,
-                            borderRadius: 4, padding: '7px 4px',
-                            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                            borderRadius: 4, padding: 'calc(7px * var(--space-scale)) calc(4px * var(--space-scale))',
+                            fontSize: 'calc(11px * var(--type-scale))', fontWeight: 600, cursor: 'pointer',
                           }}>{opt.label}</button>
                       ))}
                     </div>
@@ -4286,23 +4258,23 @@ function ScanLocations({ report, update }) {
                 </div>
 
                 <div className="loc-print-only" style={{
-                  marginTop: 8, paddingTop: 6, borderTop: '1px solid #ccc',
-                  fontSize: 11, color: '#444',
+                  marginTop: 'calc(8px * var(--space-scale))', paddingTop: 'calc(6px * var(--space-scale))', borderTop: '1px solid #ccc',
+                  fontSize: 'calc(11px * var(--type-scale))', color: '#444',
                 }}>
                   Verdict: <strong>{vm.label}</strong> · Confidence: <strong>{(loc.confidence || 'high').toUpperCase()}</strong>
                 </div>
               </div>
 
               {/* Right side (photo + north arrow) */}
-              <div className="loc-right" style={{ marginTop: 12 }}>
+              <div className="loc-right" style={{ marginTop: 'calc(12px * var(--space-scale))' }}>
                 <div style={{
-                  fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                  fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(4px * var(--space-scale))',
                   textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
                 }}>Annotated photo</div>
                 <div className="loc-photo" style={{
                   position: 'relative', background: c.cardAlt, borderRadius: 6,
                   aspectRatio: '4 / 3', overflow: 'hidden',
-                  border: `1px solid ${c.border}`, marginBottom: 8,
+                  border: `1px solid ${c.border}`, marginBottom: 'calc(8px * var(--space-scale))',
                   cursor: 'pointer',
                 }}
                   onClick={(e) => {
@@ -4333,14 +4305,14 @@ function ScanLocations({ report, update }) {
                       <div style={{
                         position: 'absolute', bottom: 6, right: 6,
                         background: 'rgba(0,0,0,0.7)', color: '#fff',
-                        padding: '3px 8px', borderRadius: 4,
-                        fontSize: 12, fontWeight: 700, letterSpacing: 0.5,
+                        padding: 'calc(3px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4,
+                        fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.5,
                       }}>{loc.label}</div>
                       <div className="no-print" style={{
                         position: 'absolute', top: 6, left: 6,
                         background: 'rgba(0,0,0,0.7)', color: '#fff',
-                        padding: '3px 8px', borderRadius: 4,
-                        fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
+                        padding: 'calc(3px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4,
+                        fontSize: 'calc(10px * var(--type-scale))', fontWeight: 600, letterSpacing: 0.5,
                         textTransform: 'uppercase',
                       }}>🖊 Click to edit</div>
                     </>
@@ -4348,12 +4320,12 @@ function ScanLocations({ report, update }) {
                     <div className="no-print" style={{
                       position: 'absolute', inset: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexDirection: 'column', gap: 4,
-                      color: c.textFaint, fontSize: 12, padding: 16, textAlign: 'center',
+                      flexDirection: 'column', gap: 'calc(4px * var(--space-scale))',
+                      color: c.textFaint, fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(16px * var(--space-scale))', textAlign: 'center',
                     }}>
-                      <div style={{ fontSize: 28 }}>📷</div>
+                      <div style={{ fontSize: 'calc(28px * var(--type-scale))' }}>📷</div>
                       <div style={{ fontWeight: 600, color: c.text }}>Click to add a photo</div>
-                      <div style={{ fontSize: 10.5 }}>Take · From library · Annotate</div>
+                      <div style={{ fontSize: 'calc(10.5px * var(--type-scale))' }}>Take · From library · Annotate</div>
                     </div>
                   )}
 
@@ -4368,18 +4340,18 @@ function ScanLocations({ report, update }) {
                         zIndex: 10,
                       }}>
                       <div style={{
-                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
-                        padding: 12, width: '88%', maxWidth: 320,
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))',
+                        padding: 'calc(12px * var(--space-scale))', width: '88%', maxWidth: 320,
                       }}>
                         <button
                           onClick={() => { takePhotoRefs.current[loc.id]?.click(); setMenuLocId(null); }}
                           style={photoMenuBtnStyle(c)}>
-                          📷<br /><span style={{ fontSize: 11 }}>Take photo</span>
+                          📷<br /><span style={{ fontSize: 'calc(11px * var(--type-scale))' }}>Take photo</span>
                         </button>
                         <button
                           onClick={() => { libraryRefs.current[loc.id]?.click(); setMenuLocId(null); }}
                           style={photoMenuBtnStyle(c)}>
-                          📂<br /><span style={{ fontSize: 11 }}>From library</span>
+                          📂<br /><span style={{ fontSize: 'calc(11px * var(--type-scale))' }}>From library</span>
                         </button>
                         <button
                           onClick={() => {
@@ -4388,7 +4360,7 @@ function ScanLocations({ report, update }) {
                             setMenuLocId(null);
                           }}
                           style={photoMenuBtnStyle(c)}>
-                          🖊<br /><span style={{ fontSize: 11 }}>Annotate</span>
+                          🖊<br /><span style={{ fontSize: 'calc(11px * var(--type-scale))' }}>Annotate</span>
                         </button>
                         <button
                           onClick={() => {
@@ -4397,8 +4369,8 @@ function ScanLocations({ report, update }) {
                             updateLoc(loc.id, { photo: null, photoAnnotations: [] });
                             setMenuLocId(null);
                           }}
-                          style={{ ...photoMenuBtnStyle(c), color: '#ff7b7b' }}>
-                          ✕<br /><span style={{ fontSize: 11 }}>Remove</span>
+                          style={{ ...photoMenuBtnStyle(c), color: c.redStrong }}>
+                          ✕<br /><span style={{ fontSize: 'calc(11px * var(--type-scale))' }}>Remove</span>
                         </button>
                         <button
                           onClick={() => setMenuLocId(null)}
@@ -4435,28 +4407,28 @@ function ScanLocations({ report, update }) {
                   );
                   if (refs.length === 0) return null;
                   return (
-                    <div className="loc-scan-refs" style={{ marginBottom: 8 }}>
+                    <div className="loc-scan-refs" style={{ marginBottom: 'calc(8px * var(--space-scale))' }}>
                       <div style={{
-                        fontSize: 10.5, color: c.textDim, marginBottom: 4,
+                        fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(4px * var(--space-scale))',
                         textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600,
                       }}>Referenced scans · {refs.length}</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
                         {refs.map(p => (
                           <div key={p.id} className="loc-scan-ref" style={{
                             border: `1px solid ${c.border}`, borderRadius: 4,
-                            background: c.cardAlt, padding: 4,
+                            background: c.cardAlt, padding: 'calc(4px * var(--space-scale))',
                           }}>
                             <AnnotatedImage
                               src={photoSrc(p)}
                               annotations={p.annotations || []}
                               style={{ background: '#000', borderRadius: 3 }}
                             />
-                            <div style={{ fontSize: 10, color: c.text, marginTop: 3, lineHeight: 1.35 }}>
+                            <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.text, marginTop: 'calc(3px * var(--space-scale))', lineHeight: 1.35 }}>
                               <strong>{SCAN_TYPE_LABEL[p.scanType || 'site'] || p.scanType}</strong>
                               {p.scaleInfo && <> · {p.scaleInfo}</>}
                             </div>
                             {p.caption && (
-                              <div style={{ fontSize: 10, color: c.textDim, lineHeight: 1.35 }}>
+                              <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textDim, lineHeight: 1.35 }}>
                                 {p.caption}
                               </div>
                             )}
@@ -4470,8 +4442,8 @@ function ScanLocations({ report, update }) {
                 <div className="loc-photo-controls">
                   <label style={{
                     display: 'block', background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-                    borderRadius: 6, padding: '8px', textAlign: 'center', fontSize: 12,
-                    color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 8,
+                    borderRadius: 6, padding: 'calc(8px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))',
+                    color: c.text, cursor: 'pointer', fontWeight: 500, marginBottom: 'calc(8px * var(--space-scale))',
                   }}>
                     📷 {locPhotoSrc(loc) ? 'Replace photo' : 'Add photo'}
                     <input
@@ -4491,15 +4463,15 @@ function ScanLocations({ report, update }) {
               </div>
 
               {/* Row controls */}
-              <div className="loc-controls" style={{ display: 'flex', gap: 5, marginTop: 8 }}>
+              <div className="loc-controls" style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', marginTop: 'calc(8px * var(--space-scale))' }}>
                 <Btn variant="ghost" onClick={() => moveLoc(loc.id, -1)}
                   disabled={idx === 0}
-                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↑ Up</Btn>
+                  style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale))' }}>↑ Up</Btn>
                 <Btn variant="ghost" onClick={() => moveLoc(loc.id, 1)}
                   disabled={idx === report.scanLocations.length - 1}
-                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>↓ Down</Btn>
+                  style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale))' }}>↓ Down</Btn>
                 <Btn variant="danger" onClick={() => removeLoc(loc.id)}
-                  style={{ flex: 1, fontSize: 11, padding: '6px' }}>✕ Remove</Btn>
+                  style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale))' }}>✕ Remove</Btn>
               </div>
             </div>
           </div>
@@ -4510,8 +4482,8 @@ function ScanLocations({ report, update }) {
 
       {report.scanLocations.length === 0 && (
         <div className="no-print" style={{
-          padding: '14px', textAlign: 'center', fontSize: 12,
-          color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 8,
+          padding: 'calc(14px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))',
+          color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 'calc(8px * var(--space-scale))',
         }}>
           No scan locations yet. Add one to build the side-by-side card.
         </div>
@@ -4528,42 +4500,42 @@ function ScanLocations({ report, update }) {
           zIndex: 800, maxWidth: 680, margin: '0 auto',
           background: c.bgRaised, color: c.text,
           border: `2px solid ${c.accent}`, borderRadius: 10,
-          padding: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+          padding: 'calc(12px * var(--space-scale))', boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
         }}>
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            marginBottom: 8, gap: 8,
+            marginBottom: 'calc(8px * var(--space-scale))', gap: 'calc(8px * var(--space-scale))',
           }}>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase' }}>
               🔗 Sync changes to the rest of the report ({pendingSyncs.length})
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))' }}>
               <Btn variant="ghost" onClick={() => skipSyncs(pendingSyncs.map(s => s.id))}
-                style={{ fontSize: 11 }}>Skip all</Btn>
+                style={{ fontSize: 'calc(11px * var(--type-scale))' }}>Skip all</Btn>
               <Btn variant="primary" onClick={() => approveSyncs(pendingSyncs.map(s => s.id))}
-                style={{ fontSize: 11 }}>✓ Approve all</Btn>
+                style={{ fontSize: 'calc(11px * var(--type-scale))' }}>✓ Approve all</Btn>
             </div>
           </div>
-          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 5 }}>
+          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 'calc(5px * var(--space-scale))' }}>
             {pendingSyncs.map(s => (
               <div key={s.id} style={{
-                display: 'flex', gap: 6, alignItems: 'center',
-                padding: '6px 8px', background: c.cardAlt,
+                display: 'flex', gap: 'calc(6px * var(--space-scale))', alignItems: 'center',
+                padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', background: c.cardAlt,
                 border: `1px solid ${c.border}`, borderRadius: 6,
-                fontSize: 11.5,
+                fontSize: 'calc(11.5px * var(--type-scale))',
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: c.text }}>{s.what}</div>
-                  <div style={{ color: c.textDim, marginTop: 1 }}>
+                  <div style={{ color: c.textDim, marginTop: 'calc(1px * var(--space-scale))' }}>
                     <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{s.oldValue || '—'}</span>
                     {' → '}
                     <strong style={{ color: c.accent }}>{s.newValue}</strong>
                   </div>
                 </div>
                 <Btn variant="ghost" onClick={() => skipSyncs([s.id])}
-                  style={{ padding: '4px 8px', fontSize: 11 }}>Skip</Btn>
+                  style={{ padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>Skip</Btn>
                 <Btn variant="primary" onClick={() => approveSyncs([s.id])}
-                  style={{ padding: '4px 8px', fontSize: 11 }}>✓ Apply</Btn>
+                  style={{ padding: 'calc(4px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✓ Apply</Btn>
               </div>
             ))}
           </div>
@@ -4744,26 +4716,26 @@ function Assistant({ report, update }) {
       <button onClick={() => setCollapsed(x => !x)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: c.accentDim, color: '#fff', border: 'none',
-          padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+          background: c.accentDim, color: c.onAccent, border: 'none',
+          padding: 'calc(8px * var(--space-scale)) calc(12px * var(--space-scale))', cursor: 'pointer', fontWeight: 600, fontSize: 'calc(13px * var(--type-scale))',
         }}>
         <span>🤖 Assistant {tips[0]?.level === 'ok' ? '· all good' : `· ${tips.length} tip${tips.length === 1 ? '' : 's'}`}</span>
-        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 16 }}>{collapsed ? '▴' : '▾'}</span>
+        <span style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))', alignItems: 'center' }}>
+          <span style={{ fontSize: 'calc(16px * var(--type-scale))' }}>{collapsed ? '▴' : '▾'}</span>
           <span onClick={(e) => { e.stopPropagation(); update({ assistantOn: false }); }}
-            style={{ fontSize: 14, opacity: 0.8 }}>✕</span>
+            style={{ fontSize: 'calc(14px * var(--type-scale))', opacity: 0.8 }}>✕</span>
         </span>
       </button>
       {!collapsed && (
-        <div style={{ maxHeight: 320, overflowY: 'auto', padding: 8 }}>
+        <div style={{ maxHeight: 320, overflowY: 'auto', padding: 'calc(8px * var(--space-scale))' }}>
           {tips.map((t, i) => {
             const s = tone[t.level];
             return (
               <div key={t.customId || i} style={{
                 background: s.bg, borderLeft: `3px solid ${s.bd}`,
-                padding: '7px 9px', marginBottom: 6, borderRadius: '0 6px 6px 0',
-                fontSize: 12, color: c.text, lineHeight: 1.4,
-                display: 'flex', alignItems: 'flex-start', gap: 6,
+                padding: 'calc(7px * var(--space-scale)) calc(9px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))', borderRadius: '0 6px 6px 0',
+                fontSize: 'calc(12px * var(--type-scale))', color: c.text, lineHeight: 1.4,
+                display: 'flex', alignItems: 'flex-start', gap: 'calc(6px * var(--space-scale))',
               }}>
                 <span style={{ color: s.fg, fontWeight: 700, flexShrink: 0 }}>{s.icon}</span>
                 <span style={{ flex: 1 }}>{t.text}</span>
@@ -4772,7 +4744,7 @@ function Assistant({ report, update }) {
                     title="Delete this custom reminder"
                     style={{
                       background: 'transparent', border: 'none', color: c.textFaint,
-                      cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                      cursor: 'pointer', fontSize: 'calc(14px * var(--type-scale))', lineHeight: 1, padding: 0,
                       flexShrink: 0,
                     }}>✕</button>
                 )}
@@ -4782,7 +4754,7 @@ function Assistant({ report, update }) {
 
           {showAdd ? (
             <div style={{
-              marginTop: 4, padding: 8, background: c.cardAlt,
+              marginTop: 'calc(4px * var(--space-scale))', padding: 'calc(8px * var(--space-scale))', background: c.cardAlt,
               border: `1px solid ${c.border}`, borderRadius: 6,
             }}>
               <textarea
@@ -4792,17 +4764,17 @@ function Assistant({ report, update }) {
                 style={{
                   width: '100%', minHeight: 52, boxSizing: 'border-box',
                   background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                  borderRadius: 4, padding: 6, fontSize: 12, fontFamily: 'inherit',
+                  borderRadius: 4, padding: 'calc(6px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', fontFamily: 'inherit',
                   resize: 'vertical',
                 }}
               />
-              <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', marginTop: 'calc(6px * var(--space-scale))', alignItems: 'center' }}>
                 <select
                   value={draftLevel}
                   onChange={e => setDraftLevel(e.target.value)}
                   style={{
                     background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                    borderRadius: 4, padding: '4px 6px', fontSize: 12,
+                    borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))',
                   }}>
                   <option value="high">High ⚠</option>
                   <option value="med">Med •</option>
@@ -4811,25 +4783,25 @@ function Assistant({ report, update }) {
                 <button onClick={addCustom}
                   disabled={!draftText.trim()}
                   style={{
-                    background: c.accent, color: '#fff', border: 'none',
-                    borderRadius: 4, padding: '5px 10px', fontSize: 12, fontWeight: 700,
+                    background: c.accent, color: c.onAccent, border: 'none',
+                    borderRadius: 4, padding: 'calc(5px * var(--space-scale)) calc(10px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700,
                     cursor: draftText.trim() ? 'pointer' : 'not-allowed',
                     opacity: draftText.trim() ? 1 : 0.5,
                   }}>Add</button>
                 <button onClick={() => { setShowAdd(false); setDraftText(''); }}
                   style={{
                     background: 'transparent', color: c.textDim, border: `1px solid ${c.border}`,
-                    borderRadius: 4, padding: '5px 10px', fontSize: 12, cursor: 'pointer',
+                    borderRadius: 4, padding: 'calc(5px * var(--space-scale)) calc(10px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', cursor: 'pointer',
                   }}>Cancel</button>
               </div>
             </div>
           ) : (
             <button onClick={() => setShowAdd(true)}
               style={{
-                width: '100%', marginTop: 2,
+                width: '100%', marginTop: 'calc(2px * var(--space-scale))',
                 background: 'transparent', color: c.textDim,
                 border: `1px dashed ${c.border}`, borderRadius: 6,
-                padding: '6px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', cursor: 'pointer', fontWeight: 600,
               }}>
               + Add custom reminder
             </button>
@@ -4852,10 +4824,15 @@ export default function GSSIReportApp() {
   const [reportsIndex, setReportsIndex] = useState(lib.index);
   const [report, setReport] = useState(lib.currentReport);
 
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem('ak_theme') || 'dark'; }
-    catch { return 'dark'; }
-  });
+  // Theme name lives in the engine (init'd in main.jsx before mount).
+  // themechange keeps this state in sync with every apply() source —
+  // the ☀/☾ toggle, the console, or a future Settings tab.
+  const [theme, setTheme] = useState(() => ThemeEngine.activeName || 'ak-steel');
+  useEffect(() => {
+    const onThemeChange = (e) => { if (e.detail) setTheme(e.detail); };
+    document.addEventListener('themechange', onThemeChange);
+    return () => document.removeEventListener('themechange', onThemeChange);
+  }, []);
 
   // ---------- Auto-save status indicator ----------
   const [savedAt, setSavedAt] = useState(null);
@@ -4923,12 +4900,9 @@ export default function GSSIReportApp() {
     };
   }, []);
 
-  useEffect(() => {
-    try { localStorage.setItem('ak_theme', theme); } catch {}
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  // ☀/☾ flips between the dark default and paper; ak-ember (or any future
+  // dark theme) also toggles out to paper and back to steel.
+  const toggleTheme = () => ThemeEngine.apply(theme === 'ak-paper' ? 'ak-steel' : 'ak-paper');
 
   // ---------- Cloud sync (opt-in: only active once signed in) ----------
   // The app stays fully local until a user signs in via the header ☁ button.
@@ -4965,6 +4939,7 @@ export default function GSSIReportApp() {
 
   // ---------- Reports library (work on multiple reports) ----------
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [themePanelOpen, setThemePanelOpen] = useState(false);
 
   const switchReport = (id) => {
     if (id === currentIdRef.current) { setReportsOpen(false); return; }
@@ -5348,8 +5323,8 @@ export default function GSSIReportApp() {
       if (!lastTarget || lastTarget.el !== card || lastTarget.side !== side) {
         clearMarker();
         card.style.boxShadow = side === 'above'
-          ? 'inset 0 3px 0 0 #e02020'
-          : 'inset 0 -3px 0 0 #e02020';
+          ? `inset 0 3px 0 0 ${c.signal}`
+          : `inset 0 -3px 0 0 ${c.signal}`;
         lastTarget = { el: card, side };
       }
     };
@@ -5681,24 +5656,23 @@ export default function GSSIReportApp() {
   return (
     <div className="ak-shell" style={{
       background: c.bg, minHeight: '100vh', color: c.text,
-      fontFamily: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      padding: '14px 12px 100px', margin: '0 auto',
+      fontFamily: 'var(--type-font-body)',
+      padding: 'calc(14px * var(--space-scale)) calc(12px * var(--space-scale)) calc(100px * var(--space-scale))', margin: '0 auto',
     }}>
-      <ThemeStyles />
       {previewMode && (
         <div className="preview-bar">
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
             👁 PDF Preview · {SECTION_IDS.filter(s => vis(s.id)).length} of {SECTION_IDS.length} sections
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))' }}>
             <button onClick={() => setPreviewMode(false)} style={{
               background: 'transparent', color: '#fff', border: '1px solid #555',
-              borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700,
+              borderRadius: 6, padding: 'calc(6px * var(--space-scale)) calc(12px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700,
               cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
             }}>✕ Exit preview</button>
             <button onClick={exportPDF} style={{
               background: '#e02020', color: '#fff', border: '1px solid #e02020',
-              borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 800,
+              borderRadius: 6, padding: 'calc(6px * var(--space-scale)) calc(14px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', fontWeight: 800,
               cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
             }}>📄 Save / send PDF</button>
           </div>
@@ -5706,6 +5680,11 @@ export default function GSSIReportApp() {
       )}
       <style>{`
         .print-only { display: none; }
+        /* Theme Studio guard: density / text-size tinkering is screen-only.
+           Print and Preview pin both scales to 1 so the deliverable never
+           moves (stylesheet !important beats the engine's inline vars). */
+        @media print { :root { --type-scale: 1 !important; --space-scale: 1 !important; } }
+        body.preview-mode { --type-scale: 1 !important; --space-scale: 1 !important; }
         /* In Preview mode, treat the page as if it were printing — so the
            brand ribbon (logo + company name pinned to the very top of the
            report) actually shows. Without this rule, the ribbon was hidden
@@ -5715,9 +5694,10 @@ export default function GSSIReportApp() {
         .brand-ribbon {
           display: flex; align-items: center; gap: 12px;
           padding: 10px 14px; margin-bottom: 12px;
-          background: linear-gradient(90deg, rgba(212,69,69,0.08), rgba(212,69,69,0));
-          border-left: 3px solid var(--ak-accent);
-          border-radius: 6px;
+          background: linear-gradient(90deg,
+            color-mix(in srgb, var(--color-accent) 8%, transparent), transparent);
+          border-left: 3px solid var(--color-accent);
+          border-radius: var(--radius-md);
         }
         .brand-ribbon-mark {
           height: 44px; width: auto; flex-shrink: 0;
@@ -5726,17 +5706,17 @@ export default function GSSIReportApp() {
         .brand-ribbon-text { line-height: 1.2; }
         .brand-ribbon-title {
           font-size: 11pt; font-weight: 800;
-          color: var(--ak-text); letter-spacing: 0.3px;
+          color: var(--color-text); letter-spacing: 0.3px;
         }
         .brand-ribbon-tagline {
           font-size: 9.5pt; font-style: italic;
-          color: var(--ak-accent); margin-top: 2px;
+          color: var(--color-accent); margin-top: 2px;
         }
         .brand-signoff {
           margin-top: 18px; padding-top: 10px;
-          border-top: 1px solid var(--ak-border);
+          border-top: 1px solid var(--color-border);
           font-size: 9pt; font-style: italic; text-align: center;
-          color: var(--ak-text-faint);
+          color: var(--color-text-faint);
         }
         @media print {
           .brand-ribbon { background: #fafafa; }
@@ -5746,7 +5726,7 @@ export default function GSSIReportApp() {
         }
         /* Mirror brand-ribbon print colours into Preview mode — without
            these, the title renders white-on-light (invisible) since the
-           dark-theme var(--ak-text) is still in effect on screen. */
+           dark-theme var(--color-text) is still in effect on screen. */
         body.preview-mode .brand-ribbon { background: #fafafa !important; }
         body.preview-mode .brand-ribbon-title { color: #111 !important; }
         body.preview-mode .brand-ribbon-tagline { color: #a32626 !important; }
@@ -5792,7 +5772,7 @@ export default function GSSIReportApp() {
         .scan-photo-row.dragging { opacity: 0.35; }
         .scan-location-card.drop-target,
         .scan-photo-row.drop-target {
-          outline: 2px dashed #e02020;
+          outline: 2px dashed var(--color-signal);
           outline-offset: -2px;
         }
         /* Typography polish — crisp rendering and aligned figures for a more
@@ -6317,8 +6297,8 @@ export default function GSSIReportApp() {
       {/* === HEADER === */}
       <div className="no-print ak-header" style={{
         position: 'relative',
-        marginBottom: 14,
-        padding: '12px 14px 14px',
+        marginBottom: 'calc(14px * var(--space-scale))',
+        padding: 'calc(12px * var(--space-scale)) calc(14px * var(--space-scale)) calc(14px * var(--space-scale))',
         background: c.bgRaised,
         border: `1px solid ${c.borderStrong}`,
         borderLeft: `4px solid ${c.accent}`,
@@ -6327,25 +6307,25 @@ export default function GSSIReportApp() {
         overflow: 'visible',
       }}>
         {/* Action buttons sit in their own row; save status pinned to the left */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))', flexWrap: 'wrap' }}>
           <span title="Your work auto-saves to this device" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4,
+            display: 'inline-flex', alignItems: 'center', gap: 'calc(5px * var(--space-scale))',
+            fontSize: 'calc(10.5px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.4,
             color: c.green, background: c.greenBg,
             border: `1px solid ${c.green}`, borderRadius: 20,
-            padding: '4px 9px', whiteSpace: 'nowrap',
+            padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))', whiteSpace: 'nowrap',
           }}>
             ✓ {savedAt
               ? `Saved ${new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
               : 'Auto-save on'}
           </span>
-          <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={{ display: 'inline-flex', gap: 'calc(6px * var(--space-scale))', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {report.status === 'approved' ? (
             <span title="Approved & archived — manage in Authorship & review"
               style={{
                 background: c.greenBg, color: c.green, border: `1px solid ${c.green}`,
-                borderRadius: 6, padding: '7px 10px',
-                fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+                borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))',
+                fontSize: 'calc(12px * var(--type-scale))', fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
               }}>✓ APPROVED</span>
           ) : (
           <button onClick={() => update({ status: report.status === 'issued' ? 'draft' : 'issued' })}
@@ -6357,8 +6337,8 @@ export default function GSSIReportApp() {
               background: report.status === 'issued' ? c.greenBg : c.amberBg,
               color: report.status === 'issued' ? c.green : c.amber,
               border: `1px solid ${report.status === 'issued' ? c.green : c.amber}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(12px * var(--type-scale))', fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1, letterSpacing: 0.4,
             }}>
             {report.status === 'issued' ? '✓ ISSUED' : '● DRAFT'}
           </button>
@@ -6367,25 +6347,36 @@ export default function GSSIReportApp() {
           <FeedbackButton c={c} />
           {typeof window !== 'undefined' && window.akDesktop && <VersionToggle c={c} />}
           <button onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
+            title={theme !== 'ak-paper' ? 'Switch to light (outdoor) mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
             style={{
               background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', fontSize: 15,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', fontSize: 'calc(15px * var(--type-scale))',
               color: c.text, cursor: 'pointer', fontWeight: 900,
               whiteSpace: 'nowrap', lineHeight: 1,
             }}>
-            {theme === 'dark' ? '☀' : '☾'}
+            {theme !== 'ak-paper' ? '☀' : '☾'}
+          </button>
+          <button onClick={() => setThemePanelOpen(true)}
+            title="Theme studio — colors, density, text size"
+            aria-label="Open theme studio"
+            style={{
+              background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', fontSize: 'calc(15px * var(--type-scale))',
+              color: c.text, cursor: 'pointer', fontWeight: 900,
+              whiteSpace: 'nowrap', lineHeight: 1,
+            }}>
+            🎨
           </button>
           <button onClick={() => update({ assistantOn: !report.assistantOn })}
             title={report.assistantOn ? 'Hide assistant' : 'Show assistant'}
             aria-label="Toggle assistant"
             style={{
               background: report.assistantOn ? c.accentDim : c.cardAlt,
-              color: report.assistantOn ? '#fff' : c.textDim,
+              color: report.assistantOn ? c.onAccent : c.textDim,
               border: `1px solid ${report.assistantOn ? c.accent : c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             🤖 {report.assistantOn ? 'On' : 'Off'}
           </button>
@@ -6395,8 +6386,8 @@ export default function GSSIReportApp() {
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             🗂 {reportsIndex.length > 1 ? reportsIndex.length : ''}
           </button>
@@ -6406,8 +6397,8 @@ export default function GSSIReportApp() {
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             👥
           </button>
@@ -6417,8 +6408,8 @@ export default function GSSIReportApp() {
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(13px * var(--type-scale))', fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             ❓
           </button>
@@ -6428,15 +6419,15 @@ export default function GSSIReportApp() {
             style={{
               background: c.cardAlt, color: c.text,
               border: `1px solid ${c.borderStrong}`,
-              borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-              fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
+              borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+              fontSize: 'calc(13px * var(--type-scale))', fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1,
             }}>
             ↻
           </button>
           <label style={{
             background: c.accent, border: `1px solid ${c.accent}`,
-            borderRadius: 6, padding: '7px 12px', textAlign: 'center', fontSize: 11,
-            color: '#fff', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
+            borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(12px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(11px * var(--type-scale))',
+            color: c.onAccent, cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap',
             letterSpacing: 1, textTransform: 'uppercase',
           }}>
             📂 Load
@@ -6481,23 +6472,23 @@ export default function GSSIReportApp() {
           Tier / Sections / Print setup are setup, not data. Collapsing them
           by default puts Project info closer to the top so the engineer can
           start typing without scrolling past five config cards every report. */}
-      <div className="no-print" style={{ marginBottom: 12 }}>
+      <div className="no-print" style={{ marginBottom: 'calc(12px * var(--space-scale))' }}>
         <button
           onClick={() => setSetupCollapsed(s => !s)}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: c.cardAlt, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 8, padding: '10px 14px', cursor: 'pointer',
-            color: c.text, fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+            borderRadius: 8, padding: 'calc(10px * var(--space-scale)) calc(14px * var(--space-scale))', cursor: 'pointer',
+            color: c.text, fontFamily: 'inherit', fontSize: 'calc(13px * var(--type-scale))', fontWeight: 600,
           }}>
           <span>⚙ Setup — tier · sections · print order</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: c.textFaint, fontWeight: 500 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, fontWeight: 500 }}>
             {!setupCollapsed && <span>tap to hide</span>}
-            <span style={{ fontSize: 14 }}>{setupCollapsed ? '▾' : '▴'}</span>
+            <span style={{ fontSize: 'calc(14px * var(--type-scale))' }}>{setupCollapsed ? '▾' : '▴'}</span>
           </span>
         </button>
         {setupCollapsed && (
-          <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 5, padding: '0 4px', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(5px * var(--space-scale))', padding: '0 calc(4px * var(--space-scale))', lineHeight: 1.4 }}>
             Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong>
             {' · '}
             Sections: <strong style={{ color: c.textDim }}>
@@ -6508,15 +6499,15 @@ export default function GSSIReportApp() {
         {/* Quick-access strip: Preview shortcut + (dev only) demo loader.
             Without these, hitting Preview means scrolling into the Print
             setup card every time — slow loop when debugging PDF styling. */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', marginTop: 'calc(6px * var(--space-scale))' }}>
           <Btn variant="primary" onClick={() => setPreviewMode(true)}
-            style={{ flex: 1, fontSize: 11, padding: '6px 8px' }}>
+            style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))' }}>
             👁 Preview saved PDF
           </Btn>
           {import.meta.env.DEV && (
             <Btn variant="ghost" onClick={loadDemoReport}
               title="DEV ONLY — fill the current report with realistic sample data"
-              style={{ fontSize: 11, padding: '6px 10px' }}>
+              style={{ fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(10px * var(--space-scale))' }}>
               🧪 Demo
             </Btn>
           )}
@@ -6526,7 +6517,7 @@ export default function GSSIReportApp() {
 
       {/* === TIER PICKER === */}
       <Card title="Report tier" dense className="no-print">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(6px * var(--space-scale))' }}>
           {[
             { id: 'quick', label: 'Quick Mark', sub: 'Field 1-pg' },
             { id: 'standard', label: 'Standard', sub: 'Engineer review' },
@@ -6545,12 +6536,12 @@ export default function GSSIReportApp() {
               style={{
                 background: tier === t.id ? c.accentDim : c.cardAlt,
                 border: `1px solid ${tier === t.id ? c.accent : c.border}`,
-                borderRadius: 6, padding: '8px 4px', cursor: 'pointer',
+                borderRadius: 6, padding: 'calc(8px * var(--space-scale)) calc(4px * var(--space-scale))', cursor: 'pointer',
                 color: tier === t.id ? c.onAccentDim : c.text,
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600 }}>{t.label}</div>
-              <div style={{ fontSize: 10, color: tier === t.id ? c.onAccentDim : c.textDim, marginTop: 2 }}>{t.sub}</div>
+              <div style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 600 }}>{t.label}</div>
+              <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: tier === t.id ? c.onAccentDim : c.textDim, marginTop: 'calc(2px * var(--space-scale))' }}>{t.sub}</div>
             </button>
           ))}
         </div>
@@ -6558,7 +6549,7 @@ export default function GSSIReportApp() {
 
       {/* === REPORT SECTIONS (Xradar-style togglable features) === */}
       <Card title="Report sections" dense className="no-print">
-        <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
           Switch each Xradar-style feature on or off independently. Tier sets sensible
           defaults; you can override per report.
         </div>
@@ -6573,8 +6564,8 @@ export default function GSSIReportApp() {
           { id: 'brandFlourishes',     label: 'Brand flourishes',           hint: 'Adds a subtle Aggarwal Kamikaze\'s ribbon at the top of the printed report and a small "signed by the crew" line at the bottom. Off by default so reviewers see a clean professional document.' },
         ].map(f => (
           <label key={f.id} style={{
-            display: 'flex', alignItems: 'flex-start', gap: 9,
-            padding: '7px 8px', marginBottom: 4,
+            display: 'flex', alignItems: 'flex-start', gap: 'calc(9px * var(--space-scale))',
+            padding: 'calc(7px * var(--space-scale)) calc(8px * var(--space-scale))', marginBottom: 'calc(4px * var(--space-scale))',
             background: report[f.id] ? c.accentDim : c.cardAlt,
             border: `1px solid ${report[f.id] ? c.accent : c.border}`,
             borderRadius: 6, cursor: 'pointer',
@@ -6582,14 +6573,14 @@ export default function GSSIReportApp() {
             <input type="checkbox"
               checked={!!report[f.id]}
               onChange={e => update({ [f.id]: e.target.checked })}
-              style={{ marginTop: 2, flexShrink: 0, accentColor: c.accent }} />
+              style={{ marginTop: 'calc(2px * var(--space-scale))', flexShrink: 0, accentColor: c.accent }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontSize: 13, fontWeight: 700,
+                fontSize: 'calc(13px * var(--type-scale))', fontWeight: 700,
                 color: report[f.id] ? c.onAccentDim : c.text,
               }}>{f.label}</div>
               <div style={{
-                fontSize: 11, lineHeight: 1.4, marginTop: 1,
+                fontSize: 'calc(11px * var(--type-scale))', lineHeight: 1.4, marginTop: 'calc(1px * var(--space-scale))',
                 color: report[f.id] ? c.onAccentDim : c.textFaint,
                 opacity: report[f.id] ? 0.85 : 1,
               }}>{f.hint}</div>
@@ -6597,7 +6588,7 @@ export default function GSSIReportApp() {
           </label>
         ))}
         {report.enableQR && (
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 'calc(6px * var(--space-scale))' }}>
             <Field label="QR code links to" hint="Pasted onto the report when QR code is on. Default points to the live report tool.">
               <Input value={report.qrUrl} onChange={e => update({ qrUrl: e.target.value })} placeholder="https://scan-report.vercel.app" />
             </Field>
@@ -6607,25 +6598,25 @@ export default function GSSIReportApp() {
 
       {/* === PRINT SETUP (per-section include/exclude + preview) === */}
       <Card title="Print setup · sections, order & visibility" dense className="no-print">
-        <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
           Tick which sections appear in the PDF, and drag any row (or use ▲▼) to set
           print order. Preview shows exactly what will print before you save.
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 9, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(9px * var(--space-scale))', flexWrap: 'wrap' }}>
           <Btn variant="ghost" onClick={() => setAllVis(true)}
-            style={{ flex: 1, fontSize: 11 }}>✓ Select all</Btn>
+            style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))' }}>✓ Select all</Btn>
           <Btn variant="ghost" onClick={() => setAllVis(false)}
-            style={{ flex: 1, fontSize: 11 }}>✕ Clear all</Btn>
+            style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))' }}>✕ Clear all</Btn>
           <Btn variant="ghost" onClick={() => update({ sectionOrder: [] })}
             title="Restore the default section order"
-            style={{ flex: 1, fontSize: 11 }}>↕ Reset order</Btn>
+            style={{ flex: 1, fontSize: 'calc(11px * var(--type-scale))' }}>↕ Reset order</Btn>
           <Btn variant="primary" onClick={() => setPreviewMode(true)}
-            style={{ flex: 1.4, fontSize: 11 }}>👁 Preview</Btn>
+            style={{ flex: 1.4, fontSize: 'calc(11px * var(--type-scale))' }}>👁 Preview</Btn>
         </div>
         <div style={{
-          display: 'flex', flexDirection: 'column', gap: 4,
+          display: 'flex', flexDirection: 'column', gap: 'calc(4px * var(--space-scale))',
           maxHeight: 320, overflowY: 'auto',
-          border: `1px solid ${c.border}`, borderRadius: 6, padding: 6,
+          border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(6px * var(--space-scale))',
         }}>
           {effectiveOrder.map((id, idx) => {
             const s = SECTION_IDS.find(x => x.id === id);
@@ -6665,10 +6656,10 @@ export default function GSSIReportApp() {
                 }}
                 onDragEnd={() => { setDragSectionId(null); setDropTargetId(null); }}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '4px 6px', borderRadius: 4,
+                  display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))',
+                  padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', borderRadius: 4,
                   background: on ? c.cardAlt : 'transparent',
-                  fontSize: 11, color: on ? c.text : c.textFaint,
+                  fontSize: 'calc(11px * var(--type-scale))', color: on ? c.text : c.textFaint,
                   opacity: isBeingDragged ? 0.4 : 1,
                   boxShadow: isDropTarget
                     ? (dropTargetId.side === 'above'
@@ -6679,12 +6670,12 @@ export default function GSSIReportApp() {
                   transition: 'opacity 0.12s',
                 }}>
                 <span style={{
-                  color: c.textFaint, fontSize: 13, lineHeight: 1, userSelect: 'none',
-                  cursor: 'grab', flexShrink: 0, padding: '0 2px',
+                  color: c.textFaint, fontSize: 'calc(13px * var(--type-scale))', lineHeight: 1, userSelect: 'none',
+                  cursor: 'grab', flexShrink: 0, padding: '0 calc(2px * var(--space-scale))',
                 }}
                   title="Drag to reorder">⋮⋮</span>
                 <label style={{
-                  display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
+                  display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))', flex: 1, minWidth: 0,
                   cursor: 'pointer', textDecoration: on ? 'none' : 'line-through',
                 }}>
                   <input type="checkbox" checked={on}
@@ -6695,13 +6686,13 @@ export default function GSSIReportApp() {
                 <button onClick={() => moveSection(id, -1)} disabled={idx === 0}
                   title="Move up" aria-label="Move section up" style={{
                     background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
-                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    color: c.text, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(2px * var(--space-scale)) calc(6px * var(--space-scale))', cursor: 'pointer',
                     opacity: idx === 0 ? 0.3 : 1, flexShrink: 0,
                   }}>▲</button>
                 <button onClick={() => moveSection(id, 1)} disabled={idx === effectiveOrder.length - 1}
                   title="Move down" aria-label="Move section down" style={{
                     background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 4,
-                    color: c.text, fontSize: 11, padding: '2px 6px', cursor: 'pointer',
+                    color: c.text, fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(2px * var(--space-scale)) calc(6px * var(--space-scale))', cursor: 'pointer',
                     opacity: idx === effectiveOrder.length - 1 ? 0.3 : 1, flexShrink: 0,
                   }}>▼</button>
               </div>
@@ -6748,12 +6739,12 @@ export default function GSSIReportApp() {
 
       {/* === SAME-DAY WORKFLOW STATUS === */}
       <Card title="Workflow status" dense className={ph('workflowStatus')}>
-        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
           Track the same-day cycle: when scanning finished, when this report was issued,
           and when the area was cleared for coring. Prints as a small status block at the
           top of the report when any timestamp is set.
         </div>
-        <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
           {[
             { id: 'scanComplete',      label: 'Scan complete' },
             { id: 'reportIssued',      label: 'Report issued' },
@@ -6765,14 +6756,14 @@ export default function GSSIReportApp() {
                 onChange={e => update({
                   workflow: { ...(report.workflow || {}), [f.id]: e.target.value },
                 })}
-                style={{ fontSize: 12 }} />
+                style={{ fontSize: 'calc(12px * var(--type-scale))' }} />
             </Field>
           ))}
         </div>
         {(report.workflow?.scanComplete || report.workflow?.reportIssued || report.workflow?.clearedForCoring) && (
           <div className="print-only workflow-status-print" style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10,
-            border: '1px solid #888', padding: '8px 10px', marginTop: 4,
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'calc(10px * var(--space-scale))',
+            border: '1px solid #888', padding: 'calc(8px * var(--space-scale)) calc(10px * var(--space-scale))', marginTop: 'calc(4px * var(--space-scale))',
             fontSize: '9pt', color: '#000',
           }}>
             {[
@@ -6834,7 +6825,7 @@ export default function GSSIReportApp() {
           <Input value={report.jobNote} onChange={e => update({ jobNote: e.target.value })}
             placeholder="P2 parkade north wall" />
         </Field>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
           <Field label="Scan date">
             <Input type="date" value={report.scanDate} onChange={e => update({ scanDate: e.target.value })} />
           </Field>
@@ -6865,13 +6856,13 @@ export default function GSSIReportApp() {
         </Field>
         {report.enableQR && report.qrUrl && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, marginTop: 10,
-            paddingTop: 10, borderTop: `1px solid ${c.border}`,
+            display: 'flex', alignItems: 'center', gap: 'calc(12px * var(--space-scale))', marginTop: 'calc(10px * var(--space-scale))',
+            paddingTop: 'calc(10px * var(--space-scale))', borderTop: `1px solid ${c.border}`,
           }}>
-            <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
+            <div style={{ background: '#fff', padding: 'calc(6px * var(--space-scale))', borderRadius: 6, flexShrink: 0 }}>
               <QRCode value={report.qrUrl} size={96} />
             </div>
-            <div style={{ fontSize: 11.5, color: c.textDim, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(11.5px * var(--type-scale))', color: c.textDim, lineHeight: 1.5 }}>
               <strong style={{ color: c.text }}>Scan to open the live report tool.</strong><br/>
               Point any phone camera at the code.
             </div>
@@ -6881,7 +6872,7 @@ export default function GSSIReportApp() {
 
       {/* === SLAB CONTEXT === */}
       <Card title="Slab context" className={ph('slab')}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
           <Field label="Slab thickness">
             <Input value={report.slabThickness} onChange={e => update({ slabThickness: e.target.value })} placeholder="200 mm" />
           </Field>
@@ -6895,7 +6886,7 @@ export default function GSSIReportApp() {
             </Select>
           </Field>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
           <Field label="Surface">
             <Select value={report.surface} onChange={e => update({ surface: e.target.value })}>
               <option>Dry</option>
@@ -6921,8 +6912,8 @@ export default function GSSIReportApp() {
       {/* === FINDINGS === */}
       <Card title="Targets identified" className={ph('targets')} badge={
         <span style={{
-          background: c.cardAlt, color: c.textDim, fontSize: 11,
-          padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+          background: c.cardAlt, color: c.textDim, fontSize: 'calc(11px * var(--type-scale))',
+          padding: 'calc(2px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4, fontWeight: 500,
         }}>{report.targets.length}</span>
       }>
         {CONFIDENCE_ORDER.map(level => {
@@ -6932,18 +6923,18 @@ export default function GSSIReportApp() {
             .filter(({ t }) => (t.confidence || 'high') === level);
           if (items.length === 0) return null;
           return (
-            <div key={level} style={{ marginBottom: 10 }}>
+            <div key={level} style={{ marginBottom: 'calc(10px * var(--space-scale))' }}>
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 9px', marginBottom: 7,
+                display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))',
+                padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))',
                 background: meta.bg, borderLeft: `3px solid ${meta.color}`,
                 borderRadius: '0 4px 4px 0',
               }}>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                  fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, letterSpacing: 0.6,
                   color: meta.color, textTransform: 'uppercase',
                 }}>{meta.label}</span>
-                <span style={{ fontSize: 11, color: c.textDim }}>
+                <span style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim }}>
                   · {items.length} target{items.length === 1 ? '' : 's'}
                 </span>
               </div>
@@ -6951,16 +6942,16 @@ export default function GSSIReportApp() {
               {items.map(({ t, i }) => (
                 <div key={i} style={{
                   border: `1px solid ${c.border}`, borderRadius: 6,
-                  padding: 9, marginBottom: 7,
+                  padding: 'calc(9px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'calc(7px * var(--space-scale))', gap: 'calc(6px * var(--space-scale))' }}>
                     <span className={`ak-conf-badge ak-conf-${level}`} style={{
-                      background: meta.bg, padding: '2px 7px', borderRadius: 4,
-                      fontSize: 11, fontWeight: 700, color: meta.color,
+                      background: meta.bg, padding: 'calc(2px * var(--space-scale)) calc(7px * var(--space-scale))', borderRadius: 4,
+                      fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, color: meta.color,
                       border: `1px solid ${meta.color}`, minWidth: 38, textAlign: 'center',
                     }}>{t.id}</span>
                     <Select value={t.type} onChange={e => updateTarget(i, { type: e.target.value })}
-                      style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}>
+                      style={{ flex: 1, padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}>
                       <option>Rebar (top mat)</option>
                       <option>Rebar (bottom mat)</option>
                       <option>PT cable</option>
@@ -6972,25 +6963,25 @@ export default function GSSIReportApp() {
                     </Select>
                     <span className="no-print" style={{ display: 'contents' }}>
                     <Btn variant="ghost" onClick={() => moveTarget(i, -1)} disabled={i === 0}
-                      title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
+                      title="Move up" style={{ padding: 'calc(4px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                     <Btn variant="ghost" onClick={() => moveTarget(i, 1)} disabled={i === report.targets.length - 1}
-                      title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.targets.length - 1 ? 0.35 : 1 }}>▼</Btn>
-                    <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                      title="Move down" style={{ padding: 'calc(4px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', opacity: i === report.targets.length - 1 ? 0.35 : 1 }}>▼</Btn>
+                    <Btn variant="ghost" onClick={() => removeTarget(i)} style={{ padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}>✕</Btn>
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 5 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))' }}>
                     <Input placeholder="Depth (mm)" value={t.depth}
                       onChange={e => updateTarget(i, { depth: e.target.value })}
-                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))' }} />
                     <Input placeholder="Cover (mm)" value={t.cover}
                       onChange={e => updateTarget(i, { cover: e.target.value })}
-                      style={{ padding: '6px 9px', fontSize: 13 }} />
+                      style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))' }} />
                   </div>
                   <Input placeholder="Note: size, spacing, observation"
                     value={t.note}
                     onChange={e => updateTarget(i, { note: e.target.value })}
-                    style={{ padding: '6px 9px', fontSize: 13, marginBottom: 5 }} />
-                  <div style={{ display: 'flex', gap: 5 }}>
+                    style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', marginBottom: 'calc(5px * var(--space-scale))' }} />
+                  <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))' }}>
                     {[
                       { id: 'high', label: 'High', color: c.green, bg: c.greenBg },
                       { id: 'med',  label: 'Med',  color: c.amber, bg: c.amberBg },
@@ -7004,7 +6995,7 @@ export default function GSSIReportApp() {
                           background: t.confidence === opt.id ? opt.bg : c.cardAlt,
                           color: t.confidence === opt.id ? opt.color : c.textDim,
                           border: `1px solid ${t.confidence === opt.id ? opt.color : c.border}`,
-                          borderRadius: 4, padding: '4px 6px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          borderRadius: 4, padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', fontWeight: 600, cursor: 'pointer',
                         }}>{opt.label} conf.</button>
                     ))}
                   </div>
@@ -7015,8 +7006,8 @@ export default function GSSIReportApp() {
         })}
         {report.targets.length === 0 && (
           <div style={{
-            padding: '14px', textAlign: 'center', fontSize: 12,
-            color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 7,
+            padding: 'calc(14px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))',
+            color: c.textFaint, background: c.cardAlt, borderRadius: 6, marginBottom: 'calc(7px * var(--space-scale))',
           }}>
             No targets yet.
           </div>
@@ -7027,11 +7018,11 @@ export default function GSSIReportApp() {
       {/* === FINDINGS SCHEDULE (print-only structured table) === */}
       {report.targets.length > 0 && (
         <Card title="Findings schedule" className={ph('findings')}>
-          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
+          <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(4px * var(--space-scale))', lineHeight: 1.5 }}>
             Prints as a formal tabular schedule (engineering deliverable format). Edit individual targets above.
           </div>
           <table className="print-only findings-table" style={{
-            width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000', marginTop: 4,
+            width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000', marginTop: 'calc(4px * var(--space-scale))',
           }}>
             <thead>
               <tr>
@@ -7061,12 +7052,12 @@ export default function GSSIReportApp() {
 
       {/* === COVER-THICKNESS SUMMARY === */}
       <Card title="Cover thickness summary" className={ph('coverSummary')}>
-        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+        <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
           Single-block summary of cover (concrete over rebar) for the top and bottom mats.
           Auto-fill from your Targets list, or override manually.
         </div>
         <label className="no-print" style={{
-          display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, marginBottom: 8,
+          display: 'flex', alignItems: 'center', gap: 'calc(7px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(8px * var(--space-scale))',
           color: c.text,
         }}>
           <input type="checkbox"
@@ -7107,9 +7098,9 @@ export default function GSSIReportApp() {
           const ro = !!cs.autoFromTargets;
           return (
             <>
-              <div style={{ fontSize: 10.5, color: c.textDim, textTransform: 'uppercase',
-                letterSpacing: 0.6, fontWeight: 700, marginBottom: 4 }}>Top mat</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, textTransform: 'uppercase',
+                letterSpacing: 0.6, fontWeight: 700, marginBottom: 'calc(4px * var(--space-scale))' }}>Top mat</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))' }}>
                 <Field label="Min cover"><Input value={topMin || ''} readOnly={ro}
                   onChange={e => set('topMin', e.target.value)} placeholder="e.g. 28 mm" /></Field>
                 <Field label="Avg cover"><Input value={topAvg || ''} readOnly={ro}
@@ -7117,9 +7108,9 @@ export default function GSSIReportApp() {
                 <Field label="Target cover"><Input value={cs.topTarget || ''}
                   onChange={e => set('topTarget', e.target.value)} placeholder="e.g. 40 mm" /></Field>
               </div>
-              <div style={{ fontSize: 10.5, color: c.textDim, textTransform: 'uppercase',
-                letterSpacing: 0.6, fontWeight: 700, marginBottom: 4 }}>Bottom mat</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textDim, textTransform: 'uppercase',
+                letterSpacing: 0.6, fontWeight: 700, marginBottom: 'calc(4px * var(--space-scale))' }}>Bottom mat</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))' }}>
                 <Field label="Min cover"><Input value={botMin || ''} readOnly={ro}
                   onChange={e => set('botMin', e.target.value)} placeholder="e.g. 22 mm" /></Field>
                 <Field label="Avg cover"><Input value={botAvg || ''} readOnly={ro}
@@ -7133,8 +7124,8 @@ export default function GSSIReportApp() {
               </Field>
 
               {/* Print summary block */}
-              <div className="print-only cover-summary-print" style={{ marginTop: 10 }}>
-                <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+              <div className="print-only cover-summary-print" style={{ marginTop: 'calc(10px * var(--space-scale))' }}>
+                <div style={{ fontWeight: 700, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 1, marginBottom: 'calc(4px * var(--space-scale))' }}>
                   COVER THICKNESS SUMMARY
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', color: '#000' }}>
@@ -7153,7 +7144,7 @@ export default function GSSIReportApp() {
                   </tbody>
                 </table>
                 {cs.note && (
-                  <div style={{ marginTop: 6, fontSize: '9pt', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ marginTop: 'calc(6px * var(--space-scale))', fontSize: '9pt', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
                     {cs.note}
                   </div>
                 )}
@@ -7175,7 +7166,7 @@ export default function GSSIReportApp() {
       {/* === DRAWING NOTES (CAD page) === */}
       {report.enableCadPage && (
         <Card title="Drawing notes (CAD page)" className={ph('drawingNotes')}>
-          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
             Project-specific notes that print in the right-side column of the landscape
             CAD page. Use one paragraph per zone or finding.
           </div>
@@ -7186,7 +7177,7 @@ export default function GSSIReportApp() {
               style={{ minHeight: 140 }}
             />
           </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
             <Field label="Drawing scale">
               <Input value={report.drawingScale || ''}
                 onChange={e => update({ drawingScale: e.target.value })}
@@ -7204,13 +7195,13 @@ export default function GSSIReportApp() {
       {/* === MARKUP COLOR KEY (APWA-aligned) === */}
       {report.enableColorLegend && (
         <Card title="Markup color key" dense className="ak-sec ak-sec-colorLegend">
-          <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(8px * var(--space-scale))', lineHeight: 1.5 }}>
             Aligned to the APWA Uniform Color Code (utility-locating standard) plus concrete-scanning convention.
             Colors below match the annotation presets used on the scan photos.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'calc(6px * var(--space-scale))' }}>
             {APWA_LEGEND.map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.text }}>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', color: c.text }}>
                 <span style={{
                   width: 16, height: 16, borderRadius: 3, flexShrink: 0,
                   background: item.color, border: '1px solid rgba(128,128,128,0.4)',
@@ -7230,22 +7221,22 @@ export default function GSSIReportApp() {
       {/* === ZONES (named area groupings) === */}
       {report.enableNamedZones && (
         <Card title="Zones" className={ph('zones')}>
-          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
             Group scan locations under named areas (e.g. "Back of House", "Zone 4 — north corridor").
             Each location can be assigned a zone in its card.
           </div>
           {(report.zones || []).map((z, i) => (
             <div key={z.id} style={{
               border: `1px solid ${c.border}`, borderRadius: 6,
-              padding: 9, marginBottom: 7, background: c.cardAlt,
+              padding: 'calc(9px * var(--space-scale))', marginBottom: 'calc(7px * var(--space-scale))', background: c.cardAlt,
             }}>
-              <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
+              <div style={{ display: 'flex', gap: 'calc(5px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))' }}>
                 <Input value={z.label}
                   onChange={e => update({
                     zones: report.zones.map(zz => zz.id === z.id ? { ...zz, label: e.target.value } : zz),
                   })}
                   placeholder="Zone name (e.g. Back of House)"
-                  style={{ fontSize: 13, fontWeight: 600 }} />
+                  style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 600 }} />
                 <Btn variant="ghost"
                   onClick={() => {
                     if (i === 0) return;
@@ -7254,7 +7245,7 @@ export default function GSSIReportApp() {
                     update({ zones: next });
                   }}
                   disabled={i === 0}
-                  style={{ padding: '6px 9px', fontSize: 11 }}>↑</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>↑</Btn>
                 <Btn variant="ghost"
                   onClick={() => {
                     if (i === report.zones.length - 1) return;
@@ -7263,7 +7254,7 @@ export default function GSSIReportApp() {
                     update({ zones: next });
                   }}
                   disabled={i === report.zones.length - 1}
-                  style={{ padding: '6px 9px', fontSize: 11 }}>↓</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>↓</Btn>
                 <Btn variant="danger"
                   onClick={() => {
                     if (!confirm(`Remove zone "${z.label}"? Locations assigned to it will become Unzoned.`)) return;
@@ -7274,15 +7265,15 @@ export default function GSSIReportApp() {
                       ),
                     });
                   }}
-                  style={{ padding: '6px 9px', fontSize: 11 }}>✕</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✕</Btn>
               </div>
               <Textarea value={z.notes || ''}
                 onChange={e => update({
                   zones: report.zones.map(zz => zz.id === z.id ? { ...zz, notes: e.target.value } : zz),
                 })}
                 placeholder="Zone-level notes (overall conditions, scope, hazards…)"
-                style={{ minHeight: 56, fontSize: 12 }} />
-              <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 4 }}>
+                style={{ minHeight: 56, fontSize: 'calc(12px * var(--type-scale))' }} />
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(4px * var(--space-scale))' }}>
                 {report.scanLocations.filter(l => l.zoneId === z.id).length} location(s) assigned
               </div>
             </div>
@@ -7302,15 +7293,15 @@ export default function GSSIReportApp() {
       {/* === PROPOSED CORE SCHEDULE (print-only) === */}
       {report.scanLocations.length > 0 && (
         <Card title="Proposed core schedule" className={ph('proposedCores')}>
-          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 4, lineHeight: 1.5 }}>
+          <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(4px * var(--space-scale))', lineHeight: 1.5 }}>
             Prints as a numbered schedule pulling label + verdict + instruction from each
             Scan Location. Useful for engineer sign-off and the coring crew's day-of checklist.
           </div>
-          <div className="print-only proposed-cores-print" style={{ marginTop: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+          <div className="print-only proposed-cores-print" style={{ marginTop: 'calc(6px * var(--space-scale))' }}>
+            <div style={{ fontWeight: 700, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 1, marginBottom: 'calc(4px * var(--space-scale))' }}>
               PROPOSED CORE SCHEDULE
             </div>
-            <ol style={{ margin: 0, paddingLeft: 22, fontSize: '10pt', lineHeight: 1.5, color: '#000' }}>
+            <ol style={{ margin: 0, paddingLeft: 'calc(22px * var(--space-scale))', fontSize: '10pt', lineHeight: 1.5, color: '#000' }}>
               {report.scanLocations.map(loc => {
                 const verdictLabel = {
                   safe: '✓ Safe to drill',
@@ -7320,15 +7311,15 @@ export default function GSSIReportApp() {
                 const spec = [loc.coreCount, loc.coreSize, loc.overCut && `over-cut ${loc.overCut}`]
                   .filter(Boolean).join(' · ');
                 return (
-                  <li key={loc.id} style={{ marginBottom: 5 }}>
+                  <li key={loc.id} style={{ marginBottom: 'calc(5px * var(--space-scale))' }}>
                     <strong>{loc.label || '—'}</strong>
                     {spec && <> · {spec}</>}
                     {' · '}<em>{verdictLabel}</em>
                     {loc.instruction && (
-                      <div style={{ marginTop: 2, fontWeight: 600 }}>↳ {loc.instruction}</div>
+                      <div style={{ marginTop: 'calc(2px * var(--space-scale))', fontWeight: 600 }}>↳ {loc.instruction}</div>
                     )}
                     {loc.notes && (
-                      <div style={{ marginTop: 1, color: '#444', whiteSpace: 'pre-wrap' }}>
+                      <div style={{ marginTop: 'calc(1px * var(--space-scale))', color: '#444', whiteSpace: 'pre-wrap' }}>
                         {loc.notes}
                       </div>
                     )}
@@ -7348,8 +7339,8 @@ export default function GSSIReportApp() {
       {/* === CORE VERDICTS === */}
       <Card title="Drill / core verdicts" className={ph('cores')} badge={
         <span style={{
-          background: c.cardAlt, color: c.textDim, fontSize: 11,
-          padding: '2px 8px', borderRadius: 4, fontWeight: 500,
+          background: c.cardAlt, color: c.textDim, fontSize: 'calc(11px * var(--type-scale))',
+          padding: 'calc(2px * var(--space-scale)) calc(8px * var(--space-scale))', borderRadius: 4, fontWeight: 500,
         }}>{report.cores.length}</span>
       }>
         {report.cores.map((co, i) => {
@@ -7361,35 +7352,35 @@ export default function GSSIReportApp() {
           return (
             <div key={i} style={{
               borderLeft: `3px solid ${v.color}`, background: v.bg,
-              padding: '9px 11px', borderRadius: '0 6px 6px 0', marginBottom: 7,
+              padding: 'calc(9px * var(--space-scale)) calc(11px * var(--space-scale))', borderRadius: '0 6px 6px 0', marginBottom: 'calc(7px * var(--space-scale))',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'calc(6px * var(--space-scale))' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))' }}>
                   <Input value={co.label} onChange={e => updateCore(i, { label: e.target.value })}
-                    style={{ width: 36, padding: '4px 6px', fontSize: 13, textAlign: 'center', fontWeight: 600 }} />
+                    style={{ width: 36, padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', textAlign: 'center', fontWeight: 600 }} />
                   <Input value={co.size} onChange={e => updateCore(i, { size: e.target.value })}
-                    placeholder='4"' style={{ width: 56, padding: '4px 6px', fontSize: 12 }} />
+                    placeholder='4"' style={{ width: 56, padding: 'calc(4px * var(--space-scale)) calc(6px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
                 </div>
-                <div className="no-print" style={{ display: 'flex', gap: 4 }}>
+                <div className="no-print" style={{ display: 'flex', gap: 'calc(4px * var(--space-scale))' }}>
                   <Btn variant="ghost" onClick={() => moveCore(i, -1)} disabled={i === 0}
-                    title="Move up" style={{ padding: '4px 7px', fontSize: 12, opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
+                    title="Move up" style={{ padding: 'calc(4px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', opacity: i === 0 ? 0.35 : 1 }}>▲</Btn>
                   <Btn variant="ghost" onClick={() => moveCore(i, 1)} disabled={i === report.cores.length - 1}
-                    title="Move down" style={{ padding: '4px 7px', fontSize: 12, opacity: i === report.cores.length - 1 ? 0.35 : 1 }}>▼</Btn>
-                  <Btn variant="ghost" onClick={() => removeCore(i)} style={{ padding: '4px 9px', fontSize: 12 }}>✕</Btn>
+                    title="Move down" style={{ padding: 'calc(4px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', opacity: i === report.cores.length - 1 ? 0.35 : 1 }}>▼</Btn>
+                  <Btn variant="ghost" onClick={() => removeCore(i)} style={{ padding: 'calc(4px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}>✕</Btn>
                 </div>
               </div>
               <Select value={co.verdict} onChange={e => updateCore(i, { verdict: e.target.value })}
-                style={{ marginBottom: 5, fontSize: 13, color: v.color, fontWeight: 600 }}>
+                style={{ marginBottom: 'calc(5px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', color: v.color, fontWeight: 600 }}>
                 <option value="safe">✓ Safe to drill</option>
                 <option value="caution">⚠ Caution</option>
                 <option value="nogo">✕ Do not drill</option>
               </Select>
               <Input value={co.clearance} onChange={e => updateCore(i, { clearance: e.target.value })}
                 placeholder="Clearance / max safe depth"
-                style={{ padding: '5px 9px', fontSize: 12, marginBottom: 5 }} />
+                style={{ padding: 'calc(5px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(5px * var(--space-scale))' }} />
               <Input value={co.note} onChange={e => updateCore(i, { note: e.target.value })}
                 placeholder="Instructions for crew"
-                style={{ padding: '5px 9px', fontSize: 12 }} />
+                style={{ padding: 'calc(5px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }} />
             </div>
           );
         })}
@@ -7419,7 +7410,7 @@ export default function GSSIReportApp() {
               <Field label="Scanner">
                 <Input value={report.scanner} onChange={e => update({ scanner: e.target.value })} />
               </Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
                 <Field label="Serial no.">
                   <Input value={report.serialNo} onChange={e => update({ serialNo: e.target.value })} placeholder="MXT-…" />
                 </Field>
@@ -7432,7 +7423,7 @@ export default function GSSIReportApp() {
               </Field>
             </>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
             <Field label="Scan mode">
               <Select value={report.scanMode} onChange={e => update({ scanMode: e.target.value })}>
                 <option>Linescan</option>
@@ -7445,7 +7436,7 @@ export default function GSSIReportApp() {
               <Input value={report.dielectric} onChange={e => update({ dielectric: e.target.value })} placeholder="6.5" />
             </Field>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
             <Field label="Scan density">
               <Input value={report.scanDensity} onChange={e => update({ scanDensity: e.target.value })} />
             </Field>
@@ -7454,12 +7445,12 @@ export default function GSSIReportApp() {
             </Field>
           </div>
           <div style={{
-            marginTop: 8, padding: 9,
+            marginTop: 'calc(8px * var(--space-scale))', padding: 'calc(9px * var(--space-scale))',
             background: c.amberBg, borderLeft: `3px solid ${c.amber}`,
             borderRadius: '0 6px 6px 0',
           }}>
-            <div style={{ fontSize: 11, color: c.amberStrong, fontWeight: 600, marginBottom: 2 }}>⚠ T-R offset zone</div>
-            <div style={{ fontSize: 12, color: c.text, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.amberStrong, fontWeight: 600, marginBottom: 'calc(2px * var(--space-scale))' }}>⚠ T-R offset zone</div>
+            <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.text, lineHeight: 1.4 }}>
               Top 58 mm: reduced resolution (near-surface fuzzy zone) per GSSI 2.7 GHz handbook.
             </div>
           </div>
@@ -7479,7 +7470,7 @@ export default function GSSIReportApp() {
         ].filter(Boolean).join('');
         return (
           <Card title="Methods" className={ph('methods')}>
-            <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+            <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
               Auto-generated from your Equipment &amp; calibration entries. Override only
               if you need custom phrasing.
             </div>
@@ -7489,8 +7480,8 @@ export default function GSSIReportApp() {
                 style={{ minHeight: 80 }}
                 placeholder={auto} />
             </Field>
-            <div className="print-only methods-print" style={{ marginTop: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+            <div className="print-only methods-print" style={{ marginTop: 'calc(8px * var(--space-scale))' }}>
+              <div style={{ fontWeight: 700, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 1, marginBottom: 'calc(4px * var(--space-scale))' }}>
                 METHODS
               </div>
               <div style={{ fontSize: '10pt', lineHeight: 1.5, color: '#000', whiteSpace: 'pre-wrap' }}>
@@ -7505,19 +7496,19 @@ export default function GSSIReportApp() {
       {showLimitations && (
         <Card title="Limitations & assumptions" className={ph('limitations')}>
           {report.limitations.map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
-              <span style={{ color: c.accent, marginTop: 9, fontSize: 11 }}>▸</span>
+            <div key={i} style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))', alignItems: 'flex-start' }}>
+              <span style={{ color: c.accent, marginTop: 'calc(9px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>▸</span>
               <Input value={line} onChange={e => {
                 const next = [...report.limitations];
                 next[i] = e.target.value;
                 update({ limitations: next });
-              }} style={{ fontSize: 12, padding: '6px 9px' }} />
+              }} style={{ fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))' }} />
               <Btn variant="ghost"
                 onClick={() => update({ limitations: report.limitations.filter((_, j) => j !== i) })}
-                style={{ padding: '6px 8px', fontSize: 11 }}>✕</Btn>
+                style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✕</Btn>
             </div>
           ))}
-          <Btn onClick={() => update({ limitations: [...report.limitations, ''] })} style={{ width: '100%', fontSize: 12 }}>
+          <Btn onClick={() => update({ limitations: [...report.limitations, ''] })} style={{ width: '100%', fontSize: 'calc(12px * var(--type-scale))' }}>
             + Add limitation
           </Btn>
         </Card>
@@ -7526,21 +7517,21 @@ export default function GSSIReportApp() {
       {/* === STANDARD NOTES (Xradar-style numbered general notes) === */}
       {report.enableStandardNotes && (
         <Card title="Standard notes" className={ph('standardNotes')}>
-          <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 9, lineHeight: 1.5 }}>
+          <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
             Numbered general notes printed alongside the drawing (CAD page) or as a
             standalone block before the legal disclaimer.
           </div>
           {(report.standardNotes || []).map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5, alignItems: 'flex-start' }}>
+            <div key={i} style={{ display: 'flex', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))', alignItems: 'flex-start' }}>
               <span style={{
-                color: c.accent, marginTop: 7, fontSize: 11, fontWeight: 700, minWidth: 22, textAlign: 'right',
+                color: c.accent, marginTop: 'calc(7px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, minWidth: 22, textAlign: 'right',
               }}>{i + 1}.</span>
               <Input value={line} onChange={e => {
                 const next = [...report.standardNotes];
                 next[i] = e.target.value;
                 update({ standardNotes: next });
-              }} style={{ fontSize: 12, padding: '6px 9px' }} />
-              <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+              }} style={{ fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))' }} />
+              <div style={{ display: 'flex', gap: 'calc(3px * var(--space-scale))', flexShrink: 0 }}>
                 <Btn variant="ghost"
                   onClick={() => {
                     if (i === 0) return;
@@ -7549,7 +7540,7 @@ export default function GSSIReportApp() {
                     update({ standardNotes: next });
                   }}
                   disabled={i === 0}
-                  style={{ padding: '6px 7px', fontSize: 11 }}>↑</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>↑</Btn>
                 <Btn variant="ghost"
                   onClick={() => {
                     if (i === report.standardNotes.length - 1) return;
@@ -7558,26 +7549,26 @@ export default function GSSIReportApp() {
                     update({ standardNotes: next });
                   }}
                   disabled={i === report.standardNotes.length - 1}
-                  style={{ padding: '6px 7px', fontSize: 11 }}>↓</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(7px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>↓</Btn>
                 <Btn variant="ghost"
                   onClick={() => update({ standardNotes: report.standardNotes.filter((_, j) => j !== i) })}
-                  style={{ padding: '6px 8px', fontSize: 11 }}>✕</Btn>
+                  style={{ padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))' }}>✕</Btn>
               </div>
             </div>
           ))}
-          <Btn onClick={() => update({ standardNotes: [...(report.standardNotes || []), ''] })} style={{ width: '100%', fontSize: 12 }}>
+          <Btn onClick={() => update({ standardNotes: [...(report.standardNotes || []), ''] })} style={{ width: '100%', fontSize: 'calc(12px * var(--type-scale))' }}>
             + Add standard note
           </Btn>
 
           {/* Print rendering when CAD page is OFF — standalone block */}
           {!report.enableCadPage && (
-            <div className="print-only std-notes-print" style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, marginBottom: 4 }}>
+            <div className="print-only std-notes-print" style={{ marginTop: 'calc(10px * var(--space-scale))' }}>
+              <div style={{ fontWeight: 700, fontSize: 'calc(11px * var(--type-scale))', letterSpacing: 1, marginBottom: 'calc(4px * var(--space-scale))' }}>
                 STANDARD NOTES
               </div>
-              <ol style={{ margin: 0, paddingLeft: 22, fontSize: 10.5, lineHeight: 1.55, color: '#000' }}>
+              <ol style={{ margin: 0, paddingLeft: 'calc(22px * var(--space-scale))', fontSize: 'calc(10.5px * var(--type-scale))', lineHeight: 1.55, color: '#000' }}>
                 {(report.standardNotes || []).filter(s => s.trim()).map((s, i) => (
-                  <li key={i} style={{ marginBottom: 3 }}>{s}</li>
+                  <li key={i} style={{ marginBottom: 'calc(3px * var(--space-scale))' }}>{s}</li>
                 ))}
               </ol>
             </div>
@@ -7651,7 +7642,7 @@ export default function GSSIReportApp() {
 
       {/* === LEGAL DISCLAIMER === */}
       <Card title="Legal disclaimer" className={ph('disclaimer')}>
-        <div className="no-print" style={{ fontSize: 11, color: c.textFaint, marginBottom: 7, lineHeight: 1.5 }}>
+        <div className="no-print" style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(7px * var(--space-scale))', lineHeight: 1.5 }}>
           Printed at the end of every report. Have your own counsel review before
           relying on this language for production work.
         </div>
@@ -7670,7 +7661,7 @@ export default function GSSIReportApp() {
         <Field label="Prepared by">
           <Input value={report.preparedBy} onChange={e => update({ preparedBy: e.target.value })} placeholder="Technician name" />
         </Field>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(8px * var(--space-scale))' }}>
           <Field label="Role">
             <Input value={report.preparedRole} onChange={e => update({ preparedRole: e.target.value })} />
           </Field>
@@ -7686,16 +7677,16 @@ export default function GSSIReportApp() {
         </Field>
 
         <div style={{
-          marginTop: 6, padding: 9,
+          marginTop: 'calc(6px * var(--space-scale))', padding: 'calc(9px * var(--space-scale))',
           background: c.cardAlt, borderRadius: 6,
         }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))', cursor: 'pointer' }}>
             <input type="checkbox" checked={report.egbcEnabled}
               onChange={e => update({ egbcEnabled: e.target.checked })}
               style={{ width: 16, height: 16 }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Add EGBC seal block</div>
-              <div style={{ fontSize: 11, color: c.textDim }}>For P.Eng-stamped reports only</div>
+              <div style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 500 }}>Add EGBC seal block</div>
+              <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim }}>For P.Eng-stamped reports only</div>
             </div>
           </label>
         </div>
@@ -7703,14 +7694,14 @@ export default function GSSIReportApp() {
         {report.egbcEnabled && (
           <div style={{
             border: `1px dashed ${c.borderStrong}`, borderRadius: 6,
-            padding: 12, textAlign: 'center', marginTop: 8,
+            padding: 'calc(12px * var(--space-scale))', textAlign: 'center', marginTop: 'calc(8px * var(--space-scale))',
             background: c.cardAlt,
           }}>
-            <div style={{ fontSize: 10, color: c.textFaint, letterSpacing: 1.5, marginBottom: 3, fontWeight: 600 }}>EGBC SEAL</div>
-            <div style={{ fontSize: 11, color: c.textDim }}>Engineers and Geoscientists BC</div>
+            <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, letterSpacing: 1.5, marginBottom: 'calc(3px * var(--space-scale))', fontWeight: 600 }}>EGBC SEAL</div>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim }}>Engineers and Geoscientists BC</div>
             <Input value={report.permitNo} onChange={e => update({ permitNo: e.target.value })}
               placeholder="Permit to Practice #"
-              style={{ marginTop: 6, textAlign: 'center', fontSize: 12 }} />
+              style={{ marginTop: 'calc(6px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))' }} />
           </div>
         )}
 
@@ -7721,28 +7712,28 @@ export default function GSSIReportApp() {
         {/* === ENGINEER APPROVAL (F3) — the engineer reviews & approves by email;
              recording it marks the report Approved and archives it. No lock. === */}
         <div className="no-print" style={{
-          marginTop: 12, padding: 11, borderRadius: 8,
+          marginTop: 'calc(12px * var(--space-scale))', padding: 'calc(11px * var(--space-scale))', borderRadius: 8,
           background: report.status === 'approved' ? c.greenBg : c.cardAlt,
           border: `1px solid ${report.status === 'approved' ? c.green : c.borderStrong}`,
         }}>
           {report.status === 'approved' ? (
             <>
-              <div style={{ fontSize: 13, fontWeight: 800, color: c.green, marginBottom: 4 }}>✓ Approved &amp; archived</div>
-              <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 800, color: c.green, marginBottom: 'calc(4px * var(--space-scale))' }}>✓ Approved &amp; archived</div>
+              <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.text, lineHeight: 1.5 }}>
                 Approved by <strong>{report.approvedBy || '—'}</strong>
                 {report.approvedDate ? ` on ${report.approvedDate}` : ''} · via email.
               </div>
               <Btn variant="ghost"
                 onClick={() => { if (confirm('Revert to Issued? This un-approves the report so you can revise it.')) update({ status: 'issued', approvedBy: '', approvedDate: '' }); }}
-                style={{ marginTop: 8, fontSize: 12 }}>↩ Revert to Issued</Btn>
+                style={{ marginTop: 'calc(8px * var(--space-scale))', fontSize: 'calc(12px * var(--type-scale))' }}>↩ Revert to Issued</Btn>
             </>
           ) : (
             <>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: c.textDim, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Engineer approval</div>
-              <div style={{ fontSize: 11, color: c.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'calc(11.5px * var(--type-scale))', fontWeight: 800, color: c.textDim, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 'calc(6px * var(--space-scale))' }}>Engineer approval</div>
+              <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(8px * var(--space-scale))', lineHeight: 1.5 }}>
                 The engineer reviews &amp; approves by email — they don't type into this report. Record their name and the date, then approve.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 8, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 'calc(8px * var(--space-scale))', marginBottom: 'calc(8px * var(--space-scale))' }}>
                 <Input value={report.approvedBy} onChange={e => update({ approvedBy: e.target.value })} placeholder={report.reviewedBy || 'Engineer name'} />
                 <Input type="date" value={report.approvedDate || ''} onChange={e => update({ approvedDate: e.target.value })} />
               </div>
@@ -7758,7 +7749,7 @@ export default function GSSIReportApp() {
           )}
         </div>
 
-        <label className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 12, color: c.textDim, lineHeight: 1.4 }}>
+        <label className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 'calc(8px * var(--space-scale))', marginTop: 'calc(10px * var(--space-scale))', cursor: 'pointer', fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, lineHeight: 1.4 }}>
           <input type="checkbox" checked={report.showWatermark !== false}
             onChange={e => update({ showWatermark: e.target.checked })} style={{ width: 16, height: 16, flexShrink: 0 }} />
           <span>Show <strong>DRAFT / FOR REVIEW</strong> watermark on the PDF until approved <span style={{ color: c.textFaint }}>(recommended)</span></span>
@@ -7789,18 +7780,18 @@ export default function GSSIReportApp() {
               { label: 'Caution', n: cc.caution || 0, color: c.amberStrong },
               { label: 'No-go',   n: cc.nogo || 0,    color: c.redStrong },
             ];
-            const cell = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: '7px 10px' };
+            const cell = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 7, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))' };
             return (
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'grid', gap: 'calc(6px * var(--space-scale))' }}>
                 {rows.map(r => (
                   <div key={r.label} style={cell}>
-                    <span style={{ fontSize: 12, color: c.textDim }}>{r.label}</span>
-                    <b style={{ fontSize: 16, color: r.color }}>{r.n}</b>
+                    <span style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim }}>{r.label}</span>
+                    <b style={{ fontSize: 'calc(16px * var(--type-scale))', color: r.color }}>{r.n}</b>
                   </div>
                 ))}
                 <div style={cell}>
-                  <span style={{ fontSize: 12, color: c.textDim }}>Cores · Targets</span>
-                  <b style={{ fontSize: 14, color: c.text }}>{report.cores.length} · {report.targets.length}</b>
+                  <span style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim }}>Cores · Targets</span>
+                  <b style={{ fontSize: 'calc(14px * var(--type-scale))', color: c.text }}>{report.cores.length} · {report.targets.length}</b>
                 </div>
               </div>
             );
@@ -7812,19 +7803,19 @@ export default function GSSIReportApp() {
       {/* === ACTIONS === */}
       <div className="no-print" style={{
         position: 'sticky', bottom: 10,
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
-        background: c.bg, padding: '10px 0 0',
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'calc(6px * var(--space-scale))',
+        background: c.bg, padding: 'calc(10px * var(--space-scale)) 0 0',
       }}>
         <Btn variant="primary" onClick={exportPDF} title={desktop ? 'Save a PDF next to your report file' : 'Open the print window — choose “Save as PDF” to make the file you send'}>📄 PDF</Btn>
         <Btn onClick={() => setEmailDialogOpen(true)} title="Open a ready-made email (attach the saved PDF yourself before sending)">📧 Email</Btn>
         <Btn onClick={() => { setSaveNote(''); setSaveOpen(true); }} title="Save a backup file you can re-open or update later">💾 Save</Btn>
       </div>
-      <div className="no-print" style={{ fontSize: 10.5, color: c.textFaint, textAlign: 'center', marginTop: 7, lineHeight: 1.5 }}>
+      <div className="no-print" style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, textAlign: 'center', marginTop: 'calc(7px * var(--space-scale))', lineHeight: 1.5 }}>
         Your work auto-saves in this browser. <strong>💾 Save</strong> makes a backup file you can
         update or keep — downloads never overwrite an earlier one. New here? Tap <strong>❓</strong> up top.
       </div>
 
-      <div style={{ fontSize: 10, color: c.textFaint, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 'calc(10px * var(--type-scale))', color: c.textFaint, textAlign: 'center', marginTop: 'calc(14px * var(--space-scale))', lineHeight: 1.6 }}>
         <span className="no-print">Tier: <strong style={{ color: c.textDim, textTransform: 'capitalize' }}>{tier}</strong><br/></span>
         GSSI StructureScan Mini XT · British Columbia engineering edition
       </div>
@@ -7839,24 +7830,25 @@ export default function GSSIReportApp() {
           .filter(s => s && vis(s.id))}
       />
       <ShortcutsPanel />
+      <ThemePanel open={themePanelOpen} onClose={() => setThemePanelOpen(false)} c={c} />
 
       {emailDialogOpen && (
         <div className="no-print" style={{
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setEmailDialogOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 18,
+            borderRadius: 10, padding: 'calc(18px * var(--space-scale))',
             width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
               📧 Email this report
             </div>
-            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(14px * var(--space-scale))', lineHeight: 1.5 }}>
               Opens a new email pre-filled from the project info.
               <strong style={{ color: c.amberStrong }}> The PDF can't attach itself</strong> —
               tap 📄 PDF first, save it, then attach that file after the email opens.
@@ -7899,10 +7891,10 @@ export default function GSSIReportApp() {
             </Field>
             <Field label="Body">
               <Textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
-                style={{ minHeight: 200, fontFamily: 'inherit', fontSize: 12 }} />
+                style={{ minHeight: 200, fontFamily: 'inherit', fontSize: 'calc(12px * var(--type-scale))' }} />
             </Field>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))', marginTop: 'calc(10px * var(--space-scale))' }}>
               <Btn variant="ghost" onClick={exportPDF}
                 title={desktop ? 'Save the PDF first, then attach it' : 'Triggers Save as PDF — keep this dialog open while you save'}>
                 📄 Save PDF first
@@ -7912,18 +7904,18 @@ export default function GSSIReportApp() {
               </Btn>
             </div>
             {canShare && (
-              <Btn onClick={shareReport} style={{ width: '100%', marginTop: 6 }}
+              <Btn onClick={shareReport} style={{ width: '100%', marginTop: 'calc(6px * var(--space-scale))' }}
                 title="Open your device's share menu (Mail, Messages, etc.) with this draft and a backup file attached">
                 📤 Share · attaches backup file
               </Btn>
             )}
             {shareNote && (
-              <div style={{ fontSize: 11, color: c.amberStrong, marginTop: 6, textAlign: 'center' }}>
+              <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.amberStrong, marginTop: 'calc(6px * var(--space-scale))', textAlign: 'center' }}>
                 {shareNote}
               </div>
             )}
             <Btn variant="ghost" onClick={() => setEmailDialogOpen(false)}
-              style={{ width: '100%', marginTop: 6 }}>
+              style={{ width: '100%', marginTop: 'calc(6px * var(--space-scale))' }}>
               Cancel
             </Btn>
           </div>
@@ -7935,22 +7927,22 @@ export default function GSSIReportApp() {
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setConfirmReset(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 18,
+            borderRadius: 10, padding: 'calc(18px * var(--space-scale))',
             width: 'min(440px, 100%)',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 6 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(6px * var(--space-scale))' }}>
               ↻ Reset the form?
             </div>
-            <div style={{ fontSize: 12.5, color: c.textDim, lineHeight: 1.5, marginBottom: 14 }}>
+            <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', color: c.textDim, lineHeight: 1.5, marginBottom: 'calc(14px * var(--space-scale))' }}>
               This clears every field — project info, targets, cores, photos, annotations, custom reminders, everything.
               Once cleared, it can't be undone. Save a draft first so you have a copy.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))' }}>
               <Btn variant="primary" onClick={() => { exportJSON(); setTimeout(doReset, 250); }}>
                 💾 Save first, then reset
               </Btn>
@@ -7960,7 +7952,7 @@ export default function GSSIReportApp() {
               </Btn>
             </div>
             <Btn variant="ghost" onClick={() => setConfirmReset(false)}
-              style={{ width: '100%', marginTop: 6 }}>
+              style={{ width: '100%', marginTop: 'calc(6px * var(--space-scale))' }}>
               Cancel
             </Btn>
           </div>
@@ -7973,18 +7965,18 @@ export default function GSSIReportApp() {
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setReportsOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 18,
+            borderRadius: 10, padding: 'calc(18px * var(--space-scale))',
             width: 'min(540px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
               🗂 My reports
             </div>
-            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(14px * var(--space-scale))', lineHeight: 1.5 }}>
               Work on as many reports as you like — each one auto-saves on its own.
               Tap a report to open it; the one you're in is marked <strong>Open</strong>.
             </div>
@@ -7997,40 +7989,40 @@ export default function GSSIReportApp() {
                   createReport();
                 }
               }}
-              style={{ width: '100%', marginBottom: 12 }}>
+              style={{ width: '100%', marginBottom: 'calc(12px * var(--space-scale))' }}>
               ＋ New report{templates.length > 0 ? ' (pick template)' : ''}
             </Btn>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(7px * var(--space-scale))' }}>
               {[...reportsIndex].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(e => {
                 const isOpen = e.id === currentId;
                 return (
                   <div key={e.id} style={{
-                    border: `1px solid ${isOpen ? c.accent : c.border}`, borderRadius: 6, padding: 9,
+                    border: `1px solid ${isOpen ? c.accent : c.border}`, borderRadius: 6, padding: 'calc(9px * var(--space-scale))',
                     background: isOpen ? c.accentDim : c.cardAlt,
                   }}>
                     <Input value={e.name}
                       onChange={ev => renameReport(e.id, ev.target.value)}
-                      style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }} />
-                    <div style={{ fontSize: 10.5, color: isOpen ? '#fff' : c.textFaint, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 600, marginBottom: 'calc(6px * var(--space-scale))' }} />
+                    <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: isOpen ? c.onAccent : c.textFaint, marginBottom: 'calc(7px * var(--space-scale))', display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))', flexWrap: 'wrap' }}>
                       {e.status === 'approved' && (
-                        <span style={{ background: c.greenBg, color: c.green, border: `1px solid ${c.green}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>✓ APPROVED · ARCHIVED</span>
+                        <span style={{ background: c.greenBg, color: c.green, border: `1px solid ${c.green}`, borderRadius: 4, padding: 'calc(1px * var(--space-scale)) calc(6px * var(--space-scale))', fontWeight: 800, fontSize: 'calc(9.5px * var(--type-scale))', letterSpacing: 0.3 }}>✓ APPROVED · ARCHIVED</span>
                       )}
                       {e.status === 'issued' && (
-                        <span style={{ background: c.amberBg, color: c.amber, border: `1px solid ${c.amber}`, borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 9.5, letterSpacing: 0.3 }}>FOR REVIEW</span>
+                        <span style={{ background: c.amberBg, color: c.amber, border: `1px solid ${c.amber}`, borderRadius: 4, padding: 'calc(1px * var(--space-scale)) calc(6px * var(--space-scale))', fontWeight: 800, fontSize: 'calc(9.5px * var(--type-scale))', letterSpacing: 0.3 }}>FOR REVIEW</span>
                       )}
                       <span>{isOpen ? 'Open now · ' : ''}Updated {e.updatedAt ? new Date(e.updatedAt).toLocaleString() : '—'}</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 'calc(6px * var(--space-scale))' }}>
                       <Btn variant="primary" onClick={() => switchReport(e.id)} disabled={isOpen}
-                        style={{ fontSize: 12, opacity: isOpen ? 0.6 : 1 }}>
+                        style={{ fontSize: 'calc(12px * var(--type-scale))', opacity: isOpen ? 0.6 : 1 }}>
                         {isOpen ? '✓ Open' : '📂 Open'}
                       </Btn>
-                      <Btn variant="ghost" onClick={() => duplicateReport(e.id)} style={{ fontSize: 12 }}>
+                      <Btn variant="ghost" onClick={() => duplicateReport(e.id)} style={{ fontSize: 'calc(12px * var(--type-scale))' }}>
                         ⧉ Copy
                       </Btn>
                       <Btn variant="ghost"
                         onClick={() => { if (confirm('Delete this report? This cannot be undone.')) deleteReport(e.id); }}
-                        style={{ fontSize: 12, borderColor: c.red, color: c.red }}>
+                        style={{ fontSize: 'calc(12px * var(--type-scale))', borderColor: c.red, color: c.red }}>
                         🗑
                       </Btn>
                     </div>
@@ -8038,37 +8030,37 @@ export default function GSSIReportApp() {
                 );
               })}
             </div>
-            <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 14, paddingTop: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>📋 Templates</div>
-                <Btn onClick={openCreateTemplate} style={{ fontSize: 11.5, padding: '6px 10px' }}>
+            <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 'calc(14px * var(--space-scale))', paddingTop: 'calc(12px * var(--space-scale))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'calc(8px * var(--space-scale))', gap: 'calc(8px * var(--space-scale))', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 'calc(13px * var(--type-scale))', fontWeight: 800, color: c.text }}>📋 Templates</div>
+                <Btn onClick={openCreateTemplate} style={{ fontSize: 'calc(11.5px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(10px * var(--space-scale))' }}>
                   💾 Save current as template…
                 </Btn>
               </div>
               {templates.length === 0 ? (
-                <div style={{ padding: 10, fontSize: 11.5, color: c.textFaint, background: c.cardAlt, borderRadius: 6, lineHeight: 1.5 }}>
+                <div style={{ padding: 'calc(10px * var(--space-scale))', fontSize: 'calc(11.5px * var(--type-scale))', color: c.textFaint, background: c.cardAlt, borderRadius: 6, lineHeight: 1.5 }}>
                   No templates yet. Save the current report as a template to reuse its client info, equipment defaults, sign-off, and section toggles on every new job for that client.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(6px * var(--space-scale))' }}>
                   {templates.map(t => (
                     <div key={t.id} style={{
-                      border: `1px solid ${c.border}`, borderRadius: 6, padding: 7, background: c.cardAlt,
-                      display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center',
+                      border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(7px * var(--space-scale))', background: c.cardAlt,
+                      display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 'calc(6px * var(--space-scale))', alignItems: 'center',
                     }}>
                       <Input value={t.name}
                         onChange={(e) => renameTemplate(t.id, e.target.value)}
-                        style={{ fontSize: 12, fontWeight: 600 }} />
-                      <Btn variant="primary" onClick={() => createReportFromTemplate(t.id)} style={{ fontSize: 11, padding: '6px 10px' }}>
+                        style={{ fontSize: 'calc(12px * var(--type-scale))', fontWeight: 600 }} />
+                      <Btn variant="primary" onClick={() => createReportFromTemplate(t.id)} style={{ fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(10px * var(--space-scale))' }}>
                         📂 Use
                       </Btn>
                       <Btn variant="ghost" onClick={() => openEditTemplate(t.id)}
-                        style={{ fontSize: 11, padding: '6px 10px' }}>
+                        style={{ fontSize: 'calc(11px * var(--type-scale))', padding: 'calc(6px * var(--space-scale)) calc(10px * var(--space-scale))' }}>
                         ✏️ Edit
                       </Btn>
                       <Btn variant="ghost"
                         onClick={() => { if (confirm('Delete this template?')) deleteTemplate(t.id); }}
-                        style={{ fontSize: 11, borderColor: c.red, color: c.red, padding: '5px 8px' }}>
+                        style={{ fontSize: 'calc(11px * var(--type-scale))', borderColor: c.red, color: c.red, padding: 'calc(5px * var(--space-scale)) calc(8px * var(--space-scale))' }}>
                         🗑
                       </Btn>
                     </div>
@@ -8076,7 +8068,7 @@ export default function GSSIReportApp() {
                 </div>
               )}
             </div>
-            <Btn variant="ghost" onClick={() => setReportsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+            <Btn variant="ghost" onClick={() => setReportsOpen(false)} style={{ width: '100%', marginTop: 'calc(12px * var(--space-scale))' }}>
               Close
             </Btn>
           </div>
@@ -8112,58 +8104,58 @@ export default function GSSIReportApp() {
           position: 'fixed', inset: 0, zIndex: 200,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setContactsOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 18,
+            borderRadius: 10, padding: 'calc(18px * var(--space-scale))',
             width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
               👥 Customer contacts
             </div>
-            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(14px * var(--space-scale))', lineHeight: 1.5 }}>
               Save the people you send reports to. They appear as quick-pick options in the
               Email dialog and as suggestions on the Client field.
             </div>
-            <Btn variant="primary" onClick={() => addContact({})} style={{ width: '100%', marginBottom: 12 }}>
+            <Btn variant="primary" onClick={() => addContact({})} style={{ width: '100%', marginBottom: 'calc(12px * var(--space-scale))' }}>
               ＋ Add contact
             </Btn>
             {contacts.length === 0 ? (
               <div style={{
-                padding: 14, textAlign: 'center', fontSize: 12, color: c.textFaint,
+                padding: 'calc(14px * var(--space-scale))', textAlign: 'center', fontSize: 'calc(12px * var(--type-scale))', color: c.textFaint,
                 background: c.cardAlt, borderRadius: 6,
               }}>No contacts yet.</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(9px * var(--space-scale))' }}>
                 {contacts.map(ct => (
                   <div key={ct.id} style={{
-                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 9, background: c.cardAlt,
+                    border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(9px * var(--space-scale))', background: c.cardAlt,
                   }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(6px * var(--space-scale))' }}>
                       <Input value={ct.name} placeholder="Contact name"
                         onChange={e => updateContact(ct.id, { name: e.target.value })}
-                        style={{ fontSize: 13 }} />
+                        style={{ fontSize: 'calc(13px * var(--type-scale))' }} />
                       <Input value={ct.company} placeholder="Company"
                         onChange={e => updateContact(ct.id, { company: e.target.value })}
-                        style={{ fontSize: 13 }} />
+                        style={{ fontSize: 'calc(13px * var(--type-scale))' }} />
                     </div>
                     <Input value={ct.email} type="email" placeholder="email@example.com"
                       onChange={e => updateContact(ct.id, { email: e.target.value })}
-                      style={{ fontSize: 13, marginBottom: 6 }} />
+                      style={{ fontSize: 'calc(13px * var(--type-scale))', marginBottom: 'calc(6px * var(--space-scale))' }} />
                     <Input value={ct.note} placeholder="Note (optional)"
                       onChange={e => updateContact(ct.id, { note: e.target.value })}
-                      style={{ fontSize: 12, marginBottom: 6 }} />
+                      style={{ fontSize: 'calc(12px * var(--type-scale))', marginBottom: 'calc(6px * var(--space-scale))' }} />
                     <Btn variant="ghost" onClick={() => removeContact(ct.id)}
-                      style={{ width: '100%', fontSize: 12, borderColor: c.red, color: c.red }}>
+                      style={{ width: '100%', fontSize: 'calc(12px * var(--type-scale))', borderColor: c.red, color: c.red }}>
                       🗑 Remove
                     </Btn>
                   </div>
                 ))}
               </div>
             )}
-            <Btn variant="ghost" onClick={() => setContactsOpen(false)} style={{ width: '100%', marginTop: 12 }}>
+            <Btn variant="ghost" onClick={() => setContactsOpen(false)} style={{ width: '100%', marginTop: 'calc(12px * var(--space-scale))' }}>
               Close
             </Btn>
           </div>
@@ -8176,40 +8168,40 @@ export default function GSSIReportApp() {
           position: 'fixed', inset: 0, zIndex: 220,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setSaveOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 18,
+            borderRadius: 10, padding: 'calc(18px * var(--space-scale))',
             width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
               💾 Save this report
             </div>
-            <div style={{ fontSize: 11, color: c.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(12px * var(--space-scale))', lineHeight: 1.5 }}>
               Your work already auto-saves inside this browser. Saving here makes a backup
               <strong> file</strong> you can keep, re-open, or move to another computer.
             </div>
 
             {desktop && recentFiles.length > 0 && (
               <div style={{
-                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 'calc(11px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))',
               }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 6 }}>
+                <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', fontWeight: 700, color: c.text, marginBottom: 'calc(6px * var(--space-scale))' }}>
                   Recent files
                 </div>
                 {recentFiles.map(f => (
-                  <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))', marginBottom: 'calc(5px * var(--space-scale))' }}>
                     <button onClick={() => openRecentFile(f.path)} title={f.path} style={{
                       flex: 1, textAlign: 'left', background: c.cardAlt, color: c.text,
-                      border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px',
-                      fontSize: 11.5, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
+                      border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(6px * var(--space-scale)) calc(9px * var(--space-scale))',
+                      fontSize: 'calc(11.5px * var(--type-scale))', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                     }}>📂 {f.name}</button>
                     <button onClick={() => removeRecentFile(f.path)} title="Remove from list" style={{
                       background: 'transparent', color: c.textFaint, border: `1px solid ${c.border}`,
-                      borderRadius: 6, padding: '6px 8px', fontSize: 11, cursor: 'pointer',
+                      borderRadius: 6, padding: 'calc(6px * var(--space-scale)) calc(8px * var(--space-scale))', fontSize: 'calc(11px * var(--type-scale))', cursor: 'pointer',
                     }}>✕</button>
                   </div>
                 ))}
@@ -8222,33 +8214,33 @@ export default function GSSIReportApp() {
                 placeholder="P2 parkade north wall" />
             </Field>
             <div style={{
-              fontSize: 11, color: c.textDim, background: c.cardAlt,
-              border: `1px solid ${c.border}`, borderRadius: 6, padding: '7px 9px',
-              marginBottom: 12, wordBreak: 'break-all',
+              fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, background: c.cardAlt,
+              border: `1px solid ${c.border}`, borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(9px * var(--space-scale))',
+              marginBottom: 'calc(12px * var(--space-scale))', wordBreak: 'break-all',
             }}>
               File name: <strong style={{ color: c.text }}>{baseFileName()}{desktop ? '.akscan' : '.json'}</strong>
             </div>
 
             {(desktop || supportsFS) && (
               <div style={{
-                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 'calc(11px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))',
               }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+                <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', fontWeight: 700, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
                   Save to a file you can update
                 </div>
-                <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
                   Pick the file once. After that, one click updates that same file —
                   no piling-up copies.
                 </div>
                 {savedFileName ? (
                   <>
-                    <div style={{ fontSize: 11, color: c.green, marginBottom: 8 }}>
+                    <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.green, marginBottom: 'calc(8px * var(--space-scale))' }}>
                       ✓ Linked to <strong>{savedFileName}</strong>
                     </div>
-                    <Btn variant="primary" onClick={() => saveToFile(false)} style={{ width: '100%', marginBottom: 6 }}>
+                    <Btn variant="primary" onClick={() => saveToFile(false)} style={{ width: '100%', marginBottom: 'calc(6px * var(--space-scale))' }}>
                       💾 Update “{savedFileName}”
                     </Btn>
-                    <Btn variant="ghost" onClick={() => saveToFile(true)} style={{ width: '100%', fontSize: 12 }}>
+                    <Btn variant="ghost" onClick={() => saveToFile(true)} style={{ width: '100%', fontSize: 'calc(12px * var(--type-scale))' }}>
                       Choose a different file…
                     </Btn>
                   </>
@@ -8262,12 +8254,12 @@ export default function GSSIReportApp() {
 
             {(desktop || supportsFS) && (
               <div style={{
-                border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+                border: `1px solid ${c.border}`, borderRadius: 8, padding: 'calc(11px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))',
               }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+                <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', fontWeight: 700, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
                   Auto-save
                 </div>
-                <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
                   Once a file is linked above, save it again automatically on a timer — so a crash
                   or closed window never costs you more than a few minutes.
                 </div>
@@ -8282,12 +8274,12 @@ export default function GSSIReportApp() {
                   </Select>
                 </Field>
                 {autoSaveMin > 0 && !hasLinkedFile() && (
-                  <div style={{ fontSize: 10.5, color: c.amberStrong, marginTop: 4 }}>
+                  <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.amberStrong, marginTop: 'calc(4px * var(--space-scale))' }}>
                     Link a file (above) to start auto-saving.
                   </div>
                 )}
                 {lastAutoSaveAt && (
-                  <div style={{ fontSize: 10.5, color: c.textFaint, marginTop: 4 }}>
+                  <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, marginTop: 'calc(4px * var(--space-scale))' }}>
                     Last auto-save: {new Date(lastAutoSaveAt).toLocaleTimeString()}
                   </div>
                 )}
@@ -8295,12 +8287,12 @@ export default function GSSIReportApp() {
             )}
 
             <div style={{
-              border: `1px solid ${c.border}`, borderRadius: 8, padding: 11, marginBottom: 10,
+              border: `1px solid ${c.border}`, borderRadius: 8, padding: 'calc(11px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))',
             }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+              <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', fontWeight: 700, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
                 Download a backup copy
               </div>
-              <div style={{ fontSize: 11, color: c.textDim, marginBottom: 9, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'calc(11px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(9px * var(--space-scale))', lineHeight: 1.5 }}>
                 Saves to your Downloads folder. Each download includes the date &amp; time, so it
                 <strong> never overwrites</strong> an earlier file.
               </div>
@@ -8310,13 +8302,13 @@ export default function GSSIReportApp() {
             </div>
 
             {!supportsFS && !desktop && (
-              <div style={{ fontSize: 10.5, color: c.textFaint, marginBottom: 10, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', color: c.textFaint, marginBottom: 'calc(10px * var(--space-scale))', lineHeight: 1.5 }}>
                 Tip: the one-click “save &amp; update the same file” option works in Chrome or Edge
                 on a computer.
               </div>
             )}
             {saveNote && (
-              <div style={{ fontSize: 11.5, color: c.green, textAlign: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 'calc(11.5px * var(--type-scale))', color: c.green, textAlign: 'center', marginBottom: 'calc(8px * var(--space-scale))' }}>
                 {saveNote}
               </div>
             )}
@@ -8338,18 +8330,18 @@ export default function GSSIReportApp() {
           position: 'fixed', inset: 0, zIndex: 250,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          padding: 'calc(16px * var(--space-scale))',
         }} onClick={() => setHelpOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: c.bgRaised, border: `1px solid ${c.borderStrong}`,
-            borderRadius: 10, padding: 20,
+            borderRadius: 10, padding: 'calc(20px * var(--space-scale))',
             width: 'min(560px, 100%)', maxHeight: '90vh', overflow: 'auto',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+            <div style={{ fontSize: 'calc(18px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
               👋 Getting started
             </div>
-            <div style={{ fontSize: 12.5, color: c.textDim, marginBottom: 16, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(16px * var(--space-scale))', lineHeight: 1.5 }}>
               A quick guide to saving your work and sending a report. You can reopen this
               any time with the <strong>❓</strong> button at the top.
             </div>
@@ -8396,40 +8388,40 @@ export default function GSSIReportApp() {
               },
             ].map((step, i) => (
               <div key={i} style={{
-                display: 'flex', gap: 11, marginBottom: 13,
-                paddingBottom: 13,
+                display: 'flex', gap: 'calc(11px * var(--space-scale))', marginBottom: 'calc(13px * var(--space-scale))',
+                paddingBottom: 'calc(13px * var(--space-scale))',
                 borderBottom: i < 5 ? `1px solid ${c.border}` : 'none',
               }}>
                 <div style={{
                   flexShrink: 0, width: 30, height: 30, borderRadius: 8,
-                  background: c.accentDim, color: '#fff',
+                  background: c.accentDim, color: c.onAccent,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 15, fontWeight: 800,
+                  fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800,
                 }}>{step.icon}</div>
                 <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: c.text, marginBottom: 3 }}>
+                  <div style={{ fontSize: 'calc(13.5px * var(--type-scale))', fontWeight: 700, color: c.text, marginBottom: 'calc(3px * var(--space-scale))' }}>
                     {i + 1}. {step.title}
                   </div>
-                  <div style={{ fontSize: 12, color: c.textDim, lineHeight: 1.55 }}>{step.body}</div>
+                  <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, lineHeight: 1.55 }}>{step.body}</div>
                 </div>
               </div>
             ))}
 
             <label style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              padding: '10px 12px', marginBottom: 10, marginTop: 2,
+              display: 'flex', alignItems: 'center', gap: 'calc(9px * var(--space-scale))',
+              padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', marginBottom: 'calc(10px * var(--space-scale))', marginTop: 'calc(2px * var(--space-scale))',
               background: c.cardAlt, border: `1px solid ${c.border}`, borderRadius: 8,
               cursor: 'pointer',
             }}>
               <input type="checkbox" checked={helpAutoShow}
                 onChange={e => setHelpAutoShow(e.target.checked)}
                 style={{ accentColor: c.accent, width: 17, height: 17, flexShrink: 0 }} />
-              <span style={{ fontSize: 12.5, color: c.text, lineHeight: 1.4 }}>
+              <span style={{ fontSize: 'calc(12.5px * var(--type-scale))', color: c.text, lineHeight: 1.4 }}>
                 Show this guide automatically when the app opens.
                 <span style={{ color: c.textFaint }}> You can turn it back on any time with the ❓ button.</span>
               </span>
             </label>
-            <Btn variant="primary" onClick={() => setHelpOpen(false)} style={{ width: '100%', padding: '11px 12px', fontWeight: 700 }}>
+            <Btn variant="primary" onClick={() => setHelpOpen(false)} style={{ width: '100%', padding: 'calc(11px * var(--space-scale)) calc(12px * var(--space-scale))', fontWeight: 700 }}>
               Got it — let’s go
             </Btn>
           </div>

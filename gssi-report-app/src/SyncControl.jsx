@@ -23,15 +23,15 @@ export default function SyncControl({ auth, sync, c }) {
   const status = signedIn ? sync.status : 'off';
   const dotColor =
     status === 'synced' ? c.green
-    : status === 'error' ? '#e0564b'
+    : status === 'error' ? c.redStrong
     : c.textDim;
 
   const btnStyle = {
     background: c.cardAlt, color: c.text,
     border: `1px solid ${signedIn && status === 'synced' ? c.green : c.borderStrong}`,
-    borderRadius: 6, padding: '7px 10px', cursor: 'pointer',
-    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
-    display: 'inline-flex', alignItems: 'center', gap: 6,
+    borderRadius: 6, padding: 'calc(7px * var(--space-scale)) calc(10px * var(--space-scale))', cursor: 'pointer',
+    fontSize: 'calc(12px * var(--type-scale))', fontWeight: 700, whiteSpace: 'nowrap', lineHeight: 1,
+    display: 'inline-flex', alignItems: 'center', gap: 'calc(6px * var(--space-scale))',
   };
 
   const submit = async (mode) => {
@@ -60,16 +60,16 @@ export default function SyncControl({ auth, sync, c }) {
   const inConflict = !!sync.conflict;
 
   const field = {
-    width: '100%', boxSizing: 'border-box', marginTop: 6,
+    width: '100%', boxSizing: 'border-box', marginTop: 'calc(6px * var(--space-scale))',
     background: c.bg || c.cardAlt, color: c.text,
     border: `1px solid ${c.borderStrong}`, borderRadius: 6,
-    padding: '10px 11px', fontSize: 14,
+    padding: 'calc(10px * var(--space-scale)) calc(11px * var(--space-scale))', fontSize: 'calc(14px * var(--type-scale))',
   };
   const action = (primary) => ({
-    flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
-    fontWeight: 700, fontSize: 13,
+    flex: 1, padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6, cursor: 'pointer',
+    fontWeight: 700, fontSize: 'calc(13px * var(--type-scale))',
     background: primary ? c.accent : c.cardAlt,
-    color: primary ? '#fff' : c.text,
+    color: primary ? c.onAccent : c.text,
     border: `1px solid ${primary ? c.accent : c.borderStrong}`,
     opacity: busy ? 0.6 : 1,
   });
@@ -80,17 +80,17 @@ export default function SyncControl({ auth, sync, c }) {
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1200,
           background: 'rgba(0,0,0,0.6)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: 16,
+          alignItems: 'center', justifyContent: 'center', padding: 'calc(16px * var(--space-scale))',
         }}>
           <div style={{
             width: '100%', maxWidth: 380, background: c.bgRaised,
             border: `1px solid ${c.borderStrong}`, borderRadius: 10,
-            padding: 18, textAlign: 'left', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+            padding: 'calc(18px * var(--space-scale))', textAlign: 'left', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 6 }}>
+            <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(6px * var(--space-scale))' }}>
               Two reports found
             </div>
-            <div style={{ fontSize: 13, color: c.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 'calc(13px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(14px * var(--space-scale))', lineHeight: 1.5 }}>
               This device has a report, and your account already has a different
               saved report. Pick which one to keep — <strong style={{ color: c.text }}>the other
               will be replaced</strong>. Nothing changes until you choose.
@@ -98,17 +98,17 @@ export default function SyncControl({ auth, sync, c }) {
             <button
               onClick={() => sync.resolveConflict('local')}
               style={{
-                width: '100%', padding: '11px 12px', borderRadius: 6, cursor: 'pointer',
-                fontWeight: 700, fontSize: 13, marginBottom: 8,
-                background: c.accent, color: '#fff', border: `1px solid ${c.accent}`,
+                width: '100%', padding: 'calc(11px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6, cursor: 'pointer',
+                fontWeight: 700, fontSize: 'calc(13px * var(--type-scale))', marginBottom: 'calc(8px * var(--space-scale))',
+                background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
               }}>
               Keep this device’s report
             </button>
             <button
               onClick={() => sync.resolveConflict('cloud')}
               style={{
-                width: '100%', padding: '11px 12px', borderRadius: 6, cursor: 'pointer',
-                fontWeight: 700, fontSize: 13,
+                width: '100%', padding: 'calc(11px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6, cursor: 'pointer',
+                fontWeight: 700, fontSize: 'calc(13px * var(--type-scale))',
                 background: c.cardAlt, color: c.text, border: `1px solid ${c.borderStrong}`,
               }}>
               Load the saved (cloud) report
@@ -136,7 +136,7 @@ export default function SyncControl({ auth, sync, c }) {
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(0,0,0,0.55)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', padding: 16,
+            alignItems: 'center', justifyContent: 'center', padding: 'calc(16px * var(--space-scale))',
           }}
         >
           <div
@@ -144,29 +144,29 @@ export default function SyncControl({ auth, sync, c }) {
             style={{
               width: '100%', maxWidth: 360, background: c.bgRaised,
               border: `1px solid ${c.borderStrong}`, borderRadius: 10,
-              padding: 18, textAlign: 'left', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+              padding: 'calc(18px * var(--space-scale))', textAlign: 'left', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
             }}
           >
             {signedIn ? (
               <>
-                <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+                <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
                   Cloud sync
                 </div>
-                <div style={{ fontSize: 13, color: c.textDim, marginBottom: 14 }}>
+                <div style={{ fontSize: 'calc(13px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(14px * var(--space-scale))' }}>
                   Signed in as <strong style={{ color: c.text }}>{auth.user?.email}</strong>.<br />
                   Status: {STATUS_LABEL[status]}{sync.lastSyncedAt ? ` · ${new Date(sync.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}.
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))' }}>
                   <button style={action(false)} disabled={busy} onClick={() => setOpen(false)}>Close</button>
                   <button style={action(true)} disabled={busy} onClick={doSignOut}>Sign out</button>
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+                <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
                   Sign in to sync
                 </div>
-                <div style={{ fontSize: 12.5, color: c.textDim, marginBottom: 6 }}>
+                <div style={{ fontSize: 'calc(12.5px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(6px * var(--space-scale))' }}>
                   Sign in on every device to keep this report — photos included — in sync.
                 </div>
                 <input
@@ -181,11 +181,11 @@ export default function SyncControl({ auth, sync, c }) {
                   onKeyDown={(e) => { if (e.key === 'Enter') submit('in'); }}
                 />
                 {msg && (
-                  <div style={{ marginTop: 10, fontSize: 12.5, color: '#e0564b', lineHeight: 1.4 }}>
+                  <div style={{ marginTop: 'calc(10px * var(--space-scale))', fontSize: 'calc(12.5px * var(--type-scale))', color: c.redStrong, lineHeight: 1.4 }}>
                     {msg}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <div style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))', marginTop: 'calc(14px * var(--space-scale))' }}>
                   <button style={action(false)} disabled={busy || !email || !password} onClick={() => submit('up')}>
                     Create account
                   </button>
@@ -196,9 +196,9 @@ export default function SyncControl({ auth, sync, c }) {
                 <button
                   onClick={() => !busy && setOpen(false)}
                   style={{
-                    width: '100%', marginTop: 8, background: 'transparent',
+                    width: '100%', marginTop: 'calc(8px * var(--space-scale))', background: 'transparent',
                     color: c.textDim, border: 'none', cursor: 'pointer',
-                    fontSize: 12, padding: 6,
+                    fontSize: 'calc(12px * var(--type-scale))', padding: 'calc(6px * var(--space-scale))',
                   }}
                 >
                   Cancel
