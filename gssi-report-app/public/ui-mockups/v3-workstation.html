@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Desktop-first mockup: fixed design width so phone review shows the real layout, pinch-zoomable -->
+<meta name="viewport" content="width=1280">
+<title>AK ScanReport — v3 Workstation UI (interactive mockup)</title>
+<style>
+  /* ════ TOKENS — same names/values as the app theme engine (src/theme/) ════
+     The mockup proves the v3 STRUCTURE; colors stay the locked v2 system. */
+  :root {
+    --color-bg: #14171c; --color-bg-raised: #1a1e24; --color-surface: #1e232a;
+    --color-surface-alt: #242a32; --color-border: #2c333c; --color-border-strong: #3a4250;
+    --color-text: #e8e4dc; --color-text-muted: #a8a59e; --color-text-faint: #6e6c66;
+    --color-accent: #d44545; --color-accent-dim: #5a1c1f; --color-on-accent: #fff;
+    --color-on-accent-dim: #f4ece0; --color-signal: #e02020;
+    --color-safe: #4fb86a; --color-safe-bg: #16291e; --color-safe-strong: #6cd082;
+    --color-warning: #d9a35a; --color-warning-bg: #2a2114; --color-warning-strong: #ecbf6e;
+    --color-danger: #d44545; --color-danger-bg: #2c1818; --color-danger-strong: #e96868;
+    --w-left: 236px; --w-right: 292px;
+    --font-body: 'Inter Variable', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--color-bg); color: var(--color-text);
+    font-family: var(--font-body); font-size: 13px; overflow: hidden;
+    display: grid; grid-template-rows: auto auto 1fr auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+
+  /* ════ MENU BAR ════ */
+  .menubar {
+    display: flex; align-items: center; gap: 2px;
+    background: var(--color-bg-raised); border-bottom: 1px solid var(--color-border);
+    padding: 0 8px; height: 34px; user-select: none; position: relative; z-index: 60;
+  }
+  .menubar .brand {
+    display: flex; align-items: center; gap: 7px; margin-right: 10px;
+    font-weight: 800; font-size: 12.5px; letter-spacing: .3px;
+  }
+  .menubar .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-accent); }
+  .menu-root {
+    background: none; border: 0; color: var(--color-text); font-size: 12.5px;
+    padding: 6px 10px; border-radius: 5px; cursor: pointer;
+  }
+  .menu-root:hover, .menu-root.open { background: var(--color-surface-alt); }
+  .menu-pop {
+    position: absolute; top: 33px; min-width: 230px;
+    background: var(--color-surface); border: 1px solid var(--color-border-strong);
+    border-radius: 8px; padding: 5px; box-shadow: 0 14px 34px rgba(0,0,0,.5);
+    animation: pop .12s ease-out; z-index: 70;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .mi {
+    display: flex; justify-content: space-between; align-items: center; gap: 18px;
+    width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+    color: var(--color-text); font-size: 12.5px; padding: 7px 10px; border-radius: 5px;
+  }
+  .mi:hover { background: var(--color-accent-dim); color: var(--color-on-accent-dim); }
+  .mi .kbd { font-size: 10.5px; color: var(--color-text-faint); }
+  .mi:hover .kbd { color: var(--color-on-accent-dim); opacity: .75; }
+  .msep { height: 1px; background: var(--color-border); margin: 5px 8px; }
+  .mockchip {
+    margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: .14em;
+    color: var(--color-warning); border: 1px solid var(--color-warning);
+    border-radius: 4px; padding: 2px 7px; text-transform: uppercase;
+  }
+
+  /* ════ TOOLBAR ════ */
+  .toolbar {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--color-bg-raised); border-bottom: 1px solid var(--color-border);
+    padding: 5px 10px; height: 44px; user-select: none;
+  }
+  .tb {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
+    background: none; border: 1px solid transparent; border-radius: 6px;
+    color: var(--color-text-muted); cursor: pointer; padding: 3px 9px; min-width: 44px;
+    font-size: 9.5px; transition: all .12s;
+  }
+  .tb .ic { font-size: 15px; line-height: 1.15; }
+  .tb:hover { background: var(--color-surface-alt); color: var(--color-text); border-color: var(--color-border); }
+  .tsep { width: 1px; height: 26px; background: var(--color-border); margin: 0 6px; }
+  .status-toggle {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    background: var(--color-warning-bg); color: var(--color-warning);
+    border: 1px solid var(--color-warning); border-radius: 6px;
+    font-size: 11px; font-weight: 800; letter-spacing: .4px; padding: 7px 11px;
+  }
+  .status-toggle.issued { background: var(--color-safe-bg); color: var(--color-safe); border-color: var(--color-safe); }
+  .tb-primary {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    background: var(--color-accent); color: var(--color-on-accent); border: 1px solid var(--color-accent);
+    border-radius: 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .6px;
+    padding: 8px 14px; text-transform: uppercase; transition: filter .12s;
+  }
+  .tb-primary:hover { filter: brightness(1.12); }
+
+  /* ════ MAIN 3-PANEL ════ */
+  .main {
+    display: grid; min-height: 0;
+    grid-template-columns: var(--w-left) 5px minmax(0,1fr) 5px var(--w-right);
+  }
+  .splitter { cursor: col-resize; background: transparent; position: relative; z-index: 5; }
+  .splitter:hover::after, .splitter.drag::after {
+    content: ''; position: absolute; inset: 0 1px; background: var(--color-accent); opacity: .55;
+  }
+  .panel {
+    background: var(--color-surface); border-right: 1px solid var(--color-border);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel.right { border-right: 0; border-left: 1px solid var(--color-border); }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--color-text-muted); padding: 9px 12px;
+    border-bottom: 1px solid var(--color-border); background: var(--color-surface-alt);
+  }
+  .panel-body { overflow-y: auto; min-height: 0; flex: 1; }
+
+  /* tree */
+  .tgroup { font-size: 9.5px; font-weight: 800; letter-spacing: .14em; color: var(--color-text-faint);
+    text-transform: uppercase; padding: 12px 12px 5px; }
+  .tnode {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: none; border: 0; border-left: 2px solid transparent;
+    color: var(--color-text-muted); font-size: 12.5px; cursor: pointer;
+    padding: 6px 10px 6px 14px; transition: background .1s, color .1s;
+  }
+  .tnode.child { padding-left: 30px; }
+  .tnode:hover { background: var(--color-surface-alt); color: var(--color-text); }
+  .tnode.sel {
+    background: var(--color-accent-dim); color: var(--color-on-accent-dim);
+    border-left-color: var(--color-accent);
+  }
+  .tnode .st { margin-left: auto; font-size: 10px; }
+  .st.done { color: var(--color-safe); } .st.part { color: var(--color-warning); } .st.todo { color: var(--color-text-faint); }
+  .vdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* workspace */
+  .work { min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
+  .crumbs {
+    display: flex; align-items: center; gap: 7px; padding: 9px 16px;
+    font-size: 11.5px; color: var(--color-text-faint); border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-raised);
+  }
+  .crumbs b { color: var(--color-text); font-weight: 700; }
+  .screen { flex: 1; overflow-y: auto; padding: 18px 20px 40px; animation: screenin .16s ease-out; }
+  @keyframes screenin { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+  .card {
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 14px; max-width: 980px;
+  }
+  .card h2 {
+    font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--color-text-muted); margin-bottom: 12px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .f label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px; }
+  .f input, .f textarea, .f select {
+    width: 100%; background: var(--color-surface-alt); color: var(--color-text);
+    border: 1px solid var(--color-border); border-radius: 6px; font: inherit;
+    padding: 8px 10px; outline: none; transition: border-color .12s;
+  }
+  .f :is(input,textarea,select):focus { border-color: var(--color-accent); }
+  .span2 { grid-column: 1 / -1; }
+
+  table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.data th {
+    text-align: left; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--color-text-faint); padding: 6px 9px; border-bottom: 1px solid var(--color-border-strong);
+  }
+  table.data td { padding: 8px 9px; border-bottom: 1px solid var(--color-border); }
+  table.data tr:hover td { background: var(--color-surface-alt); }
+  .chip { font-size: 10px; font-weight: 800; letter-spacing: .5px; border-radius: 4px; padding: 2px 7px; }
+  .chip.high { background: var(--color-safe-bg); color: var(--color-safe); border: 1px solid var(--color-safe); }
+  .chip.med  { background: var(--color-warning-bg); color: var(--color-warning); border: 1px solid var(--color-warning); }
+  .chip.low  { background: var(--color-danger-bg); color: var(--color-danger-strong); border: 1px solid var(--color-danger); }
+
+  .seg { display: inline-flex; border: 1px solid var(--color-border-strong); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    background: var(--color-surface-alt); color: var(--color-text-muted); border: 0;
+    font-size: 11px; font-weight: 800; letter-spacing: .4px; padding: 8px 14px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--color-border-strong); }
+  .seg .on-safe { background: var(--color-safe); color: #06170b; }
+  .seg .on-caution { background: var(--color-warning); color: #211503; }
+  .seg .on-nogo { background: var(--color-signal); color: #fff; }
+
+  /* inspector */
+  .insp-sec { padding: 12px 14px; border-bottom: 1px solid var(--color-border); }
+  .insp-sec h3 { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--color-text-faint); margin-bottom: 9px; }
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 5px 10px; font-size: 12px; }
+  .kv .k { color: var(--color-text-faint); } .kv .v { color: var(--color-text); }
+  .tip { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; line-height: 1.45;
+    color: var(--color-text-muted); padding: 7px 8px; border: 1px solid var(--color-border);
+    border-radius: 6px; margin-bottom: 6px; background: var(--color-surface-alt); }
+  .tip .d { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+
+  /* status bar */
+  .statusbar {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--color-bg-raised); border-top: 1px solid var(--color-border);
+    padding: 5px 12px; font-size: 11px; color: var(--color-text-muted); user-select: none;
+  }
+  .statusbar .ok { color: var(--color-safe); }
+  .statusbar .right { margin-left: auto; display: flex; gap: 14px; color: var(--color-text-faint); }
+
+  /* command palette + toasts */
+  .veil { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 90;
+    display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+  .pal { width: 520px; background: var(--color-surface); border: 1px solid var(--color-border-strong);
+    border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.55); overflow: hidden;
+    animation: pop .14s ease-out; }
+  .pal input { width: 100%; background: var(--color-surface-alt); border: 0; outline: none;
+    border-bottom: 1px solid var(--color-border); color: var(--color-text);
+    font: inherit; font-size: 14px; padding: 13px 16px; }
+  .pal .list { max-height: 320px; overflow-y: auto; padding: 6px; }
+  .pal .it { display: flex; justify-content: space-between; padding: 9px 11px; border-radius: 6px;
+    font-size: 12.5px; color: var(--color-text-muted); cursor: pointer; }
+  .pal .it.hot { background: var(--color-accent-dim); color: var(--color-on-accent-dim); }
+  .toasts { position: fixed; right: 14px; bottom: 40px; z-index: 95; display: flex;
+    flex-direction: column; gap: 8px; }
+  .toast { background: var(--color-surface); border: 1px solid var(--color-border-strong);
+    border-left: 3px solid var(--color-accent); color: var(--color-text);
+    border-radius: 8px; padding: 10px 14px; font-size: 12px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.45); animation: toastin .18s ease-out; }
+  @keyframes toastin { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 5px; border: 2px solid var(--color-surface); }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+  <!-- ════ MENU BAR ════ -->
+  <div class="menubar" id="menubar">
+    <span class="brand"><span class="dot"></span> AK ScanReport <span style="color:var(--color-text-faint);font-weight:600">· v3 Workstation</span></span>
+    <button class="menu-root" data-menu="file">File</button>
+    <button class="menu-root" data-menu="edit">Edit</button>
+    <button class="menu-root" data-menu="view">View</button>
+    <button class="menu-root" data-menu="report">Report</button>
+    <button class="menu-root" data-menu="help">Help</button>
+    <span class="mockchip">UI mockup — nothing saves</span>
+  </div>
+
+  <!-- ════ TOOLBAR ════ -->
+  <div class="toolbar">
+    <button class="tb" onclick="toast('Mock: new report')"><span class="ic">🗎</span>New</button>
+    <button class="tb" onclick="toast('Mock: open .akscan')"><span class="ic">📂</span>Open</button>
+    <button class="tb" onclick="toast('Mock: saved AKCC-2026-0518.akscan')"><span class="ic">💾</span>Save</button>
+    <span class="tsep"></span>
+    <button class="tb" onclick="toast('Mock: undo')"><span class="ic">↶</span>Undo</button>
+    <button class="tb" onclick="toast('Mock: redo')"><span class="ic">↷</span>Redo</button>
+    <span class="tsep"></span>
+    <button class="tb" onclick="toast('Mock: add scan location')"><span class="ic">⊕</span>Location</button>
+    <button class="tb" onclick="toast('Mock: add photo')"><span class="ic">🖼</span>Photo</button>
+    <button class="tb" onclick="toast('Mock: add target')"><span class="ic">⌖</span>Target</button>
+    <span class="tsep"></span>
+    <button class="status-toggle" id="statusToggle" onclick="toggleStatus()">● DRAFT</button>
+    <span style="flex:1"></span>
+    <button class="tb" onclick="cycleTheme()" title="Cycle theme (View ▸ Theme)"><span class="ic">🎨</span><span id="themeLbl">steel</span></button>
+    <span class="tsep"></span>
+    <button class="tb-primary" onclick="toast('Mock: opens print-ready preview (locked ak-paper deliverable)')">👁 Preview PDF</button>
+  </div>
+
+  <!-- ════ MAIN ════ -->
+  <div class="main" id="main">
+    <div class="panel">
+      <div class="panel-head">Report explorer <span style="cursor:pointer" onclick="toast('Mock: collapse panel — drag the splitter too')">⟨</span></div>
+      <div class="panel-body" id="tree"></div>
+    </div>
+    <div class="splitter" id="splitL"></div>
+    <div class="work">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="screen" id="screen"></div>
+    </div>
+    <div class="splitter" id="splitR"></div>
+    <div class="panel right">
+      <div class="panel-head">Inspector</div>
+      <div class="panel-body" id="insp"></div>
+    </div>
+  </div>
+
+  <!-- ════ STATUS BAR ════ -->
+  <div class="statusbar">
+    <span class="ok">● Saved 5:07 PM</span>
+    <span>AKCC-2026-0518 · Stuart Olson Construction</span>
+    <span id="sbStatus">DRAFT</span>
+    <span>3 scan locations · 4 targets</span>
+    <span class="right">
+      <span>78% complete</span><span id="sbTheme">ak-steel</span><span>Ctrl+K — command palette</span><span>v3 mockup r1</span>
+    </span>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+<script>
+/* ════════ tokens (mirrors src/theme/themes/) ════════ */
+const THEMES = {
+  steel: { bg:'#14171c', bgRaised:'#1a1e24', surface:'#1e232a', surfaceAlt:'#242a32',
+    border:'#2c333c', borderStrong:'#3a4250', text:'#e8e4dc', textMuted:'#a8a59e',
+    textFaint:'#6e6c66', accent:'#d44545', accentDim:'#5a1c1f', onAccentDim:'#f4ece0',
+    safe:'#4fb86a', safeBg:'#16291e', warning:'#d9a35a', warningBg:'#2a2114',
+    danger:'#d44545', dangerBg:'#2c1818', dangerStrong:'#e96868' },
+  ember: { bg:'#16130e', bgRaised:'#1c1812', surface:'#211c15', surfaceAlt:'#29221a',
+    border:'#3a3022', borderStrong:'#4e4130', text:'#ece5d8', textMuted:'#aaa094',
+    textFaint:'#6e6759', accent:'#d97e2a', accentDim:'#4e2a0c', onAccentDim:'#f6ecdf',
+    safe:'#4fb86a', safeBg:'#1a2917', warning:'#d9a35a', warningBg:'#2e2310',
+    danger:'#d44545', dangerBg:'#301a14', dangerStrong:'#e96868' },
+  paper: { bg:'#f6f3ec', bgRaised:'#ede9df', surface:'#fbf8f1', surfaceAlt:'#e8e4d8',
+    border:'#cfcabc', borderStrong:'#9c9685', text:'#1f1d18', textMuted:'#46423a',
+    textFaint:'#6e6a5e', accent:'#a32626', accentDim:'#f0d4d2', onAccentDim:'#5e1416',
+    safe:'#2b6e3a', safeBg:'#d8ecdc', warning:'#7a5510', warningBg:'#f4e4c4',
+    danger:'#a32626', dangerBg:'#efd8d6', dangerStrong:'#7c1818' },
+};
+const kebab = s => s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+let themeName = 'steel';
+function applyTheme(n) {
+  themeName = n;
+  for (const [k, v] of Object.entries(THEMES[n]))
+    document.documentElement.style.setProperty('--color-' + kebab(k), v);
+  document.getElementById('themeLbl').textContent = n;
+  document.getElementById('sbTheme').textContent = 'ak-' + n;
+  drawDiagram();
+}
+function cycleTheme() {
+  applyTheme({ steel:'ember', ember:'paper', paper:'steel' }[themeName]);
+  toast('Theme: ak-' + themeName + ' — structure is v3, colors stay the v2 token system');
+}
+
+/* ════════ demo data (from the app's DEMO_REPORT) ════════ */
+const LOCS = {
+  'loc-1': { label:'L1 — Bay 14 east, col line C4', verdict:'safe', conf:'high', size:'4" core',
+    instr:'Clear to core at marked centre. Maintain 150 mm from PT trace.',
+    notes:'Top mat consistent #4 @ 200. No services in window.' },
+  'loc-2': { label:'L2 — Bay 14 centre span', verdict:'caution', conf:'med', size:'6" core',
+    instr:'Core only with spotter — conduit within 90 mm of proposed centre.',
+    notes:'~25 mm conduit N-S near east edge of window. Offset west 120 mm preferred.' },
+  'loc-3': { label:'L3 — NE column footing', verdict:'nogo', conf:'high', size:'—',
+    instr:'DO NOT CORE. Congested rebar + two PT cables crossing window.',
+    notes:'Reflections overlap below 200 mm; daylight verify before ANY penetration within 0.5 m.' },
+};
+const TARGETS = [
+  ['T-01','Rebar (top mat)','50 mm','high','#4 @ 200 mm o/c'],
+  ['T-02','Rebar (bottom mat)','230 mm','high','#5 @ 250 mm o/c'],
+  ['T-03','Post-tension cable','135 mm','high','Two cables E-W, ~600 mm apart'],
+  ['T-04','Conduit / unknown','210 mm','med','~25 mm dia, N-S near east edge'],
+];
+const VC = { safe:'#3fb950', caution:'#e0a020', nogo:'#e02020' };
+
+/* ════════ tree ════════ */
+const TREE = [
+  { g:'Project' },
+  { id:'project', l:'Project info', st:'done' },
+  { id:'slab', l:'Slab & survey', st:'done' },
+  { id:'equipment', l:'Equipment', st:'done' },
+  { g:'Field work' },
+  { id:'diagram', l:'Site diagram', st:'done' },
+  { id:'locs', l:'Scan locations', st:'part' },
+  { id:'loc-1', l:'L1 · Bay 14 east', st:'done', child:1, v:'safe' },
+  { id:'loc-2', l:'L2 · Centre span', st:'part', child:1, v:'caution' },
+  { id:'loc-3', l:'L3 · NE footing', st:'done', child:1, v:'nogo' },
+  { id:'photos', l:'Photos (6)', st:'part' },
+  { g:'Report' },
+  { id:'findings', l:'Findings table', st:'done' },
+  { id:'cores', l:'Proposed cores', st:'part' },
+  { id:'uncertainty', l:'Uncertainty zones', st:'done' },
+  { id:'signoff', l:'Authorship & sign-off', st:'todo' },
+  { id:'cad', l:'CAD page', st:'todo' },
+];
+const STI = { done:'✓', part:'◐', todo:'○' };
+let sel = 'project';
+function renderTree() {
+  document.getElementById('tree').innerHTML = TREE.map(n => n.g
+    ? `<div class="tgroup">${n.g}</div>`
+    : `<button class="tnode ${n.child?'child':''} ${sel===n.id?'sel':''}" onclick="go('${n.id}')">
+         ${n.v?`<span class="vdot" style="background:${VC[n.v]}"></span>`:''}
+         <span>${n.l}</span><span class="st ${n.st}">${STI[n.st]}</span>
+       </button>`).join('');
+}
+function go(id) { sel = id; renderTree(); renderScreen(); renderInsp(); }
+
+/* ════════ workspace screens ════════ */
+const F = (label, val, span) => `<div class="f ${span?'span2':''}"><label>${label}</label><input value="${val}"></div>`;
+const SCREENS = {
+  project: () => `
+    <div class="card"><h2>Project</h2><div class="grid2">
+      ${F('Project №','AKCC-2026-0518')}${F('Scan date','2026-05-26')}
+      ${F('Client','Stuart Olson Construction')}${F('Site contact','M. Reyes — 604-555-0142')}
+      ${F('Site address','1133 Melville St, Vancouver BC','s')}
+      ${F('Scan area','P2 parkade slab — gridlines C-D / 4-5, 22 sqm','s')}
+      ${F('Weather / surface','14°C overcast · slab dry')}${F('Job note','P2 parkade — Bay 14 slab penetration set')}
+    </div></div>
+    <div class="card"><h2>Same-day workflow</h2><div class="grid2">
+      ${F('Scan complete','2026-05-26 09:45')}${F('Report issued','2026-05-26 11:30')}
+      ${F('Cleared for coring','— pending engineer','s')}
+    </div></div>`,
+  slab: () => `
+    <div class="card"><h2>Slab & survey</h2><div class="grid2">
+      ${F('Slab thickness','300 mm (per as-built)')}${F('Slab age','> 30 days cured')}
+      ${F('Coverage','100% of requested area')}${F('Grid','500 mm bidirectional')}
+    </div></div>`,
+  equipment: () => `
+    <div class="card"><h2>Equipment</h2><div class="grid2">
+      ${F('Unit','GSSI StructureScan Mini XT')}${F('Serial','XMT-7741')}
+      ${F('Firmware','4.0.2')}${F('Calibration','Auto-depth, verified on known rebar')}
+    </div></div>`,
+  diagram: () => `
+    <div class="card" style="max-width:1100px"><h2>Site diagram — Bay 14, P2 parkade</h2>
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        ${['◇ Select','━ Rebar','━ PT cable','━ Conduit','▦ Zone','⊙ Pin'].map((t,i) =>
+          `<button class="tb" style="flex-direction:row;gap:6px;padding:6px 11px;${i===0?'border-color:var(--color-accent);color:var(--color-text)':''}" onclick="toast('Mock: ${t} tool')">${t}</button>`).join('')}
+      </div>
+      <canvas id="diag" width="1040" height="420" style="width:100%;border:1px solid var(--color-border-strong);border-radius:6px;background:#2a2a28"></canvas>
+      <div style="display:flex;gap:18px;margin-top:9px;font-size:11.5px;color:var(--color-text-muted)">
+        <span><span style="color:#FAC775">━</span> Rebar</span><span><span style="color:#F09595">━</span> PT cable</span>
+        <span><span style="color:#9BC5E8">━</span> Conduit</span><span><span style="color:#e02020">▦</span> No-core zone</span>
+        <span style="margin-left:auto;color:var(--color-text-faint)">Utility colors are locked report data — never themed</span>
+      </div>
+    </div>`,
+  locs: () => `
+    <div class="card"><h2>Scan locations — overview</h2>
+      <table class="data"><tr><th></th><th>Location</th><th>Verdict</th><th>Confidence</th><th>Core</th></tr>
+      ${Object.entries(LOCS).map(([id,L]) => `
+        <tr style="cursor:pointer" onclick="go('${id}')">
+          <td><span class="vdot" style="background:${VC[L.verdict]};display:inline-block"></span></td>
+          <td><b>${L.label}</b></td><td style="text-transform:uppercase;font-weight:800;font-size:11px">${L.verdict}</td>
+          <td><span class="chip ${L.conf}">${L.conf.toUpperCase()}</span></td><td>${L.size}</td></tr>`).join('')}
+      </table></div>`,
+  photos: () => `
+    <div class="card"><h2>Photos (6)</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        ${['L1 wide','L1 markup','L2 wide','L2 conduit trace','L3 congestion','B-scan grab'].map(cap => `
+          <div style="border:1px solid var(--color-border);border-radius:7px;overflow:hidden;cursor:pointer" onclick="toast('Mock: opens annotation editor')">
+            <div style="height:96px;background:linear-gradient(135deg,var(--color-surface-alt),var(--color-bg-raised));display:flex;align-items:center;justify-content:center;font-size:24px">🖼</div>
+            <div style="padding:6px 9px;font-size:11.5px;color:var(--color-text-muted)">${cap}</div>
+          </div>`).join('')}
+      </div></div>`,
+  findings: () => `
+    <div class="card" style="max-width:1100px"><h2>Findings — embedded targets</h2>
+      <table class="data"><tr><th>ID</th><th>Type</th><th>Depth</th><th>Confidence</th><th>Note</th></tr>
+      ${TARGETS.map(t => `<tr><td style="font-weight:700">${t[0]}</td><td>${t[1]}</td><td>${t[2]}</td>
+        <td><span class="chip ${t[3]}">${t[3].toUpperCase()}</span></td><td style="color:var(--color-text-muted)">${t[4]}</td></tr>`).join('')}
+      </table>
+      <div style="margin-top:10px;font-size:11.5px;color:var(--color-text-faint)">4 targets · 3 high confidence · uncertainty zone active near NE footing</div>
+    </div>`,
+  uncertainty: () => `
+    <div class="card"><h2>Uncertainty zones</h2>
+      <div class="f span2"><label>Declared zones</label>
+      <textarea rows="4" style="width:100%">Near east column footing (NE corner): rebar congestion gives overlapping reflections — depth confidence below 200 mm is reduced. Daylight verify before any core in that 0.5 m radius.</textarea></div></div>`,
+  cores: () => `
+    <div class="card"><h2>Proposed core schedule</h2>
+      <table class="data"><tr><th>#</th><th>Location</th><th>Spec</th><th>Verdict</th></tr>
+        <tr><td>1</td><td>L1 — Bay 14 east</td><td>4" · over-cut ½"</td><td><span class="chip high">✓ CLEAR</span></td></tr>
+        <tr><td>2</td><td>L2 — centre span</td><td>6" · offset 120 mm W</td><td><span class="chip med">⚠ SPOTTER</span></td></tr>
+      </table></div>`,
+  signoff: () => `
+    <div class="card"><h2>Authorship & sign-off</h2><div class="grid2">
+      ${F('Technician','D. Cunningham')}${F('Reviewed by','— pending')}
+      ${F('Sign date','2026-05-26')}${F('Status','Draft — awaiting engineer')}
+    </div></div>`,
+  cad: () => `
+    <div class="card"><h2>CAD page</h2>
+      <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+        Landscape A4 sheet with letterhead, diagram snapshot, legend, and title block.
+        Renders with the locked print palette — unchanged in v3.</div></div>`,
+};
+function locScreen(id) {
+  const L = LOCS[id];
+  const segBtn = v => `<button class="${L.verdict===v?'on-'+v:''}" onclick="setVerdict('${id}','${v}')">${v.toUpperCase()}</button>`;
+  return `
+    <div class="card" style="max-width:1100px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:13px">
+        <h2 style="margin:0">${L.label}</h2>
+        <span class="seg">${segBtn('safe')}${segBtn('caution')}${segBtn('nogo')}</span>
+        <span class="chip ${L.conf}" style="margin-left:auto">CONF ${L.conf.toUpperCase()}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px">
+        <div>
+          <div style="border:1px solid var(--color-border-strong);border-radius:7px;height:230px;background:linear-gradient(135deg,var(--color-surface-alt),var(--color-bg-raised));display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;cursor:pointer" onclick="toast('Mock: opens the photo annotation editor')">
+            <div style="font-size:30px">🖼</div>
+            <div style="font-size:11.5px;color:var(--color-text-faint)">Location photo · 9 annotations · tap to edit</div>
+          </div>
+          <div style="display:flex;gap:7px;margin-top:9px">
+            ${['#1a1a1a','#e84a4a','#e89c3a','#3a8de8','#45c97a'].map(h =>
+              `<span style="width:20px;height:20px;border-radius:4px;background:${h};border:1px solid var(--color-border-strong)"></span>`).join('')}
+            <span style="font-size:10.5px;color:var(--color-text-faint);align-self:center;margin-left:4px">APWA preset palette (report data — not themed)</span>
+          </div>
+        </div>
+        <div>
+          <div class="f"><label>Instruction (prints bold on report)</label><textarea rows="2" style="width:100%">${L.instr}</textarea></div>
+          <div class="f" style="margin-top:9px"><label>Notes</label><textarea rows="3" style="width:100%">${L.notes}</textarea></div>
+          <div style="margin-top:10px"><label style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted)">Depth references in this window</label>
+          <table class="data" style="margin-top:5px">
+            ${TARGETS.slice(0, id==='loc-3'?3:2).map(t => `<tr><td>${t[0]}</td><td>${t[1]}</td><td><b>${t[2]}</b></td></tr>`).join('')}
+          </table></div>
+        </div>
+      </div>
+    </div>`;
+}
+function setVerdict(id, v) { LOCS[id].verdict = v; renderScreen(); renderTree2(); toast('Verdict → ' + v.toUpperCase()); }
+function renderTree2(){ TREE.forEach(n => { if (LOCS[n.id]) n.v = LOCS[n.id].verdict; }); renderTree(); }
+
+const NAMES = {};
+TREE.forEach(n => { if (n.id) NAMES[n.id] = n.l; });
+function renderScreen() {
+  const html = LOCS[sel] ? locScreen(sel) : (SCREENS[sel] ? SCREENS[sel]() : SCREENS.project());
+  document.getElementById('crumbs').innerHTML =
+    `AKCC-2026-0518 <span>›</span> <b>${NAMES[sel] || sel}</b>`;
+  const sc = document.getElementById('screen');
+  sc.innerHTML = html; sc.style.animation = 'none'; void sc.offsetWidth; sc.style.animation = '';
+  if (sel === 'diagram') drawDiagram();
+}
+
+/* diagram canvas — grid + utility strokes + verdict pins (locked data colors) */
+function drawDiagram() {
+  const c = document.getElementById('diag'); if (!c) return;
+  const x = c.getContext('2d'); x.clearRect(0,0,c.width,c.height);
+  x.strokeStyle = 'rgba(255,255,255,.07)';
+  for (let i=0;i<c.width;i+=40){x.beginPath();x.moveTo(i,0);x.lineTo(i,c.height);x.stroke();}
+  for (let i=0;i<c.height;i+=40){x.beginPath();x.moveTo(0,i);x.lineTo(c.width,i);x.stroke();}
+  const stroke=(col,w,pts,dash)=>{x.save();x.strokeStyle=col;x.lineWidth=w;x.lineCap='round';if(dash)x.setLineDash([10,7]);
+    x.beginPath();x.moveTo(...pts[0]);pts.slice(1).forEach(p=>x.lineTo(...p));x.stroke();x.restore();};
+  for (let i=0;i<5;i++) stroke('#FAC775',4,[[80,70+i*65],[960,74+i*65]]);
+  stroke('#F09595',6,[[200,40],[210,400]]); stroke('#F09595',6,[[780,40],[770,400]]);
+  stroke('#9BC5E8',5,[[640,40],[645,400]],true);
+  x.save();x.strokeStyle='#e02020';x.lineWidth=2.5;x.setLineDash([]);x.strokeRect(820,60,170,150);
+  x.strokeStyle='rgba(224,32,32,.5)';for(let i=-150;i<170;i+=14){x.beginPath();x.moveTo(820+Math.max(0,i),60+Math.max(0,-i));x.lineTo(820+Math.min(170,i+150),60+Math.min(150,150-i+0));x.stroke();}x.restore();
+  const pin=(px,py,col,t,fg)=>{x.beginPath();x.arc(px,py,16,0,7);x.fillStyle=col;x.fill();x.lineWidth=3;x.strokeStyle='rgba(0,0,0,.55)';x.stroke();x.fillStyle=fg;x.font='bold 13px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(t,px,py);};
+  pin(160,300,'#3fb950','L1','#000'); pin(490,230,'#e0a020','L2','#000'); pin(905,135,'#e02020','L3','#fff');
+}
+
+/* ════════ inspector ════════ */
+function renderInsp() {
+  const L = LOCS[sel];
+  const props = L ? `
+    <div class="kv">
+      <span class="k">Type</span><span class="v">Scan location</span>
+      <span class="k">Verdict</span><span class="v" style="text-transform:uppercase;font-weight:800">${L.verdict}</span>
+      <span class="k">Confidence</span><span class="v">${L.conf}</span>
+      <span class="k">Core spec</span><span class="v">${L.size}</span>
+      <span class="k">Photo</span><span class="v">1 · 9 annotations</span>
+    </div>` : `
+    <div class="kv">
+      <span class="k">Section</span><span class="v">${NAMES[sel]||sel}</span>
+      <span class="k">Prints</span><span class="v">Yes · order ${(TREE.findIndex(n=>n.id===sel))}</span>
+      <span class="k">Tier</span><span class="v">Full</span>
+    </div>`;
+  document.getElementById('insp').innerHTML = `
+    <div class="insp-sec"><h3>Selection</h3>${props}</div>
+    <div class="insp-sec"><h3>Report completion</h3>
+      <div style="display:flex;align-items:center;gap:12px">
+        <svg width="56" height="56" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--color-border)" stroke-width="6"/>
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--color-safe)" stroke-width="6"
+            stroke-dasharray="${2*Math.PI*24}" stroke-dashoffset="${2*Math.PI*24*0.22}"
+            stroke-linecap="round" transform="rotate(-90 28 28)"/>
+          <text x="28" y="32" text-anchor="middle" fill="var(--color-text)" font-size="13" font-weight="800">78%</text>
+        </svg>
+        <div style="font-size:11.5px;color:var(--color-text-muted);line-height:1.5">
+          12 of 15 sections ready.<br>Sign-off and CAD page remain.</div>
+      </div></div>
+    <div class="insp-sec"><h3>Assistant</h3>
+      <div class="tip"><span class="d" style="background:var(--color-danger)"></span>L3 is NO-GO but still listed in the core schedule — remove or annotate.</div>
+      <div class="tip"><span class="d" style="background:var(--color-warning)"></span>L2 has no close-up photo of the conduit trace.</div>
+      <div class="tip"><span class="d" style="background:var(--color-safe)"></span>Same-day workflow on track: issued 1h 45m after scan complete.</div>
+    </div>
+    <div class="insp-sec"><h3>v3 notes</h3>
+      <div style="font-size:11px;color:var(--color-text-faint);line-height:1.55">
+        Workstation shell: explorer tree ▸ focused editor ▸ inspector.
+        Everything themeable stays on v2 tokens; report data colors and the
+        print pipeline are untouched.</div></div>`;
+}
+
+/* ════════ menus ════════ */
+const MENUS = {
+  file: [['New report','Ctrl+N'],['Open…','Ctrl+O'],['Save .akscan','Ctrl+S'],['Save as…','Ctrl+Shift+S'],null,
+         ['Preview PDF','Ctrl+P'],['Send to engineer…',''],null,['Exit','']],
+  edit: [['Undo','Ctrl+Z'],['Redo','Ctrl+Y'],null,['Add scan location',''],['Add photo',''],['Add target','']],
+  view: [['Theme: steel ✓→ ember → paper','🎨'],['Density: normal',''],null,
+         ['Toggle explorer','Ctrl+B'],['Toggle inspector','Ctrl+I'],null,['Command palette','Ctrl+K']],
+  report: [['Mark issued',''],['Approve & archive',''],null,['Reorder sections…',''],['Tier: Full ▾','']],
+  help: [['Getting started',''],['What’s new',''],['About v3 mockup','']],
+};
+let openMenu = null;
+document.getElementById('menubar').addEventListener('click', e => {
+  const root = e.target.closest('.menu-root'); if (!root) return;
+  closeMenu(root.dataset.menu !== openMenu ? root : null);
+});
+function closeMenu(openRoot) {
+  document.querySelectorAll('.menu-pop').forEach(p => p.remove());
+  document.querySelectorAll('.menu-root').forEach(b => b.classList.remove('open'));
+  openMenu = null;
+  if (!openRoot) return;
+  const name = openRoot.dataset.menu; openMenu = name; openRoot.classList.add('open');
+  const pop = document.createElement('div'); pop.className = 'menu-pop';
+  pop.style.left = openRoot.offsetLeft + 'px';
+  pop.innerHTML = MENUS[name].map(it => it === null ? '<div class="msep"></div>' :
+    `<button class="mi" onclick="menuAct('${it[0].replace(/'/g,'')}')"><span>${it[0]}</span><span class="kbd">${it[1]}</span></button>`).join('');
+  document.getElementById('menubar').appendChild(pop);
+}
+function menuAct(label) {
+  closeMenu(null);
+  if (label.startsWith('Theme')) return cycleTheme();
+  if (label === 'Command palette') return palOpen();
+  if (label === 'Mark issued') return toggleStatus();
+  toast('Mock: ' + label);
+}
+document.addEventListener('click', e => { if (!e.target.closest('.menubar')) closeMenu(null); });
+
+/* ════════ status toggle / toasts / palette / splitters ════════ */
+let issued = false;
+function toggleStatus() {
+  issued = !issued;
+  const b = document.getElementById('statusToggle');
+  b.textContent = issued ? '✓ ISSUED' : '● DRAFT';
+  b.classList.toggle('issued', issued);
+  document.getElementById('sbStatus').textContent = issued ? 'ISSUED' : 'DRAFT';
+  toast(issued ? 'Issued — FOR REVIEW watermark on PDF' : 'Back to draft — DRAFT watermark on PDF');
+}
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity .25s'; t.style.opacity = '0';
+    setTimeout(() => t.remove(), 260); }, 2300);
+}
+/* command palette */
+let palEl = null, palIdx = 0;
+const PAL_ITEMS = () => [
+  ...TREE.filter(n => n.id).map(n => ({ t: 'Go to: ' + n.l, run: () => go(n.id) })),
+  { t: 'Action: Save .akscan', run: () => toast('Mock: saved') },
+  { t: 'Action: Preview PDF', run: () => toast('Mock: preview (locked deliverable)') },
+  { t: 'Action: Mark issued / draft', run: toggleStatus },
+  { t: 'Action: Cycle theme', run: cycleTheme },
+];
+function palOpen() {
+  palClose(); palIdx = 0;
+  palEl = document.createElement('div'); palEl.className = 'veil';
+  palEl.innerHTML = `<div class="pal"><input id="palIn" placeholder="Jump to a section or run an action…">
+    <div class="list" id="palList"></div></div>`;
+  palEl.addEventListener('click', e => { if (e.target === palEl) palClose(); });
+  document.body.appendChild(palEl);
+  const inp = document.getElementById('palIn');
+  inp.addEventListener('input', palRender);
+  inp.focus(); palRender();
+}
+function palRender() {
+  const q = (document.getElementById('palIn')?.value || '').toLowerCase();
+  const items = PAL_ITEMS().filter(i => i.t.toLowerCase().includes(q));
+  palIdx = Math.min(palIdx, Math.max(0, items.length - 1));
+  document.getElementById('palList').innerHTML = items.map((i, n) =>
+    `<div class="it ${n===palIdx?'hot':''}" onclick="palRun(${n})">${i.t}<span style="color:var(--color-text-faint)">↵</span></div>`).join('')
+    || '<div class="it">No match</div>';
+  window._palItems = items;
+}
+function palRun(n) { const i = window._palItems[n]; palClose(); if (i) i.run(); }
+function palClose() { palEl?.remove(); palEl = null; }
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); palOpen(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); toast('Mock: saved AKCC-2026-0518.akscan'); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); toast('Mock: preview PDF'); return; }
+  if (!palEl) return;
+  if (e.key === 'Escape') palClose();
+  if (e.key === 'ArrowDown') { palIdx++; palRender(); e.preventDefault(); }
+  if (e.key === 'ArrowUp') { palIdx = Math.max(0, palIdx - 1); palRender(); e.preventDefault(); }
+  if (e.key === 'Enter') { palRun(palIdx); }
+});
+/* splitters */
+function wireSplit(id, varName, fromRight) {
+  const el = document.getElementById(id);
+  el.addEventListener('mousedown', e => {
+    e.preventDefault(); el.classList.add('drag');
+    const move = ev => {
+      const w = fromRight ? (window.innerWidth - ev.clientX) : ev.clientX;
+      document.documentElement.style.setProperty(varName, Math.max(150, Math.min(460, w)) + 'px');
+    };
+    const up = () => { el.classList.remove('drag');
+      removeEventListener('mousemove', move); removeEventListener('mouseup', up); };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
+  el.addEventListener('dblclick', () =>
+    document.documentElement.style.setProperty(varName, fromRight ? '292px' : '236px'));
+}
+wireSplit('splitL', '--w-left', false);
+wireSplit('splitR', '--w-right', true);
+
+renderTree(); renderScreen(); renderInsp();
+</script>
+</body>
+</html>
