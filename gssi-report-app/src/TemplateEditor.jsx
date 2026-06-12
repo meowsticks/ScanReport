@@ -7,7 +7,7 @@ import { TEMPLATE_FIELD_META, TEMPLATE_FIELD_GROUPS } from './lib/templates.js';
 
 const overlayStyle = {
   position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.6)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'calc(16px * var(--space-scale))',
 };
 
 export default function TemplateEditor({ open, mode, initialName, initialFields, onSave, onClose, c }) {
@@ -34,7 +34,7 @@ export default function TemplateEditor({ open, mode, initialName, initialFields,
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', background: c.bg || c.cardAlt,
     color: c.text, border: `1px solid ${c.borderStrong}`, borderRadius: 6,
-    padding: '7px 9px', fontSize: 12.5, fontFamily: 'inherit',
+    padding: 'calc(7px * var(--space-scale)) calc(9px * var(--space-scale))', fontSize: 'calc(12.5px * var(--type-scale))', fontFamily: 'inherit',
   };
   const dim = (on) => ({ opacity: on ? 1 : 0.45 });
 
@@ -68,7 +68,7 @@ export default function TemplateEditor({ open, mode, initialName, initialFields,
       const summary = Array.isArray(val)
         ? `${val.length} item${val.length === 1 ? '' : 's'}`
         : (val ? '(captured)' : '(empty)');
-      return <div style={{ fontSize: 11.5, color: c.textDim, fontStyle: 'italic', ...dim(on) }}>{summary} — copied as-is</div>;
+      return <div style={{ fontSize: 'calc(11.5px * var(--type-scale))', color: c.textDim, fontStyle: 'italic', ...dim(on) }}>{summary} — copied as-is</div>;
     }
     return <input type="text" disabled={!on} value={val ?? ''}
       onChange={(e) => setField(key, e.target.value)} style={{ ...inputStyle, ...dim(on) }} />;
@@ -85,35 +85,35 @@ export default function TemplateEditor({ open, mode, initialName, initialFields,
       <div onClick={(e) => e.stopPropagation()} style={{
         width: '100%', maxWidth: 580, maxHeight: '92vh', display: 'flex', flexDirection: 'column',
         background: c.bgRaised, border: `1px solid ${c.borderStrong}`, borderRadius: 10,
-        padding: 18, boxShadow: '0 12px 40px rgba(0,0,0,0.4)', textAlign: 'left',
+        padding: 'calc(18px * var(--space-scale))', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', textAlign: 'left',
       }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: c.text, marginBottom: 4 }}>
+        <div style={{ fontSize: 'calc(15px * var(--type-scale))', fontWeight: 800, color: c.text, marginBottom: 'calc(4px * var(--space-scale))' }}>
           {mode === 'edit' ? '📋 Edit template' : '📋 New template — preview'}
         </div>
-        <div style={{ fontSize: 12, color: c.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 'calc(12px * var(--type-scale))', color: c.textDim, marginBottom: 'calc(12px * var(--space-scale))', lineHeight: 1.5 }}>
           {mode === 'edit'
             ? 'Tweak any value. Uncheck a row to drop that field from this template — applying it then leaves that field as the report’s default.'
             : 'This is exactly what will be saved. Uncheck rows to leave them out, edit values inline. Per-job data (photos, targets, cores, dates) is never captured.'}
         </div>
 
-        <label style={{ fontSize: 11, fontWeight: 700, color: c.textDim }}>Template name</label>
+        <label style={{ fontSize: 'calc(11px * var(--type-scale))', fontWeight: 700, color: c.textDim }}>Template name</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. client or workflow"
-          style={{ ...inputStyle, marginTop: 4, marginBottom: 12, fontSize: 13, fontWeight: 600 }} />
+          style={{ ...inputStyle, marginTop: 'calc(4px * var(--space-scale))', marginBottom: 'calc(12px * var(--space-scale))', fontSize: 'calc(13px * var(--type-scale))', fontWeight: 600 }} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto', paddingRight: 4, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(14px * var(--space-scale))', overflow: 'auto', paddingRight: 'calc(4px * var(--space-scale))', flex: 1, minHeight: 0 }}>
           {TEMPLATE_FIELD_GROUPS.map((g) => (
             <div key={g.label}>
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: c.text, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 'calc(10.5px * var(--type-scale))', fontWeight: 800, color: c.text, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 'calc(6px * var(--space-scale))' }}>
                 {g.label}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(5px * var(--space-scale))' }}>
                 {g.keys.map((k) => {
                   const meta = TEMPLATE_FIELD_META[k];
                   if (!meta) return null;
                   return (
-                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '22px 130px 1fr', gap: 6, alignItems: 'center' }}>
+                    <div key={k} style={{ display: 'grid', gridTemplateColumns: '22px 130px 1fr', gap: 'calc(6px * var(--space-scale))', alignItems: 'center' }}>
                       <input type="checkbox" checked={included.has(k)} onChange={() => toggle(k)} />
-                      <label style={{ fontSize: 11.5, color: c.textDim }}>{meta.label}</label>
+                      <label style={{ fontSize: 'calc(11.5px * var(--type-scale))', color: c.textDim }}>{meta.label}</label>
                       {renderEditor(k, meta)}
                     </div>
                   );
@@ -123,15 +123,15 @@ export default function TemplateEditor({ open, mode, initialName, initialFields,
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <div style={{ display: 'flex', gap: 'calc(8px * var(--space-scale))', marginTop: 'calc(14px * var(--space-scale))' }}>
           <button onClick={onClose} style={{
-            flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
-            fontWeight: 700, fontSize: 13,
+            flex: 1, padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6, cursor: 'pointer',
+            fontWeight: 700, fontSize: 'calc(13px * var(--type-scale))',
             background: c.cardAlt, color: c.text, border: `1px solid ${c.borderStrong}`,
           }}>Cancel</button>
           <button onClick={save} style={{
-            flex: 1, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
-            fontWeight: 700, fontSize: 13,
+            flex: 1, padding: 'calc(10px * var(--space-scale)) calc(12px * var(--space-scale))', borderRadius: 6, cursor: 'pointer',
+            fontWeight: 700, fontSize: 'calc(13px * var(--type-scale))',
             background: c.accent, color: c.onAccent, border: `1px solid ${c.accent}`,
           }}>{mode === 'edit' ? 'Save changes' : 'Save template'}</button>
         </div>

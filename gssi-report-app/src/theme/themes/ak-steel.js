@@ -40,7 +40,10 @@ export default {
     dangerStrong:  '#e96868',
   },
 
-  space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 40 },
+  // scale: unitless multipliers (strings stay verbatim — numbers would
+  // become px). Theme Studio's density / text-size knobs override these;
+  // print + preview pin them back to 1 so deliverables never scale.
+  space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 40, scale: '1' },
 
   type: {
     fontBody: "'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -50,6 +53,7 @@ export default {
     sizeHeading: 18,
     sizeCaption: 12,
     sizeData: 13,
+    scale: '1',
   },
 
   radius: { sm: 4, md: 6, lg: 8, xl: 10 },

@@ -1,20 +1,52 @@
-# AK Theme Engine — retrofit record (June 11 2026)
+# AK Theme Engine — retrofit record (June 11–12 2026)
 
 The token-based theme engine from the June 10 design session is now wired
-into the app. **With ak-steel active the app is pixel-identical to the
-pre-retrofit build** (screenshot-diffed, see Verification below). Re-skinning
-is now a data change: edit/add a theme file, or poke tokens live.
+into the app. **With ak-steel active at default settings the app is
+pixel-identical to the pre-retrofit build** (screenshot-diffed, see
+Verification below). Re-skinning is now a data change: edit/add a theme
+file, or tinker live in the Theme Studio.
 
 ## What shipped
 
 | Piece | Where |
 |---|---|
-| Engine (~100 lines: register/apply/init/setToken/get) | `gssi-report-app/src/theme/engine.js` |
+| Engine (register/apply/init/setToken/overrides/get) | `gssi-report-app/src/theme/engine.js` |
 | ak-steel — dark default, ≡ old dark palette verbatim | `src/theme/themes/ak-steel.js` |
 | ak-paper — light/outdoor, ≡ old light palette verbatim | `src/theme/themes/ak-paper.js` |
 | ak-ember — NEW dark industrial orange | `src/theme/themes/ak-ember.js` |
 | Init before first paint | `src/main.jsx` (`ThemeEngine.init()`) |
 | No-flash boot (reads `ak-theme-bg`) | `index.html` |
+| **v0.2 Theme Studio** — 🎨 in the header (phone-first sheet) | `src/ThemePanel.jsx` |
+
+## Theme Studio (v0.2, shipped June 12)
+
+Bottom-sheet panel behind the header 🎨 button: theme picker (steel / paper
+/ ember with palette-swatch cards), accent + danger color pickers (curated
+presets + native OS color wheel), density (Compact ·75 / Normal / Comfy
+·1.25), text size (85–130%), reset-to-factory per theme.
+
+- Everything applies live (`setToken`) and persists per theme in
+  `ak-theme-overrides` (localStorage): `{ [themeName]: { 'group.key': value } }`.
+  Theme files stay pristine; `clearOverrides()` = factory reset.
+- Picking accent/danger also derives the tint family so the UI follows
+  coherently: `accentDim = color-mix(picked 30%, var(--color-bg))`,
+  `dangerBg = mix(picked 14%, bg)`, `dangerStrong = mix(picked 60%, text)`.
+  Mixing toward each theme's own bg/text keeps the derivation correct in
+  dark and light themes alike. Hand-tune theme files for exact control.
+- Density/text-size work through two unitless tokens, `--space-scale` and
+  `--type-scale` (strings `'1'` in every theme file). Every inline
+  `fontSize` and `padding`/`margin`/`gap` in the app is wrapped as
+  `calc(Npx * var(--type-scale|--space-scale))` — exactly `Npx` at scale 1
+  (pixel-verified), scaled everywhere otherwise.
+- **Deliverable guard**: `@media print` and `body.preview-mode` pin both
+  scales to 1 with `!important` (stylesheet importants beat the engine's
+  inline vars), and print colors were never tokens. Verified: with text
+  130% + density 0.75 + a green accent active, preview renders
+  byte-identical to the locked reference.
+- Not scaled on purpose: the `<style>`-block CSS (print/preview + the
+  desktop-only ws-nav), `letterSpacing`/`lineHeight`, shapes/positions
+  (radius, width/height, absolute offsets), and on-diagram elements
+  (NorthArrow) which print.
 
 - Tokens flatten onto `<html>` as `--color-*`, `--space-*`, `--type-*`,
   `--radius-*` (numbers → px, camelCase → kebab-case).
@@ -89,16 +121,17 @@ is deferred — see below.
   from the light accent (#a32626) instead of the dark one; at 8% alpha the
   difference is imperceptible and it's now correct per the tint rule.
 
-## Deferred: inline spacing/font-size long tail
+## The spacing/font-size long tail — resolved (v0.2)
 
 The audit found ~390 numeric spacing props (values 1–18, no clean scale —
 5/7/9/11 all heavily used) and ~355 inline `fontSize` numbers across a
 16-step ladder (9.5–28, half-steps included). Forcing those onto a 5-step
-scale would shift hundreds of pixels and break the pixel-identical
-guarantee; converting them 1:1 adds indirection with zero theming gain
-(space/type values are identical across all three themes). They stay
-literal for now and convert together with the v0.2 density/text-size work,
-which needs a deliberate scale design anyway.
+token scale would have shifted hundreds of pixels. The v0.2 answer keeps
+every value exact and multiplies instead: `fontSize: 11` became
+`fontSize: 'calc(11px * var(--type-scale))'` (≈1,100 sites converted by
+script, pixel-verified identical at scale 1). The classic `--space-md`-style
+tokens still exist for NEW structured layout; the multiplier is what makes
+the Studio's density/text knobs govern the whole editor.
 
 ## Rules for ALL future ScanReport work (from the handoff, now in force)
 
@@ -113,19 +146,27 @@ which needs a deliberate scale design anyway.
 
 ## Verification (screenshot pixel-diff, Chromium, frozen clock)
 
+v0.1 retrofit (June 11):
+
 | Surface | Result |
 |---|---|
 | Editor desktop dark / light | **identical** |
 | Editor mobile dark / light | **identical** |
 | Preview mode (PDF surface) | **identical** |
+
+v0.2 Theme Studio (June 12):
+
+| Surface | Result |
+|---|---|
+| Editor at default settings vs locked reference | **identical** except the header rows containing the new 🎨 button |
+| Preview with text 130% + density 0.75 + green accent | **byte-identical** to the locked reference (guard holds) |
+| Studio interactions: pick → persist across reload → per-theme isolation → reset | all pass, zero JS errors |
 | `vite build` | passes |
-| Legacy `ak_theme` migration, toggle, `apply('ak-ember')`, `setToken`, `themechange` | all pass, zero JS errors |
 
-## Roadmap (unchanged from handoff)
+## Roadmap
 
-- **v0.2** Settings tab: theme picker (incl. ember), accent/danger pickers,
-  density, text size; persist user overrides next to the theme name.
-- **v0.3** Export/import themes as .json.
+- ~~v0.2 Settings tab~~ — shipped as the Theme Studio (this doc, above).
+- **v0.3** Export/import themes as .json (lockbox portability).
 - **v1.0** Tokens drive the deliverable renderer (if ever unlocked — see
   open questions).
 
